@@ -47,7 +47,8 @@
     const next = `${location.pathname}${queryString ? `?${queryString}` : ''}`;
     history[push ? 'pushState' : 'replaceState']({}, '', next);
   };
-  const refreshFilters = async (push = true, expectedToken = token) => {
+  // urlMode: 'push' (filter change), 'none' (selection path; selectIndex writes the URL itself)
+  const refreshFilters = async (urlMode = 'push', expectedToken = token) => {
     if (selectedIndex < 0 || !selectedCard || !release) return;
     const thisFilterToken = ++filterToken;
     // Neighbour cards may belong to other uncached shards, so load them before applying card filters.
@@ -58,7 +59,7 @@
     for (const [index] of savedNeighbours) cardCache.set(index, await getCard(index));
     if (expectedToken !== token || thisFilterToken !== filterToken) return;
     visibleNeighbours = filterNeighbours(savedNeighbours, (index) => cardCache.get(index), filters());
-    updateUrl(push);
+    if (urlMode === 'push') updateUrl(true);
   };
   const selectIndex = async (index, push = true) => {
     const request = ++token;
@@ -73,7 +74,7 @@
       selectedCard = card;
       savedNeighbours = shardData.neighbours[index % release.shard_size];
       visibleNeighbours = savedNeighbours;
-      if (card.has_text) await refreshFilters(false, request);
+      if (card.has_text) await refreshFilters('none', request);
       if (request !== token) return;
       loading = false;
       if (push) updateUrl(true, names.ids[index]);
@@ -116,7 +117,7 @@
     else if (event.key === 'Enter' && suggestions.length) { event.preventDefault(); chooseSuggestion(suggestions[Math.max(activeSuggestion, 0)]); }
     else if (event.key === 'Escape') suggestions = [];
   };
-  const onFilter = () => refreshFilters(true).catch((reason) => { error = reason.message; });
+  const onFilter = () => refreshFilters('push').catch((reason) => { error = reason.message; });
   const onHistory = () => {
     const state = parseUrl(location.search);
     color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type;

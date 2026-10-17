@@ -88,3 +88,15 @@ A running account of what was done, in order. The numbers here come from generat
 ## P6: pilots (started 2026-10-17 06:45 UTC)
 
 1. Slots 1-6 run back to back through `.scratch/run_pilots.sh`, which stops at the first failure. The log is `runs/pilot_chain.log`.
+
+## P9 (early): static app (2026-10-17)
+
+1. Luna (GPT-6 Luna) built the Svelte/Vite app in `web/` against `web/SCHEMA.md` (commit 291b23d):
+   - A deterministic 600-card synthetic fixture with invented names.
+   - `check-bundle.mjs`, which verifies sha256 and byte counts.
+   - 5 vitest tests.
+   - The JS bundle is 22 kB gzipped.
+2. My checks:
+   - Re-ran fixture, test and build; all pass. The JS validator also accepts the **real** Python-exported dry-run bundle (27,866 cards), so the two independent schema implementations agree.
+   - Served the build under a sub-path (`/sub/`) with the real bundle. Deep link, search, keyboard selection, neighbour click, filter URL state, the unknown-ID message and the 375px layout (no overflow) all work.
+   - Found and fixed a history bug: selecting a card overwrote the previous history entry, so Back did nothing. Back and forward now restore the right card.
