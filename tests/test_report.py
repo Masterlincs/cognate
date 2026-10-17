@@ -49,3 +49,17 @@ def test_contrast_aligns_by_seed_id_not_order(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="seed sets"):
         rp.contrast(cand, {1: "comp1", 2: "comp2"}, "full", "B", 4, fam)
     assert rp.contrast(cand, "pre", "full", "B", 4, fam)["n_seeds"] == 3
+
+
+def test_best_recipe_prefers_lower_lr_scale_unless_advanced():
+    from mtgemb.report import best_recipe
+
+    def row(lr, scale, full, hl, ok=True):
+        return {"lr": lr, "scale": scale, "full": full, "hard_lexical": hl,
+                "finished": True, "guardrail_passed": ok}
+    a, b, c = row(1e-5, 20, 0.600, 0.580), row(3e-5, 20, 0.604, 0.590), row(3e-5, 50, 0.610, 0.570)
+    assert best_recipe([c, b, a]) is a  # b gains only 0.004; c drops hard-lexical by 0.010
+    b2 = row(3e-5, 20, 0.606, 0.576)
+    assert best_recipe([a, b2, c]) is b2  # +0.006 full, -0.004 hard-lexical: advances
+    assert best_recipe([row(1e-5, 20, 0.7, 0.7, ok=False), b]) is b
+    assert best_recipe([row(1e-5, 20, 0.7, 0.7, ok=False)]) is None

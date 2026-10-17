@@ -93,3 +93,19 @@ def promotion(full: dict, hard_lexical: dict) -> bool:
                 and full["lower_adjusted"] > PROMOTION["full_lower"]
                 and hard_lexical["point"] >= PROMOTION["hard_lexical_point"]
                 and hard_lexical["lower_adjusted"] > PROMOTION["hard_lexical_lower"])
+
+
+def best_recipe(rows: list[dict]) -> dict | None:
+    """Best E5 recipe among pilot rows.
+
+    Walk recipes in preference order (lower lr, then lower scale). The first one that
+    finished and passed its guardrail is the incumbent; a later recipe replaces it only if
+    it advances over the incumbent by the pilot thresholds. None if no recipe qualifies.
+    """
+    best = None
+    for r in sorted(rows, key=lambda r: (r["lr"], r["scale"])):
+        if not (r["finished"] and r["guardrail_passed"]):
+            continue
+        if best is None or advances(r, best):
+            best = r
+    return best
