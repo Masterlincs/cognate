@@ -196,3 +196,58 @@ def build_training_data(ds_dir: Path) -> dict:
     log_event("data", "COMPLETED", step="pairs", pairs_id=rec["pairs_id"], **pstats)
     return rec
 
+
+
+def audit_pairs(ds_dir: Path, per_band: int = 40) -> dict:
+    """Structural audit of sampled pairs and negatives, plus a readable sample file.
+
+    Automated checks establish consistency only; semantic quality stays unverified unless
+    a person judges the written sample.
+    """
+    ds = load_dataset(ds_dir)
+    pdir = Path(ds_dir) / PAIRS_VERSION
+    pairs = pd.read_parquet(pdir / "pairs.parquet")
+    neg = pd.read_parquet(pdir / "negatives.parquet")
+    cards = ds["cards"].set_index("oracle_id")
+    sets = tag_sets(ds["memberships"])
+    rng = np.random.default_rng(20261017)
+    bands = {
+        "broad_tag_df_200_500": pairs[pairs["tag_df_fit"] >= 200],
+        "mid_tag_df_11_199": pairs[(pairs["tag_df_fit"] > 10) & (pairs["tag_df_fit"] < 200)],
+        "rare_tag_df_le_10": pairs[pairs["tag_df_fit"] <= 10],
+    }
+    checks = Counter()
+    lines = ["# Pair audit sample", "", "Structural checks are automated. Semantic quality is "
+             "unverified unless marked as judged.", ""]
+    for name, frame in bands.items():
+        sample = frame.iloc[rng.choice(len(frame), min(per_band, len(frame)), replace=False)]
+        lines += [f"## {name} ({len(sample)} of {len(frame)})", ""]
+        for r in sample.itertuples():
+            a, b = cards.loc[r.a], cards.loc[r.b]
+            checks["pairs_checked"] += 1
+            checks["both_fit"] += a["split"] == "fit" and b["split"] == "fit"
+            checks["tag_on_both"] += r.tag_id in sets[r.a] and r.tag_id in sets[r.b]
+            checks["different_family"] += a["family_id"] != b["family_id"]
+            checks["shared_all_consistent"] += set(r.shared_all) == set(sets[r.a] & sets[r.b])
+            lines += [f"- tag `{r.tag_label}` (df {r.tag_df_fit}); shared {len(r.shared_all)}",
+                      f"  - {a['name']}: {a['text'][:160]!r}",
+                      f"  - {b['name']}: {b['text'][:160]!r}"]
+        lines.append("")
+    for lo, hi in ((1, 30), (31, 100), (101, 200)):
+        band = neg[(neg["rank"] >= lo) & (neg["rank"] <= hi)]
+        sample = band.iloc[rng.choice(len(band), 15, replace=False)]
+        lines += [f"## lexical negatives ranks {lo}-{hi}", ""]
+        for r in sample.itertuples():
+            a, b = cards.loc[r.anchor], cards.loc[r.negative]
+            checks["negatives_checked"] += 1
+            checks["neg_no_shared_tag"] += not (sets[r.anchor] & sets[r.negative])
+            checks["neg_both_fit"] += a["split"] == "fit" and b["split"] == "fit"
+            checks["neg_different_family"] += a["family_id"] != b["family_id"]
+            lines += [f"- rank {r.rank}, lex {r.lex_cosine:.2f}",
+                      f"  - {a['name']}: {a['text'][:160]!r}",
+                      f"  - {b['name']}: {b['text'][:160]!r}"]
+        lines.append("")
+    (pdir / "audit_sample.md").write_text("\n".join(lines), encoding="utf-8")
+    rec = {"checks": dict(checks), "semantic_quality": "unverified", "created_utc": utcnow()}
+    atomic_write_json(pdir / "audit.json", rec)
+    return rec

@@ -104,12 +104,13 @@ class TrainData:
             shape=(len(self.ids), len(tcol)))
         neg = pd.read_parquet(pdir / "negatives.parquet")
         neg = neg[neg["anchor"].isin(pos) & neg["negative"].isin(pos)]
-        self.neg_pool: dict[int, np.ndarray] = {}
-        self.neg_rank: dict[int, np.ndarray] = {}
-        for anc, g in neg.groupby("anchor"):
-            g = g.sort_values("rank")
-            self.neg_pool[pos[anc]] = g["negative"].map(pos).to_numpy()
-            self.neg_rank[pos[anc]] = g["rank"].to_numpy()
+        neg = neg.assign(ai=neg["anchor"].map(pos), ni=neg["negative"].map(pos))
+        neg = neg.sort_values(["ai", "rank"])
+        ai, ni, rk = (neg[c].to_numpy() for c in ("ai", "ni", "rank"))
+        starts = np.flatnonzero(np.r_[True, ai[1:] != ai[:-1]])
+        ends = np.r_[starts[1:], len(ai)]
+        self.neg_pool = {int(ai[s]): ni[s:e] for s, e in zip(starts, ends, strict=True)}
+        self.neg_rank = {int(ai[s]): rk[s:e] for s, e in zip(starts, ends, strict=True)}
         self.identity = {"dataset_id": ds["ident"]["dataset_id"],
                          "pairs_id": self.pairs_rec["pairs_id"]}
 
@@ -523,7 +524,9 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
                    "eff_neg_a2b": s1["eff_neg_mean"], "eff_neg_b2a": s2["eff_neg_mean"],
                    "masked_frac_a2b": s1["masked_frac"], "multi_pos_rows": s1["multi_pos_rows"],
                    "n_neg": int(len(neg)), "offdiag_cos": off_mean,
-                   "sec": round(time.time() - t_last, 3)}
+                   "sec": round(time.time() - t_last, 3),
+                   "peak_mem_gb": round(torch.xpu.max_memory_allocated() / 1e9, 2)
+                   if dev.type == "xpu" else None}
             t_last = time.time()
             metrics_f.write(json.dumps(rec) + "\n")
             done = upd + 1
