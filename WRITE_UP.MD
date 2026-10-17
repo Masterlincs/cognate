@@ -63,3 +63,28 @@ A running account of what was done, in order. The numbers here come from generat
    Sol found no errors in the metric maths, the bootstrap, the loss/masks, the schedule or the split.
 6. Baselines on benchmark v2, full / hard-lexical: lexical 0.6042 / 0.5769, E5 0.5655 / 0.5391, BGE 0.5403 / 0.5133. The checkpoint guardrails are now E5 ≥ 0.5341 and BGE ≥ 0.5083 hard-lexical.
 7. Froze the training settings and registered the slots and statistics. Slot 10 is skipped as a proven no-op, because the slot 9 replay is the best-E5 run itself.
+8. Sol review r2 confirmed 7 of the 9 fixes and found 5 more problems. All were fixed:
+   - The benchmark id now binds the dataset id. Before this, a changed tag weight kept the same id → benchmark v3 `8bf2f48c0bba3b2c`, with numbers identical to v2.
+   - Torn metrics lines are now handled on a fresh start.
+   - `text.py` is now part of the resume code identity.
+   - Interrupted weight-directory swaps now recover.
+   - Encoder evaluation now takes the GPU lock.
+   Sol review r3: **accept**.
+
+## P8 (early): exporter (2026-10-17)
+
+1. `export.py` does the following:
+   - Encodes the fit+dev catalogue; sealed rows are never loaded.
+   - Checks device-vs-CPU parity on 64 seeded cards (≥0.9999).
+   - Computes exact top-50 neighbours in 512-row blocks, with a stable tie-break by Oracle ID.
+   - Checks 20 seeded rows against an independent float64 full sort. The check is tie-aware.
+   - Writes the static bundle of `web/SCHEMA.md` plus `artifacts/releases/<id>/` (vectors, ID order, parity, reference neighbours).
+   - Builds the release into `.partial` directories and renames them at the end, so a failure publishes nothing. The first dry run crashed on an inverted index map; I fixed it and moved the empty partial directories aside as `*.failed-1`.
+2. Dry run with pretrained E5 into `.scratch/web` (not a release):
+   - Parity 0.99999988; 20/20 reference rows pass (18 exact lists, 2 float32 near-tie swaps).
+   - Bundle size: 39 MB raw; names.json 1.7 MB (0.84 MB gzipped).
+   - Sanity check: Lightning Bolt → Lightning Strike, Precision Bolt, Lightning Helix.
+
+## P6: pilots (started 2026-10-17 06:45 UTC)
+
+1. Slots 1-6 run back to back through `.scratch/run_pilots.sh`, which stops at the first failure. The log is `runs/pilot_chain.log`.
