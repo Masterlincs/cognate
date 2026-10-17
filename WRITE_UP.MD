@@ -114,7 +114,19 @@ A running account of what was done, in order. The numbers here come from generat
    - Same run_id, so this is not an extra run.
    - Finished at 10:52 UTC. Selected update 2000: full 0.6806, hard-lexical 0.6634, guardrail passed.
    - Under , initial-1 advances over initial-2 (full +0.030, hard-lexical +0.031), so initial-1 is the incumbent until initial-3 is in.
-4. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
+4. initial-3 (E5, lr 3e-5, scale 50) hit the same native XPU abort at about update 500 (11:20 UTC):
+   - Its update-250 dev eval was 0.6203/0.5990.
+   - Crash output kept as `runs/initial-3-e5-lr3e-05-s50.crash-1.out`; I resumed from the update-250 checkpoint.
+   - Both crashes struck just before an eval/checkpoint step. The metric lines (last at 1743 and 493) are buffered, so the true crash point is uncertain within about 20 updates.
+   - The crash is not deterministic: the resumed initial-2 passed update 1750 without trouble.
+   - No Windows System or Application event was logged. 14 GB of RAM was free.
+   - The chain script now auto-resumes after this specific abort (output ends in `AssertHandler::printMessage`), at most 3 times per run. It keeps each crash output, logs a `CRASHED` event and still stops on any other failure.
+   - train.py is not changed while runs are resumable, since the code identity is part of the checkpoint.
+5. Paused at the user's request (about 12:09 UTC). I killed the chain script, then initial-3's process tree at about update 1100. Its last checkpoint is update 1000, so resuming redoes about 100 updates. Slots 4-6 have not started.
+   - Resumed at the user's request ("continue") at 14:13 UTC with the same chain command. The trainer reloaded `ckpt-0001000.pt` (code identity unchanged, 46064545ace8be82) and logged its own `RESUMED` event at 14:14 UTC. My manual `RESUMED` line in `runs/train.jsonl` at 14:13 is nested under an extra `event` key (wrong call shape); left in place, not rewritten.
+   - initial-3 (E5, 3e-5, scale 50) finished at 15:05 UTC: selected update 2000, full 0.7109, hard-lexical 0.6952, guardrail passed. Curve still rising at 2000, like initial-1.
+   - Best E5 recipe: initial-1. initial-3 is +0.0007 on full, below the 0.005 advancement threshold, so the lower-scale recipe stays. Wrote configs initial-7/8/9 from initial-1 with one field changed each, checked schedule hashes on CPU (7 and 9 match initial-1; 8 differs by design), and queued them with `.scratch/queue_after.sh` to start when initial-6 logs DONE (abandons on any FAIL).
+6. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)
 
