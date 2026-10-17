@@ -82,12 +82,10 @@ def test_tag_reason_keeps_functional_examples_and_drops_metadata():
         assert tag_reason(label) is not None
 
 
-@pytest.mark.xfail(
-    reason="tag_reason currently drops 'tutors by name' via its generic name suffix rule",
-    strict=True,
-)
 def test_tag_reason_keeps_tutors_by_name():
     assert tag_reason("tutors by name") is None
+    assert tag_reason("change name") is None
+    assert tag_reason("tutored by name") == "name"
 
 
 def test_build_families_transitive_edges_empty_text_and_meld():

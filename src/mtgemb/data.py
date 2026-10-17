@@ -133,9 +133,14 @@ _DENY_PATTERNS = [
 ]
 
 
+_KEEP_EXACT = {"tutors by name", "change name"}  # functional despite matching a deny pattern
+
+
 def tag_reason(label: str) -> str | None:
     """None if the tag is retained as functional, else the exclusion category."""
     lab = label.strip().lower()
+    if lab in _KEEP_EXACT:
+        return None
     if lab in _DENY_EXACT:
         return "metadata"
     for pat, why in _DENY_PATTERNS:

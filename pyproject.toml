@@ -18,7 +18,11 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest", "ruff"]
+dev = [
+    "pytest",
+    "ruff",
+    "sentence-transformers>=6.1.0",
+]
 
 [project.scripts]
 mtgemb = "mtgemb.cli:main"
