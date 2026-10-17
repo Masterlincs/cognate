@@ -1,17 +1,17 @@
 {
-  "phase": "P6",
+  "phase": "P7",
   "status": "RUNNING",
-  "last_completed": "P5",
-  "next_action": "Queue running initial-7..9 (best E5 = initial-1). Then P6 freeze -> P7 confirmation.",
+  "last_completed": "P6",
+  "next_action": "Confirmation chain: confirm-e5-s1, bge-s1, e5-s2, bge-s2, e5-s3, bge-s3. Then eval-encoder on each final/, report.contrast (M=4, n_boot 8000), promotion decision.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
   "smokes_used": 3,
   "initial_runs_used": 9,
   "extension_runs_used": 0,
-  "confirmation_runs_used": 0,
-  "updated_utc": "2026-10-17T21:11:00Z",
-  "active_run": "initial-9-e5-lr3e-05-s20-multipos",
+  "confirmation_runs_used": 1,
+  "updated_utc": "2026-10-17T22:55:00Z",
+  "active_run": "confirm-e5-s1",
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
@@ -20,7 +20,24 @@
     "initial-5-bge-lr1e-05-s20",
     "initial-6-bge-lr3e-05-s50",
     "initial-7-e5-lr3e-05-s20-spec",
-    "initial-8-e5-lr3e-05-s20-band31-100"
+    "initial-8-e5-lr3e-05-s20-band31-100",
+    "initial-9-e5-lr3e-05-s20-multipos"
   ],
-  "best_e5_recipe": "initial-1-e5-lr3e-05-s20"
+  "best_e5_recipe": "initial-1-e5-lr3e-05-s20",
+  "frozen": {
+    "e5_candidates": [
+      "initial-1 recipe"
+    ],
+    "bge_control": "initial-4 recipe",
+    "updates": 2000,
+    "selection": "final",
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "deployment_seed": 1,
+    "M": 4,
+    "decision": ""
+  }
 }

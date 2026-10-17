@@ -135,6 +135,34 @@ A running account of what was done, in order. The numbers here come from generat
    - initial-7 (initial-1 + specificity pair weights) finished at 19:11 UTC with no crash: selected update 2000, full 0.7042, hard-lexical 0.6880, guardrail passed, same schedule hash as initial-1. Against initial-1 (same batches, same seed): -0.0060 full, -0.0065 hard-lexical, so it does not advance. On this dev proxy, single seed, specificity weighting did not help. initial-8 (band [31,100]) started.
    - initial-8 hit the native XPU abort at 19:39 UTC, about 11.5 min after its update-250 eval (one interval takes about 15 min), so roughly update 440-450, mid-stretch. Auto-resume 1/3 restarted it from update 250. Five crashes so far; two of them (initial-6, initial-8) were not near an eval, so the eval-transition guess no longer holds.
    - initial-8 (initial-1 + band [31,100]) finished at 21:09 UTC: selected update 2000, full 0.7004, hard-lexical 0.6836, guardrail passed. Against initial-1: -0.0097 full, -0.0109 hard-lexical; does not advance. Easier negatives (lexical ranks 31-100) did worse than the registered band [1,30] on this dev proxy, single seed. Its batches differ from initial-1's by design (schedule a6497e72d42e876c). initial-9 (multi-positive) started.
+   - initial-9 (initial-1 + multi-positive objective) finished at 22:51 UTC with no crash: selected update 2000, full 0.7056, hard-lexical 0.6899, guardrail passed, same schedule as initial-1. Against initial-1: -0.0046 / -0.0046; does not advance. Its random-pair cosine is the lowest of all runs (0.043).
+
+### P6 summary and freeze (2026-10-17)
+
+All nine registered initial runs finished (slot 10 skipped as a proven no-op). Dev tag-proxy nDCG@10 on each run's guarded-best checkpoint; single seed 0, selection-exposed, not promotion evidence. Hours are wall-clock from STARTED to COMPLETED (initial-3 includes a 2 h user pause); crashes are native XPU aborts, each auto-resumed from the last checkpoint.
+
+| Slot | Backbone | lr | scale | weighting | band | objective | sel. update | full | hard-lex | guardrail | rand. cos | hours | peak GB | crashes | skipped rows | schedule |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| initial-1 | e5-base-v2 | 3e-05 | 20 | none | [1, 30] | masked_infonce | 2000 | 0.7102 | 0.6945 | True | 0.080 | 1.91 | 8.5 | 0 | 0 | 5839ec9d |
+| initial-2 | e5-base-v2 | 1e-05 | 20 | none | [1, 30] | masked_infonce | 2000 | 0.6806 | 0.6634 | True | 0.156 | 2.20 | 8.5 | 1 | 0 | 5839ec9d |
+| initial-3 | e5-base-v2 | 3e-05 | 50 | none | [1, 30] | masked_infonce | 2000 | 0.7109 | 0.6952 | True | 0.561 | 4.20 | 8.5 | 1 | 0 | 5839ec9d |
+| initial-4 | bge-small-en-v1.5 | 3e-05 | 20 | none | [1, 30] | masked_infonce | 2000 | 0.6675 | 0.6495 | True | 0.221 | 0.74 | 4.4 | 1 | 0 | 5839ec9d |
+| initial-5 | bge-small-en-v1.5 | 1e-05 | 20 | none | [1, 30] | masked_infonce | 2000 | 0.6301 | 0.6100 | True | 0.297 | 0.74 | 4.4 | 0 | 0 | 5839ec9d |
+| initial-6 | bge-small-en-v1.5 | 3e-05 | 50 | none | [1, 30] | masked_infonce | 2000 | 0.6668 | 0.6494 | True | 0.680 | 0.71 | 4.4 | 1 | 0 | 5839ec9d |
+| initial-7 | e5-base-v2 | 3e-05 | 20 | specificity | [1, 30] | masked_infonce | 2000 | 0.7042 | 0.6880 | True | 0.083 | 1.88 | 8.5 | 0 | 0 | 5839ec9d |
+| initial-8 | e5-base-v2 | 3e-05 | 20 | none | [31, 100] | masked_infonce | 2000 | 0.7004 | 0.6836 | True | 0.064 | 1.95 | 8.5 | 1 | 0 | a6497e72 |
+| initial-9 | e5-base-v2 | 3e-05 | 20 | none | [1, 30] | multi_positive | 2000 | 0.7056 | 0.6899 | True | 0.043 | 1.67 | 8.5 | 0 | 0 | 5839ec9d |
+
+Baselines for reference (same benchmark): lexical 0.6042 / 0.5769, pretrained E5 0.5655 / 0.5391, pretrained BGE 0.5403 / 0.5133.
+
+What the pilots show, within their limits:
+1. Fine-tuning helps a lot on this proxy: every guarded run beats its pretrained backbone by 0.09-0.15 full nDCG@10, and every E5 run beats the lexical baseline.
+2. lr 3e-5 beats 1e-5 for both backbones at 2000 updates; scale 50 vs 20 is a practical tie for both, though scale 50 leaves the space far more concentrated.
+3. None of the three interventions (specificity weighting, easier negatives, multi-positive) beat the plain recipe on matched batches; all three were slightly worse.
+4. E5 leads BGE-small by about 0.04 on identical batches.
+5. Every curve was still rising at update 2000.
+
+Freeze: no extension runs; one E5 candidate (initial-1 recipe); BGE control = initial-4 recipe; 2000 updates, final checkpoint; seeds 1-3 (seed = data_seed), matched per seed; deployment seed 1; M = 4 registered contrasts. Six confirmation runs, interleaved E5/BGE by seed.
 6. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)
