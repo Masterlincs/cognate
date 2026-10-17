@@ -266,3 +266,34 @@ def test_guarded_selection_requires_guardrail(tiny):
     with pytest.raises(ValueError, match="guardrail"):
         tr.train(_cfg(run_id="g"), {"benchmark_id": "x"}, dev=torch.device("cpu"),
                  data=FakeData())
+
+
+def test_fresh_start_discards_torn_metrics(tiny):
+    d = tiny / "runs" / "fresh"
+    d.mkdir(parents=True)
+    (d / "metrics.jsonl").write_text('{"update": 1, "lo')
+    tr.train(_cfg(run_id="fresh", stop_after=3), None, dev=torch.device("cpu"), data=FakeData())
+    tr.train(_cfg(run_id="fresh"), None, dev=torch.device("cpu"), data=FakeData())
+    assert len((d / "metrics.jsonl").read_text().splitlines()) == 12
+
+
+class _Saver:
+    def __init__(self, tag):
+        self.tag = tag
+
+    def save_pretrained(self, path, **_):
+        path.mkdir(parents=True, exist_ok=True)
+        (path / f"{self.tag}.txt").write_text(self.tag)
+
+
+def test_save_weights_recovers_interrupted_swaps(tmp_path):
+    p = tmp_path / "best"
+    # published new copy, stale backup left behind
+    (tmp_path / "best.old").mkdir()
+    p.mkdir()
+    tr._save_weights(_Saver("m1"), _Saver("t1"), p)
+    assert (p / "m1.txt").exists() and not (tmp_path / "best.old").exists()
+    # interrupted between renames: only the backup exists
+    p.rename(tmp_path / "best.old")
+    tr._save_weights(_Saver("m2"), _Saver("t2"), p)
+    assert (p / "m2.txt").exists() and not (tmp_path / "best.old").exists()

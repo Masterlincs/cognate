@@ -24,7 +24,7 @@ from pydantic import BaseModel, ConfigDict, model_validator
 
 from . import encoder as enc
 from .data import load_dataset
-from .evaluate import Benchmark, evaluate
+from .evaluate import Benchmark, evaluate, load_benchmark
 from .util import (
     RUNS,
     atomic_write_bytes,
@@ -452,7 +452,7 @@ def finalise_selection(evals: list[dict], cfg: TrainConfig, tol: float = 0.005):
     return select_checkpoint(evals, cfg.guardrail_hard_lexical, tol)
 
 
-_CODE_FILES = ("train.py", "encoder.py", "evaluate.py")
+_CODE_FILES = ("train.py", "encoder.py", "evaluate.py", "text.py")
 
 
 def code_identity() -> str:
@@ -523,9 +523,14 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
         _truncate_metrics(out / "metrics.jsonl", start)
         log_event("train", "RESUMED", run_id=cfg.run_id, update=start)
     else:
+        _truncate_metrics(out / "metrics.jsonl", 0)  # restart before any checkpoint
         log_event("train", "STARTED", run_id=cfg.run_id, slot=cfg.slot,
                   schedule_hash=sched_hash, config=cfg.model_dump(mode="json"))
-    bm = Benchmark(bench, *_bench_frames(cfg.dataset_dir)) if bench else None
+    bm = None
+    if bench:
+        bm = load_benchmark(cfg.dataset_dir)[0]
+        if bm.spec["benchmark_id"] != bench["benchmark_id"]:
+            raise ValueError("benchmark changed since the run was configured")
     metrics_f = open(out / "metrics.jsonl", "a", encoding="utf-8")
     autocast = torch.autocast(device_type=dev.type, dtype=torch.bfloat16,
                               enabled=cfg.precision == "bf16")
@@ -629,11 +634,16 @@ def _save_weights(model, tok, path: Path) -> None:
     import shutil
 
     tmp = path.with_name(path.name + ".tmp")
+    old = path.with_name(path.name + ".old")
+    if old.exists():  # an interrupted earlier swap
+        if path.exists():
+            shutil.rmtree(old)  # new copy was published; backup is stale
+        else:
+            os.replace(old, path)  # interrupted between the two renames: restore
     if tmp.exists():
         shutil.rmtree(tmp)
     model.save_pretrained(tmp, safe_serialization=True)
     tok.save_pretrained(tmp)
-    old = path.with_name(path.name + ".old")
     if path.exists():
         os.replace(path, old)
     os.replace(tmp, path)
@@ -658,11 +668,6 @@ def _truncate_metrics(path: Path, upto: int) -> None:
         if u <= upto:
             keep.append(line)
     atomic_write_bytes(path, "".join(line + "\n" for line in keep).encode())
-
-
-def _bench_frames(ds_dir):
-    ds = load_dataset(ds_dir)
-    return ds["cards"], ds["memberships"], ds["tags"]
 
 
 def eval_model(model, tok, recipe, max_length, bm: Benchmark, dev) -> dict:

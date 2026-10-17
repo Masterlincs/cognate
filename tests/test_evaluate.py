@@ -75,14 +75,14 @@ def _vectors(bm, score_by_id):
 
 def test_benchmark_universe_and_anchors():
     cards, mem, tags = _fixture()
-    b = build_benchmark(cards, mem, tags)
+    b = build_benchmark(cards, mem, tags, "ds")
     assert b["universe"] == ["a1", "c1", "c2", "c3", "c4", "d2"]  # sealed excluded, sorted
     assert b["anchors"] == ["a1"]  # d2 only has a tag unseen in fit
 
 
 def test_views_hand_calculated():
     cards, mem, tags = _fixture()
-    bm = Benchmark(build_benchmark(cards, mem, tags), cards, mem, tags)
+    bm = Benchmark(build_benchmark(cards, mem, tags, "ds"), cards, mem, tags)
     v = _vectors(bm, {"c1": 0.9, "c4": 0.8, "c3": 0.7, "c2": 0.6, "d2": 0.5})
     s = evaluate(bm, v)["per_anchor"].set_index("view")
     # full ranking c1(2) c4(0) c3(3) c2(2) d2(0); ideal 3,2,2
@@ -110,7 +110,7 @@ def test_hard_lexical_excludes_high_jaccard():
     cards, mem, tags = _fixture()
     cards.loc[cards.oracle_id == "c3", "text"] = "deal 3 damage"  # Jaccard 1 with a1
     cards.loc[cards.oracle_id == "c3", "family_id"] = "c3"
-    bm = Benchmark(build_benchmark(cards, mem, tags), cards, mem, tags)
+    bm = Benchmark(build_benchmark(cards, mem, tags, "ds"), cards, mem, tags)
     v = _vectors(bm, {"c1": 0.9, "c4": 0.8, "c3": 0.7, "c2": 0.6, "d2": 0.5})
     s = evaluate(bm, v)["per_anchor"].set_index("view")
     assert s.loc["hard", "n_candidates"] == 4 and s.loc["hard_lexical", "n_candidates"] == 3
@@ -119,12 +119,12 @@ def test_hard_lexical_excludes_high_jaccard():
 
 def test_ties_break_by_oracle_id_and_row_order_invariance():
     cards, mem, tags = _fixture()
-    bm = Benchmark(build_benchmark(cards, mem, tags), cards, mem, tags)
+    bm = Benchmark(build_benchmark(cards, mem, tags, "ds"), cards, mem, tags)
     v = _vectors(bm, {"c1": 0.5, "c2": 0.5, "c3": 0.5, "c4": 0.5, "d2": 0.5})
     out = evaluate(bm, v, top_n=5)
     assert out["top"]["a1"] == ["c1", "c2", "c3", "c4", "d2"]
     shuffled = cards.sample(frac=1, random_state=3)
-    bm2 = Benchmark(build_benchmark(shuffled, mem.sample(frac=1, random_state=4), tags),
+    bm2 = Benchmark(build_benchmark(shuffled, mem.sample(frac=1, random_state=4), tags, "ds"),
                     shuffled, mem, tags)
     out2 = evaluate(bm2, v, top_n=5)
     pd.testing.assert_frame_equal(out["per_anchor"], out2["per_anchor"])
@@ -133,7 +133,7 @@ def test_ties_break_by_oracle_id_and_row_order_invariance():
 def test_duplicate_text_candidates_both_count():
     cards, mem, tags = _fixture()
     cards.loc[cards.oracle_id == "c2", "text"] = "deal 3 damage to any target"  # same as c1
-    bm = Benchmark(build_benchmark(cards, mem, tags), cards, mem, tags)
+    bm = Benchmark(build_benchmark(cards, mem, tags, "ds"), cards, mem, tags)
     v = _vectors(bm, {"c1": 0.9, "c2": 0.9, "c3": 0.7, "c4": 0.8, "d2": 0.5})
     assert evaluate(bm, v, top_n=2)["top"]["a1"] == ["c1", "c2"]
 
@@ -141,7 +141,7 @@ def test_duplicate_text_candidates_both_count():
 @pytest.mark.parametrize("bad", ["nan", "zero", "rows"])
 def test_invalid_vectors_fail(bad):
     cards, mem, tags = _fixture()
-    bm = Benchmark(build_benchmark(cards, mem, tags), cards, mem, tags)
+    bm = Benchmark(build_benchmark(cards, mem, tags, "ds"), cards, mem, tags)
     v = _vectors(bm, {"c1": 0.9, "c4": 0.8, "c3": 0.7, "c2": 0.6, "d2": 0.5})
     if bad == "nan":
         v[2, 0] = np.nan
@@ -157,7 +157,7 @@ def test_lexical_sparse_vectors_accepted():
     import scipy.sparse as sp
 
     cards, mem, tags = _fixture()
-    bm = Benchmark(build_benchmark(cards, mem, tags), cards, mem, tags)
+    bm = Benchmark(build_benchmark(cards, mem, tags, "ds"), cards, mem, tags)
     v = _vectors(bm, {"c1": 0.9, "c4": 0.8, "c3": 0.7, "c2": 0.6, "d2": 0.5})
     dense = evaluate(bm, v)["per_anchor"]
     sparse = evaluate(bm, sp.csr_matrix(v * 3.0))["per_anchor"]  # scale-invariant
@@ -190,7 +190,7 @@ def test_untagged_candidate_stays_in_universe_with_zero_gain():
     cards, mem, tags = _fixture()
     extra = cards.iloc[[3]].assign(oracle_id="c0", family_id="c0", text="untagged thing")
     cards = pd.concat([cards, extra], ignore_index=True)
-    bm = Benchmark(build_benchmark(cards, mem, tags), cards, mem, tags)
+    bm = Benchmark(build_benchmark(cards, mem, tags, "ds"), cards, mem, tags)
     assert "c0" in bm.ids and bm.spec["counts"]["universe_untagged"] == 1
     # c0 outranks every relevant card: it occupies rank 1 with gain 0
     v = _vectors(bm, {"c0": 0.95, "c1": 0.9, "c4": 0.8, "c3": 0.7, "c2": 0.6, "d2": 0.5})
@@ -207,3 +207,10 @@ def test_validate_vectors_handles_huge_finite_rows():
     assert np.allclose(np.linalg.norm(x, axis=1), 1.0)
     with pytest.raises(ValueError):
         validate_vectors(np.zeros((2, 2)), 2)
+
+
+def test_benchmark_id_binds_dataset_identity():
+    cards, mem, tags = _fixture()
+    a = build_benchmark(cards, mem, tags, "ds")
+    b = build_benchmark(cards, mem, tags, "ds-other")
+    assert a["universe"] == b["universe"] and a["benchmark_id"] != b["benchmark_id"]

@@ -52,7 +52,8 @@ def main(argv: list[str] | None = None) -> None:
         from .evaluate import bench_path, build_benchmark, save_benchmark
 
         ds = load_dataset(a.ds)
-        out = build_benchmark(ds["cards"], ds["memberships"], ds["tags"])
+        out = build_benchmark(ds["cards"], ds["memberships"], ds["tags"],
+                              ds["ident"]["dataset_id"])
         save_benchmark(out, bench_path(a.ds))
         out = {k: out[k] for k in ("benchmark_id", "counts")}
     elif a.cmd == "eval-lexical":

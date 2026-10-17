@@ -2,7 +2,7 @@
  "run_id": "initial-5-bge-lr1e-05-s20",
  "slot": "initial-5",
  "hypothesis": "bge-small-en-v1.5 optimisation sensitivity arm lr=1e-05, scale=20",
- "comparator": "pretrained bge-small-en-v1.5 (benchmark 6f02d24d42efb042)",
+ "comparator": "pretrained bge-small-en-v1.5 (benchmark 8bf2f48c0bba3b2c)",
  "backbone": "bge-small-en-v1.5",
  "max_length": 92,
  "lr": 1e-05,

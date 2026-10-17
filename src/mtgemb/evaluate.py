@@ -19,7 +19,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from .text import word_tokens
 from .util import atomic_write_json, read_json, sha256_json, utcnow
 
-BENCHMARK_VERSION = "benchmark_v2"  # v1 dropped untagged candidates
+BENCHMARK_VERSION = "benchmark_v3"  # v2 + dataset identity bound into the id
 K = 10
 VIEWS = ("full", "hard", "hard_lexical", "cross_colour", "cross_cost", "cross_body", "strict",
          "dev_candidates")
@@ -35,8 +35,10 @@ RARE_DF = 10
 
 # ---------------------------------------------------------------- benchmark
 
-def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame) -> dict:
-    """Freeze universe, anchors and per-card relevance inputs (fit-only tag weights)."""
+def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame,
+                    dataset_id: str) -> dict:
+    """Freeze universe, anchors and rules, bound to the dataset that supplies relevance
+    inputs (tags, weights, text, metadata): the id changes if any of them change."""
     fit_tags = set(tags.loc[tags["df_fit"] > 0, "tag_id"])
     tagged = set(mem["oracle_id"])
     u = cards[cards["split"].isin(["fit", "dev"]) & (cards["text_status"] == "ok")
@@ -46,6 +48,7 @@ def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame) 
     dev_all = cards[(cards["split"] == "dev") & (cards["text_status"] == "ok")]
     dev_mem = mem[mem["oracle_id"].isin(set(dev_all["oracle_id"]))]
     bench = {
+        "dataset_id": dataset_id,
         "universe": u["oracle_id"].tolist(),
         "anchors": anchors,
         "rules": {
@@ -72,8 +75,25 @@ def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame) 
         },
         "created_utc": utcnow(),
     }
-    bench["benchmark_id"] = sha256_json([bench["universe"], bench["anchors"], bench["rules"]])[:16]
+    bench["benchmark_id"] = _bench_id(bench)
     return bench
+
+
+def _bench_id(bench: dict) -> str:
+    return sha256_json([bench["dataset_id"], bench["universe"], bench["anchors"],
+                        bench["rules"]])[:16]
+
+
+def load_benchmark(ds_dir) -> tuple[Benchmark, dict]:
+    """Frozen benchmark plus its dataset; refuses a spec edited or built on other inputs."""
+    from .data import load_dataset
+
+    ds = load_dataset(ds_dir)
+    spec = read_json(bench_path(ds_dir))
+    if spec.get("dataset_id") != ds["ident"]["dataset_id"] or _bench_id(spec) != spec[
+            "benchmark_id"]:
+        raise ValueError("benchmark does not match its dataset or has been edited")
+    return Benchmark(spec, ds["cards"], ds["memberships"], ds["tags"]), ds
 
 
 class Benchmark:

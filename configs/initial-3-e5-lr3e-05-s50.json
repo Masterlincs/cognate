@@ -2,7 +2,7 @@
  "run_id": "initial-3-e5-lr3e-05-s50",
  "slot": "initial-3",
  "hypothesis": "e5-base-v2 optimisation sensitivity arm lr=3e-05, scale=50",
- "comparator": "pretrained e5-base-v2 (benchmark 6f02d24d42efb042)",
+ "comparator": "pretrained e5-base-v2 (benchmark 8bf2f48c0bba3b2c)",
  "backbone": "e5-base-v2",
  "max_length": 94,
  "lr": 3e-05,

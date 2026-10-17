@@ -4,22 +4,15 @@ and store immutable evaluation records under runs/eval/<benchmark_id>/<name>/.""
 from __future__ import annotations
 
 import time
-from pathlib import Path
 
 import numpy as np
 import torch
 
 from . import encoder as enc
-from .data import load_dataset
-from .evaluate import Benchmark, bench_path, cohort_summary, evaluate
+from .evaluate import Benchmark, cohort_summary, evaluate, load_benchmark
 from .lexical import LEXICAL_RECIPE, fit_vectorizer
-from .util import RUNS, atomic_write_json, git_identity, log_event, read_json, sha256_file, utcnow
-
-
-def load_benchmark(ds_dir: str | Path) -> tuple[Benchmark, dict]:
-    ds = load_dataset(ds_dir)
-    spec = read_json(bench_path(ds_dir))
-    return Benchmark(spec, ds["cards"], ds["memberships"], ds["tags"]), ds
+from .train import DeviceLock
+from .util import RUNS, atomic_write_json, git_identity, log_event, sha256_file, utcnow
 
 
 def save_eval(name: str, bm: Benchmark, res: dict, meta: dict, vectors=None,
@@ -60,12 +53,13 @@ def eval_encoder(ds_dir, name: str, backbone: str, max_length: int,
     recipe = enc.RECIPES[backbone]
     tok, model = enc.load(recipe, model_path)
     dev = enc.device()
-    model.to(dev)
     lengths = enc.token_lengths(tok, bm.texts, recipe)
     truncated = {bm.ids[i] for i in np.flatnonzero(lengths > max_length)}
-    t0 = time.time()
-    v = enc.encode(model, tok, bm.texts, recipe, max_length, batch_size=batch_size, dev=dev)
-    secs = time.time() - t0
+    with DeviceLock():
+        model.to(dev)
+        t0 = time.time()
+        v = enc.encode(model, tok, bm.texts, recipe, max_length, batch_size=batch_size, dev=dev)
+        secs = time.time() - t0
     res = evaluate(bm, v)
     meta = {"system": "encoder", "backbone": backbone, "recipe": recipe,
             "max_length": max_length, "model_path": model_path, "device": str(dev),
