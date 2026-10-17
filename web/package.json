@@ -1,0 +1,19 @@
+{
+  "name": "mtg-card-discovery",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "fixture": "node scripts/make-fixture.mjs",
+    "dev": "vite",
+    "build": "vite build",
+    "test": "vitest run",
+    "check-bundle": "node scripts/check-bundle.mjs"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^5.0.0",
+    "svelte": "^5.0.0",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.0"
+  }
+}
