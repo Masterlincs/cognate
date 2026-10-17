@@ -1,6 +1,16 @@
-import numpy as np
+import hashlib
+import json
 
-from mtgemb.export import reference_check, topk_neighbours
+import numpy as np
+import pytest
+
+from mtgemb.export import (
+    finish_interrupted,
+    ranking_parity,
+    reference_check,
+    release_digest,
+    topk_neighbours,
+)
 
 
 def test_topk_excludes_self_breaks_ties_by_index_and_blocks_agree():
@@ -18,3 +28,39 @@ def test_topk_excludes_self_breaks_ties_by_index_and_blocks_agree():
     assert (a == b).all()
     _, bad, exact = reference_check(big, a, np.arange(20))
     assert bad == [] and exact == 20
+
+
+def test_ranking_parity_counts_top10_overlap():
+    v = np.eye(12, dtype=np.float32)[:, :12] + 0.01
+    v /= np.linalg.norm(v, axis=1, keepdims=True)
+    nidx, _ = topk_neighbours(v, k=10)
+    rows = np.array([0, 5])
+    assert ranking_parity(v[rows], v, rows, nidx).tolist() == [1.0, 1.0]
+    wrong = nidx.copy()
+    wrong[0, :2] = [0, 0]  # two device picks replaced: overlap 8/10 at most
+    assert ranking_parity(v[rows], v, rows, wrong)[0] <= 0.9
+
+
+def test_release_digest_binds_catalogue_and_encoder():
+    base = ("ds", ["a", "b"], {"model_id": "m", "max_length": 94}, "mh", "vh")
+    d = release_digest(*base)
+    assert d == release_digest(*base)
+    assert d != release_digest("ds2", *base[1:])
+    assert d != release_digest("ds", ["b", "a"], *base[2:])
+    assert d != release_digest("ds", base[1], {"model_id": "m", "max_length": 92}, *base[3:])
+
+
+def test_finish_interrupted_adopts_only_matching_artifacts(tmp_path):
+    out, art, final_art = tmp_path / "out", tmp_path / "art.partial", tmp_path / "art"
+    out.mkdir()
+    (out / "release.json").write_text("{}", "utf-8")
+    art.mkdir()
+    (art / "release_meta.json").write_text(json.dumps({"release_json_sha256": "x"}), "utf-8")
+    with pytest.raises(FileExistsError):
+        finish_interrupted(out, art, final_art)
+    good = hashlib.sha256(b"{}").hexdigest()
+    (art / "release_meta.json").write_text(json.dumps({"release_json_sha256": good}), "utf-8")
+    finish_interrupted(out, art, final_art)
+    assert (final_art / "release_meta.json").exists() and not art.exists()
+    with pytest.raises(FileExistsError):  # no partial artifacts left
+        finish_interrupted(out, tmp_path / "missing", tmp_path / "art2")

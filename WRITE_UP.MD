@@ -100,3 +100,15 @@ A running account of what was done, in order. The numbers here come from generat
    - Re-ran fixture, test and build; all pass. The JS validator also accepts the **real** Python-exported dry-run bundle (27,866 cards), so the two independent schema implementations agree.
    - Served the build under a sub-path (`/sub/`) with the real bundle. Deep link, search, keyboard selection, neighbour click, filter URL state, the unknown-ID message and the 375px layout (no overflow) all work.
    - Found and fixed a history bug: selecting a card overwrote the previous history entry, so Back did nothing. Back and forward now restore the right card.
+
+## Review: exporter, app and statistics (Sol round 1, 2026-10-17)
+
+Sol (GPT-6.1 Sol) reviewed the exporter, app and report code and found six P2 issues. I accepted all six.
+
+1. App: a stale popstate selection, and no check of ID order, the card-to-index mapping or the `current.json` pointer. Luna fixed both (429bdab). I re-ran fixture, tests (7), build and `check-bundle` on the fixture and the real dry-run bundle; all pass.
+2. Exporter (ff5cc27):
+   - The release ID now hashes the dataset id, the catalogue ID order, the encoder recipe with max_length, the model hash and the vector hash.
+   - Publication renames the bundle first and the artifacts last. A retry after a crash between the two adopts the partial artifacts only if they name the published `release.json`.
+   - New query-side parity check: the top-10 of CPU-encoded probe cards against the device catalogue must overlap the device top-10 by at least 0.98 on average.
+3. Statistics (ff5cc27): `report.contrast` now pairs candidate and comparator runs by seed id, not list order.
+4. Sol round 2 (re-review) launched.

@@ -56,22 +56,34 @@ def _ndcg(bench_id: str, name: str, view: str) -> pd.Series:
     return per.set_index("anchor")["ndcg"]
 
 
-def contrast(cand: list[str], comp: list[str], view: str, bench_id: str, m: int,
-             families: pd.Series) -> dict:
-    """Candidate seeds vs comparator (1 eval if untrained, else seeds matched by index)."""
-    a = [_ndcg(bench_id, n, view) for n in cand]
-    b = [_ndcg(bench_id, n, view) for n in comp]
+def contrast(cand: dict[int, str], comp: dict[int, str] | str, view: str, bench_id: str,
+             m: int, families: pd.Series) -> dict:
+    """Paired candidate-minus-comparator contrast.
+
+    cand: {seed: eval name}. comp: {seed: eval name} for a trained comparator (seed sets
+    must match; pairs are aligned by seed id, never by list order), or a single eval name
+    for an untrained comparator, which is broadcast to every candidate seed.
+    """
+    seeds = sorted(cand)
+    if isinstance(comp, dict):
+        if sorted(comp) != seeds:
+            raise ValueError(f"seed sets differ: {seeds} vs {sorted(comp)}")
+        comp_names = [comp[s] for s in seeds]
+    else:
+        comp_names = [comp]
+    a = [_ndcg(bench_id, cand[s], view) for s in seeds]
+    b = [_ndcg(bench_id, n, view) for n in comp_names]
     anchors = a[0].index
-    for s in a + b:
-        if not s.index.equals(anchors):
+    for x in a + b:
+        if not x.index.equals(anchors):
             raise ValueError("systems were scored on different anchor sets")
-    out = paired_bootstrap(np.stack([s.to_numpy() for s in a]),
-                           np.stack([s.to_numpy() for s in b]),
+    out = paired_bootstrap(np.stack([x.to_numpy() for x in a]),
+                           np.stack([x.to_numpy() for x in b]),
                            families.loc[anchors].to_numpy(), n_boot=n_boot_for(m),
                            seed=BOOT_SEED, lower_q=PROMOTION["alpha"] / m)
-    out.update(view=view, candidate=cand, comparator=comp,
-               cand_seed_means=[float(s.mean()) for s in a],
-               comp_seed_means=[float(s.mean()) for s in b])
+    out.update(view=view, seeds=seeds, candidate=[cand[s] for s in seeds],
+               comparator=comp_names, cand_seed_means=[float(x.mean()) for x in a],
+               comp_seed_means=[float(x.mean()) for x in b])
     return out
 
 

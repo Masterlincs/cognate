@@ -80,6 +80,38 @@ def reference_check(v: np.ndarray, nidx: np.ndarray, rows: np.ndarray, atol: flo
     return ref, bad, exact
 
 
+def ranking_parity(q: np.ndarray, v: np.ndarray, rows: np.ndarray, nidx: np.ndarray,
+                   k: int = 10) -> np.ndarray:
+    """Top-k set overlap per probe: CPU query rows q (for catalogue rows `rows`) ranked
+    against the device catalogue v, versus the device top-k in nidx."""
+    out = np.empty(len(rows))
+    for i, r in enumerate(rows):
+        sc = v @ q[i]
+        sc[r] = -np.inf
+        top = np.argsort(-sc, kind="stable")[:k]
+        out[i] = len(set(top.tolist()) & set(nidx[r, :k].tolist())) / k
+    return out
+
+
+def release_digest(dataset_id: str, ids: list[str], encoder: dict, model_hash: str,
+                   vec_hash: str) -> str:
+    """Everything that defines a release's content; same inputs -> same release_id."""
+    return sha256_json([dataset_id, sha256_json(ids), encoder, model_hash, vec_hash])[:8]
+
+
+def finish_interrupted(final_out: Path, art: Path, final_art: Path) -> None:
+    """Complete a publication interrupted between the bundle and artifact renames.
+
+    The bundle is published first and the artifacts last, so final_art existing means the
+    release is complete. Only artifacts that name this exact release.json are adopted.
+    """
+    meta_p = art / "release_meta.json"
+    if not meta_p.exists() or json.loads(meta_p.read_text("utf-8"))[
+            "release_json_sha256"] != sha256_file(final_out / "release.json"):
+        raise FileExistsError(f"bundle {final_out} exists without matching artifacts")
+    os.replace(art, final_art)
+
+
 def _dump(path: Path, obj) -> dict:
     data = json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     atomic_write_bytes(path, data)
@@ -113,6 +145,9 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     if cos.min() < 0.9999:
         raise ValueError(f"device/CPU parity failed: min cosine {cos.min():.6f}")
     nidx, nsco = topk_neighbours(v)
+    overlap = ranking_parity(cpu, v, probe, nidx)
+    if overlap.mean() < 0.98:
+        raise ValueError(f"CPU/device top-10 overlap {overlap.mean():.4f} < 0.98")
     ref_rows = np.sort(rng.choice(len(ti), size=min(ref_n, len(ti)), replace=False))
     ref, bad, exact = reference_check(v, nidx, ref_rows)
     if bad:
@@ -122,15 +157,23 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     model_hash = sha256_json(recipe) if model_path is None else sha256_file(
         Path(model_path) / "model.safetensors")
     snapshot = ds["ident"].get("snapshot") or Path(ds_dir).name.split("_")[0]
-    release_id = f"{snapshot}-{backbone}-{sha256_json([model_hash, vec_hash])[:8]}"
+    encoder_meta = {**recipe, "max_length": max_length}
+    release_id = f"{snapshot}-{backbone}-" + release_digest(
+        ds["ident"]["dataset_id"], cards["oracle_id"].tolist(), encoder_meta, model_hash,
+        vec_hash)
     web = Path(web_dir or ROOT / "web" / "public")
-    out = web / "data" / release_id
-    art = ARTIFACTS / "releases" / release_id
-    if out.exists() or art.exists():
-        raise FileExistsError(f"release {release_id} already exported; never overwritten")
-    # write into unpublished .partial dirs, rename at the end: a failure publishes nothing
-    final_out, final_art = out, art
+    final_out = web / "data" / release_id
+    final_art = ARTIFACTS / "releases" / release_id
+    # write into unpublished .partial dirs; rename bundle first, artifacts last
     out, art = (p.with_name(p.name + ".partial") for p in (final_out, final_art))
+    if final_art.exists():
+        raise FileExistsError(f"release {release_id} already exported; never overwritten")
+    if final_out.exists():
+        finish_interrupted(final_out, art, final_art)
+        log_event("export", "COMPLETED", release_id=release_id, recovered=True)
+        return {"release_id": release_id, "bundle": str(final_out),
+                "artifacts": str(final_art), "parity": json.loads(
+                    (final_art / "release_meta.json").read_text("utf-8"))["parity"]}
     for p in (out, art):
         if p.exists():
             shutil.rmtree(p)  # leftover from a failed export; never published
@@ -176,13 +219,16 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
 
     np.save(art / "vectors.npy", v)
     meta = {"release_id": release_id, "dataset_id": ds["ident"]["dataset_id"],
-            "encoder": {**recipe, "max_length": max_length}, "model_path": model_path,
+            "encoder": encoder_meta, "model_path": model_path,
             "model_hash": model_hash, "run_id": run_id, "dim": int(v.shape[1]),
             "vector_rows": "catalogue cards with has_text, in oracle_id order",
             "vectors_sha256": sha256_file(art / "vectors.npy"),
             "n_cards": len(cards), "n_with_text": int(len(ti)),
             "parity": {"device": str(dev), "cpu_vs_device_min_cos": float(cos.min()),
-                       "n_probe": int(len(probe)), "topk_reference_rows": int(len(ref_rows)),
+                       "n_probe": int(len(probe)),
+                       "cpu_query_top10_overlap_mean": float(overlap.mean()),
+                       "cpu_query_top10_overlap_min": float(overlap.min()),
+                       "topk_reference_rows": int(len(ref_rows)),
                        "topk_reference_failures": 0, "topk_reference_exact_lists": exact},
             "reference_neighbours": {cards.loc[ti[r], "oracle_id"]:
                                      [cards.loc[ti[j], "oracle_id"] for j in ref[int(r)]]
@@ -190,8 +236,8 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
             "bundle_dir": str(final_out), "release_json_sha256": sha256_file(out / "release.json"),
             "code": git_identity(), "created_utc": utcnow()}
     atomic_write_json(art / "release_meta.json", meta)
-    os.replace(art, final_art)
     os.replace(out, final_out)
+    os.replace(art, final_art)
     log_event("export", "COMPLETED", release_id=release_id, status=status, run_id=run_id)
     return {"release_id": release_id, "bundle": str(final_out), "artifacts": str(final_art),
             "parity": meta["parity"]}
