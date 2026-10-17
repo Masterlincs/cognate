@@ -7,16 +7,17 @@
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
   "smokes_used": 3,
-  "initial_runs_used": 5,
+  "initial_runs_used": 6,
   "extension_runs_used": 0,
   "confirmation_runs_used": 0,
-  "updated_utc": "2026-10-17T15:51:00Z",
-  "active_run": "initial-5-bge-lr1e-05-s20",
+  "updated_utc": "2026-10-17T16:36:00Z",
+  "active_run": "initial-6-bge-lr3e-05-s50",
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
     "initial-3-e5-lr3e-05-s50",
-    "initial-4-bge-lr3e-05-s20"
+    "initial-4-bge-lr3e-05-s20",
+    "initial-5-bge-lr1e-05-s20"
   ],
   "best_e5_recipe": "initial-1-e5-lr3e-05-s20"
 }
