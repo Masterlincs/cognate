@@ -49,11 +49,11 @@ def main(argv: list[str] | None = None) -> None:
         out = audit_pairs(Path(a.ds))
     elif a.cmd == "benchmark":
         from .data import load_dataset
-        from .evaluate import build_benchmark, save_benchmark
+        from .evaluate import bench_path, build_benchmark, save_benchmark
 
         ds = load_dataset(a.ds)
         out = build_benchmark(ds["cards"], ds["memberships"], ds["tags"])
-        save_benchmark(out, Path(a.ds) / "benchmark.json")
+        save_benchmark(out, bench_path(a.ds))
         out = {k: out[k] for k in ("benchmark_id", "counts")}
     elif a.cmd == "eval-lexical":
         from .baselines import eval_lexical
@@ -64,10 +64,11 @@ def main(argv: list[str] | None = None) -> None:
 
         out = eval_encoder(a.ds, a.name, a.backbone, a.max_length, a.model_path)["summary"]
     elif a.cmd == "train":
+        from .evaluate import bench_path
         from .train import TrainConfig, train
 
         cfg = TrainConfig(**read_json(a.config))
-        bench = read_json(Path(cfg.dataset_dir) / "benchmark.json") if cfg.eval_every else None
+        bench = read_json(bench_path(cfg.dataset_dir)) if cfg.eval_every else None
         out = train(cfg, bench)
     print(json.dumps(out, indent=2, default=str))
 

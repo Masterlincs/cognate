@@ -378,16 +378,33 @@ def prepare(raw_dir: Path, out_dir: Path | None = None) -> dict:
     return ident
 
 
-def load_dataset(ds_dir: Path) -> dict:
-    """Load a finalised dataset, verifying file hashes."""
+def load_dataset(ds_dir: Path, include_sealed: bool = False) -> dict:
+    """Load a finalised dataset, verifying file hashes.
+
+    By default sealed rows are dropped by the parquet reader's filter, so no caller sees
+    sealed text, metadata or tag memberships. Only an authorised final evaluation may pass
+    include_sealed=True. (Hashing still reads the files' bytes; it parses nothing.)
+    """
     ds_dir = Path(ds_dir)
     ident = read_json(ds_dir / "dataset.json")
     for name, h in ident["files"].items():
         if sha256_file(ds_dir / name) != h:
             raise ValueError(f"dataset file changed: {name}")
     out = {"ident": ident, "dir": ds_dir}
+    flt = None if include_sealed else [("split", "!=", "sealed")]
+    out["cards"] = pd.read_parquet(ds_dir / "cards.parquet", filters=flt)
+    keep = None if include_sealed else out["cards"]["oracle_id"].tolist()
     for name in ident["files"]:
-        out[name.removesuffix(".parquet")] = pd.read_parquet(ds_dir / name)
+        key = name.removesuffix(".parquet")
+        if key == "cards":
+            continue
+        if keep is not None and key == "memberships":
+            out[key] = pd.read_parquet(ds_dir / name, filters=[("oracle_id", "in", keep)])
+        elif keep is not None and key == "family_edges":
+            out[key] = pd.read_parquet(ds_dir / name,
+                                       filters=[("a", "in", keep), ("b", "in", keep)])
+        else:
+            out[key] = pd.read_parquet(ds_dir / name)
     return out
 
 

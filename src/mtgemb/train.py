@@ -2,7 +2,8 @@
 
 The batch schedule is a pure function of (config, data), so the sampler position is just
 the update counter. Checkpoints hold model, optimiser, scheduler, RNG states and counters,
-and are written atomically with a hash sidecar that resume validates.
+and are immutable generations (ckpt-<update>.pt) published by atomically rewriting a single
+pointer file (last.json) that carries the hash resume validates.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 import torch
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from . import encoder as enc
 from .data import load_dataset
@@ -65,8 +66,16 @@ class TrainConfig(BaseModel):
     grad_checkpointing: bool = False
     max_skip_rate: float = 0.01
     guardrail_hard_lexical: float | None = None  # pretrained hard-lexical nDCG
+    # guarded_best: pilot rule (MASTER_PLAN §5). final: confirmation runs, no selection
+    selection: Literal["guarded_best", "final"] = "guarded_best"
     dataset_dir: str
     stop_after: int | None = None  # engineering: stop (resumably) after this update
+
+    @model_validator(mode="after")
+    def _confirmation_uses_final(self):
+        if self.slot.startswith("confirm") and self.selection != "final":
+            raise ValueError("confirmation runs must use selection='final'")
+        return self
 
 
 # ---------------------------------------------------------------- data
@@ -312,23 +321,35 @@ def _set_rng_state(st: dict) -> None:
         torch.xpu.set_rng_state_all(st["xpu"])
 
 
-def save_checkpoint(path: Path, state: dict, identity: dict) -> None:
-    """Atomic: write temp, fsync, rename; then the hash sidecar (also atomic)."""
-    path = Path(path)
+def save_checkpoint(out: Path, state: dict, identity: dict) -> Path:
+    """Write a new generation (temp, fsync, rename), then atomically repoint last.json.
+
+    An interruption at any point leaves last.json naming a complete, matching generation.
+    Superseded generations are removed only after the pointer has moved.
+    """
+    out = Path(out)
+    path = out / f"ckpt-{state['update']:07d}.pt"
     tmp = path.with_name(path.name + ".tmp")
     torch.save(state, tmp)
     with open(tmp, "r+b") as f:  # Windows needs a writable handle to fsync
         os.fsync(f.fileno())
     os.replace(tmp, path)
-    atomic_write_json(path.with_suffix(".json"),
-                      {"sha256": sha256_file(path), "identity": identity, "saved_utc": utcnow(),
-                       "update": state["update"]})
+    atomic_write_json(out / "last.json",
+                      {"file": path.name, "sha256": sha256_file(path), "identity": identity,
+                       "saved_utc": utcnow(), "update": state["update"]})
+    for old in out.glob("ckpt-*.pt"):
+        if old.name != path.name:
+            old.unlink()
+    return path
 
 
-def load_checkpoint(path: Path, identity: dict) -> dict:
-    """Reject a checkpoint whose bytes, config or inputs differ from the current run."""
-    path = Path(path)
-    side = read_json(path.with_suffix(".json"))
+def load_checkpoint(out: Path, identity: dict) -> dict | None:
+    """Latest published generation, or None. Rejects changed bytes, config or inputs."""
+    ptr = Path(out) / "last.json"
+    if not ptr.exists():
+        return None
+    side = read_json(ptr)
+    path = Path(out) / side["file"]
     if sha256_file(path) != side["sha256"]:
         raise ValueError(f"checkpoint {path} is corrupted (hash mismatch)")
     if side["identity"] != identity:
@@ -415,6 +436,31 @@ def select_checkpoint(evals: list[dict], guardrail: float | None, tol: float = 0
     return best, True
 
 
+SELECTION_RULES = {
+    "guarded_best": "best dev full nDCG with hard-lexical >= pretrained-0.005; "
+                    "ties: higher hard-lexical, earlier update",
+    "final": "fixed final update; no checkpoint selection on development results",
+}
+
+
+def finalise_selection(evals: list[dict], cfg: TrainConfig, tol: float = 0.005):
+    """(selected eval, guardrail passed) under the run's registered selection mode."""
+    if cfg.selection == "final":
+        sel = max(evals, key=lambda e: e["update"])
+        g = cfg.guardrail_hard_lexical
+        return sel, g is None or sel["hard_lexical"] >= g - tol
+    return select_checkpoint(evals, cfg.guardrail_hard_lexical, tol)
+
+
+_CODE_FILES = ("train.py", "encoder.py", "evaluate.py")
+
+
+def code_identity() -> str:
+    """Hash of the source that defines training semantics; resume refuses a change."""
+    here = Path(__file__).parent
+    return sha256_json({f: sha256_file(here / f) for f in _CODE_FILES})[:16]
+
+
 def run_dir(run_id: str) -> Path:
     return RUNS / run_id
 
@@ -427,8 +473,11 @@ def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | No
     out.mkdir(parents=True, exist_ok=True)
     data = data or TrainData(cfg.dataset_dir)
     recipe = enc.RECIPES[cfg.backbone]
+    if bench and cfg.selection == "guarded_best" and cfg.guardrail_hard_lexical is None:
+        raise ValueError("guarded_best selection needs guardrail_hard_lexical "
+                         "(the backbone's pretrained hard-lexical nDCG)")
     cfg_hash = sha256_json(cfg.model_dump(mode="json", exclude={"stop_after"}))
-    identity = {"config": cfg_hash, **data.identity, "recipe": recipe,
+    identity = {"config": cfg_hash, **data.identity, "recipe": recipe, "code": code_identity(),
                 "benchmark_id": bench["benchmark_id"] if bench else None}
     manifest_path = out / "manifest.json"
     if manifest_path.exists():
@@ -440,8 +489,7 @@ def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | No
                "identity": identity, "code": git_identity(), "created_utc": utcnow(),
                "device": str(dev), "torch": torch.__version__,
                "hypothesis": cfg.hypothesis, "comparator": cfg.comparator,
-               "selection_rule": "best dev full nDCG with hard-lexical >= pretrained-0.005; "
-                                 "ties: higher hard-lexical, earlier update"}
+               "selection_rule": SELECTION_RULES[cfg.selection]}
         atomic_write_json(manifest_path, man)
 
     batches = build_schedule(cfg, data)
@@ -460,15 +508,16 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
     model.to(dev)
     opt = torch.optim.AdamW(param_groups(model, cfg.weight_decay), lr=cfg.lr)
     sch = torch.optim.lr_scheduler.LambdaLR(opt, lr_lambda(cfg.total_updates, cfg.warmup_frac))
-    ckpt = out / "last.pt"
     start, evals, best = 0, [], None
-    if ckpt.exists():
-        st = load_checkpoint(ckpt, identity)
+    skipped_total = rows_total = 0
+    st = load_checkpoint(out, identity)
+    if st is not None:
         model.load_state_dict(st["model"])
         opt.load_state_dict(st["optimizer"])
         sch.load_state_dict(st["scheduler"])
         _set_rng_state(st["rng"])
         start, evals, best = st["update"], st["evals"], st.get("best")
+        skipped_total, rows_total = st["skipped_total"], st["rows_total"]
         if st["schedule_hash"] != sched_hash:
             raise ValueError("batch schedule changed since the checkpoint")
         _truncate_metrics(out / "metrics.jsonl", start)
@@ -481,7 +530,6 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
     autocast = torch.autocast(device_type=dev.type, dtype=torch.bfloat16,
                               enabled=cfg.precision == "bf16")
     t_last = time.time()
-    skipped_total = rows_total = 0
     done = start
     try:
         for upd in range(start, cfg.total_updates):
@@ -540,16 +588,17 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
                 evals.append(e)
                 metrics_f.write(json.dumps({"eval": e}) + "\n")
                 cur, ok = select_checkpoint(evals, cfg.guardrail_hard_lexical)
-                if ok and cur["update"] == done:
+                if cfg.selection == "guarded_best" and ok and cur["update"] == done:
                     best = dict(e)
                     _save_weights(model, tok, out / "best")
                 log_event("train", "EVAL", run_id=cfg.run_id, **e)
             if is_eval or done == cfg.total_updates or (cfg.stop_after and done == cfg.stop_after):
                 metrics_f.flush()
-                save_checkpoint(ckpt, {"model": model.state_dict(), "optimizer": opt.state_dict(),
-                                       "scheduler": sch.state_dict(), "rng": _rng_state(),
-                                       "update": done, "evals": evals, "best": best,
-                                       "schedule_hash": sched_hash}, identity)
+                save_checkpoint(out, {"model": model.state_dict(), "optimizer": opt.state_dict(),
+                                      "scheduler": sch.state_dict(), "rng": _rng_state(),
+                                      "update": done, "evals": evals, "best": best,
+                                      "skipped_total": skipped_total, "rows_total": rows_total,
+                                      "schedule_hash": sched_hash}, identity)
     except BaseException as ex:
         metrics_f.close()
         log_event("train", "FAILED" if not isinstance(ex, KeyboardInterrupt) else "INTERRUPTED",
@@ -560,10 +609,11 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
     result = {"run_id": cfg.run_id, "updates_done": done,
               "evals": evals, "schedule_hash": sched_hash, "finished": finished}
     if finished and evals:
-        sel, passed = select_checkpoint(evals, cfg.guardrail_hard_lexical)
+        sel, passed = finalise_selection(evals, cfg)
         _save_weights(model, tok, out / "final")
-        result.update(selected=sel, guardrail_passed=passed,
-                      selected_dir=str(out / ("best" if passed else "final")))
+        use_best = cfg.selection == "guarded_best" and passed
+        result.update(selected=sel, guardrail_passed=passed, selection=cfg.selection,
+                      selected_dir=str(out / ("best" if use_best else "final")))
         atomic_write_json(out / "result.json", result)
         log_event("train", "COMPLETED", run_id=cfg.run_id, selected=sel, guardrail_passed=passed)
     elif finished:
@@ -596,8 +646,14 @@ def _truncate_metrics(path: Path, upto: int) -> None:
     if not path.exists():
         return
     keep = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        r = json.loads(line)
+    lines = path.read_text(encoding="utf-8").splitlines()
+    for n, line in enumerate(lines):
+        try:
+            r = json.loads(line)
+        except json.JSONDecodeError:
+            if n == len(lines) - 1:
+                break  # torn final record from an interrupted write
+            raise
         u = r["eval"]["update"] if "eval" in r else r["update"]
         if u <= upto:
             keep.append(line)

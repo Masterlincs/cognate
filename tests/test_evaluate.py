@@ -184,3 +184,26 @@ def test_bootstrap_known_sign_and_pairing():
 
 def test_n_boot_tail():
     assert n_boot_for(8) == 16000
+
+
+def test_untagged_candidate_stays_in_universe_with_zero_gain():
+    cards, mem, tags = _fixture()
+    extra = cards.iloc[[3]].assign(oracle_id="c0", family_id="c0", text="untagged thing")
+    cards = pd.concat([cards, extra], ignore_index=True)
+    bm = Benchmark(build_benchmark(cards, mem, tags), cards, mem, tags)
+    assert "c0" in bm.ids and bm.spec["counts"]["universe_untagged"] == 1
+    # c0 outranks every relevant card: it occupies rank 1 with gain 0
+    v = _vectors(bm, {"c0": 0.95, "c1": 0.9, "c4": 0.8, "c3": 0.7, "c2": 0.6, "d2": 0.5})
+    s = evaluate(bm, v)["per_anchor"].set_index("view")
+    dcg = 2 / L2(3) + 3 / L2(5) + 2 / L2(6)
+    idcg = 3 + 2 / L2(3) + 2 / L2(4)
+    assert s.loc["full", "ndcg"] == pytest.approx(dcg / idcg)
+
+
+def test_validate_vectors_handles_huge_finite_rows():
+    from mtgemb.evaluate import validate_vectors
+
+    x = validate_vectors(np.array([[1e20, 1e20], [1.0, 0.0]], dtype=np.float32), 2)
+    assert np.allclose(np.linalg.norm(x, axis=1), 1.0)
+    with pytest.raises(ValueError):
+        validate_vectors(np.zeros((2, 2)), 2)

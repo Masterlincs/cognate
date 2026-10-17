@@ -131,3 +131,24 @@ def test_idf_weights_use_fit_memberships_and_omit_unknown_tags():
     assert weights["rare"] == pytest.approx(1 + math.log(3 / 2))
     assert "only-nonfit" not in weights
 
+
+
+def test_load_dataset_hides_sealed_rows_by_default(tmp_path):
+    from mtgemb.data import load_dataset
+    from mtgemb.util import atomic_write_json, sha256_file
+
+    pd.DataFrame({"oracle_id": ["f", "d", "s"], "split": ["fit", "dev", "sealed"],
+                  "text": ["a", "b", "secret"]}).to_parquet(tmp_path / "cards.parquet")
+    pd.DataFrame({"oracle_id": ["f", "s"], "tag_id": ["t", "t"]}).to_parquet(
+        tmp_path / "memberships.parquet")
+    pd.DataFrame({"a": ["f", "d"], "b": ["d", "s"], "reason": ["x", "y"]}).to_parquet(
+        tmp_path / "family_edges.parquet")
+    files = {n: sha256_file(tmp_path / n)
+             for n in ("cards.parquet", "memberships.parquet", "family_edges.parquet")}
+    atomic_write_json(tmp_path / "dataset.json", {"files": files})
+    ds = load_dataset(tmp_path)
+    assert set(ds["cards"]["oracle_id"]) == {"f", "d"}
+    assert "secret" not in ds["cards"]["text"].tolist()
+    assert ds["memberships"]["oracle_id"].tolist() == ["f"]
+    assert ds["family_edges"][["a", "b"]].values.tolist() == [["f", "d"]]
+    assert len(load_dataset(tmp_path, include_sealed=True)["cards"]) == 3

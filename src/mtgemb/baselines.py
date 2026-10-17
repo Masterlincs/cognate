@@ -1,5 +1,5 @@
 """Evaluate fixed systems (lexical, pretrained encoders, trained checkpoints) on the benchmark
-and store immutable evaluation records under runs/eval/<name>/."""
+and store immutable evaluation records under runs/eval/<benchmark_id>/<name>/."""
 
 from __future__ import annotations
 
@@ -11,20 +11,20 @@ import torch
 
 from . import encoder as enc
 from .data import load_dataset
-from .evaluate import Benchmark, cohort_summary, evaluate
+from .evaluate import Benchmark, bench_path, cohort_summary, evaluate
 from .lexical import LEXICAL_RECIPE, fit_vectorizer
 from .util import RUNS, atomic_write_json, git_identity, log_event, read_json, sha256_file, utcnow
 
 
 def load_benchmark(ds_dir: str | Path) -> tuple[Benchmark, dict]:
     ds = load_dataset(ds_dir)
-    spec = read_json(Path(ds_dir) / "benchmark.json")
+    spec = read_json(bench_path(ds_dir))
     return Benchmark(spec, ds["cards"], ds["memberships"], ds["tags"]), ds
 
 
 def save_eval(name: str, bm: Benchmark, res: dict, meta: dict, vectors=None,
               truncated: set[str] | None = None) -> dict:
-    out = RUNS / "eval" / name
+    out = RUNS / "eval" / bm.spec["benchmark_id"] / name
     if (out / "summary.json").exists():
         raise FileExistsError(f"evaluation {name} already recorded; use a new name")
     out.mkdir(parents=True, exist_ok=True)

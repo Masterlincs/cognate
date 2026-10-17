@@ -1,7 +1,7 @@
 """Tag-proxy retrieval evaluation (MASTER_PLAN §5).
 
-Benchmark: a frozen candidate universe U (fit+dev cards with usable text and at least one
-retained functional tag), sorted by Oracle ID, and frozen development anchors. Every system
+Benchmark: a frozen candidate universe U (fit+dev cards with usable text; untagged cards
+stay in with zero proxy gain), sorted by Oracle ID, and frozen development anchors. Every system
 supplies one L2-normalisable row per U card; scores are cosine; ties break by Oracle ID
 ascending. Each view's mask is applied before both the retrieved and the ideal ranking.
 """
@@ -19,6 +19,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from .text import word_tokens
 from .util import atomic_write_json, read_json, sha256_json, utcnow
 
+BENCHMARK_VERSION = "benchmark_v2"  # v1 dropped untagged candidates
 K = 10
 VIEWS = ("full", "hard", "hard_lexical", "cross_colour", "cross_cost", "cross_body", "strict",
          "dev_candidates")
@@ -39,7 +40,7 @@ def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame) 
     fit_tags = set(tags.loc[tags["df_fit"] > 0, "tag_id"])
     tagged = set(mem["oracle_id"])
     u = cards[cards["split"].isin(["fit", "dev"]) & (cards["text_status"] == "ok")
-              & cards["oracle_id"].isin(tagged)].sort_values("oracle_id")
+              ].sort_values("oracle_id")
     fit_tagged = set(mem.loc[mem["tag_id"].isin(fit_tags), "oracle_id"])
     anchors = u[(u["split"] == "dev") & u["oracle_id"].isin(fit_tagged)]["oracle_id"].tolist()
     dev_all = cards[(cards["split"] == "dev") & (cards["text_status"] == "ok")]
@@ -48,7 +49,8 @@ def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame) 
         "universe": u["oracle_id"].tolist(),
         "anchors": anchors,
         "rules": {
-            "universe": "split in {fit, dev}, text_status ok, >=1 retained functional tag",
+            "version": BENCHMARK_VERSION,
+            "universe": "split in {fit, dev}, text_status ok; untagged cards have zero gain",
             "anchors": "dev cards in universe with >=1 tag represented in fit",
             "ranking": "cosine desc, then oracle_id asc", "k": K,
             "views": VIEWS, "hard_lexical_jaccard": HARD_LEXICAL_JACCARD,
@@ -59,7 +61,8 @@ def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame) 
             "pilot_thresholds": PILOT_THRESHOLDS, "promotion": PROMOTION,
         },
         "counts": {
-            "universe": len(u), "anchors": len(anchors),
+            "universe": len(u), "universe_untagged": int((~u["oracle_id"].isin(tagged)).sum()),
+            "anchors": len(anchors),
             "dev_ok_cards": len(dev_all),
             "dev_untagged": int((~dev_all["oracle_id"].isin(tagged)).sum()),
             "dev_tags_unseen_in_fit": int(dev_mem.loc[~dev_mem["tag_id"].isin(fit_tags),
@@ -192,15 +195,15 @@ def validate_vectors(x, n: int) -> object:
         if (norms == 0).any():
             raise ValueError(f"{int((norms == 0).sum())} zero vectors")
         return sp.diags(1.0 / norms) @ x
-    x = np.asarray(x, dtype=np.float32)
+    x = np.asarray(x, dtype=np.float64)  # float64 norms: no overflow for finite float32 input
     if x.ndim != 2:
         raise ValueError("vectors must be 2-D")
     if not np.isfinite(x).all():
         raise ValueError("non-finite values in vectors")
     norms = np.linalg.norm(x, axis=1)
-    if (norms == 0).any():
-        raise ValueError(f"{int((norms == 0).sum())} zero vectors")
-    return x / norms[:, None]
+    if not (norms > 0).all() or not np.isfinite(norms).all():
+        raise ValueError(f"{int((~(norms > 0)).sum())} zero or unnormalisable vectors")
+    return (x / norms[:, None]).astype(np.float32)
 
 
 def evaluate(bm: Benchmark, vectors, block: int = 256, top_n: int = 0) -> dict:
@@ -314,6 +317,10 @@ def paired_bootstrap(a: np.ndarray, b: np.ndarray, clusters: np.ndarray, *, n_bo
 def n_boot_for(m_contrasts: int, alpha: float = 0.05, tail: int = 100) -> int:
     """Enough resamples for >= `tail` samples below the alpha/M quantile."""
     return int(math.ceil(tail * m_contrasts / alpha))
+
+
+def bench_path(ds_dir) -> Path:
+    return Path(ds_dir) / f"{BENCHMARK_VERSION}.json"
 
 
 def save_benchmark(bench: dict, path: Path) -> None:

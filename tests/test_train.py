@@ -214,8 +214,12 @@ def test_resume_matches_uninterrupted_and_rejects_corruption(tiny):
     cpu = torch.device("cpu")
     tr.train(_cfg(run_id="straight"), None, dev=cpu, data=data)
     tr.train(_cfg(run_id="split", stop_after=5), None, dev=cpu, data=data)
-    assert (tiny / "runs" / "split" / "last.pt").exists()
-    assert not (tiny / "runs" / "split" / "final").exists()
+    sd = tiny / "runs" / "split"
+    assert (sd / "last.json").exists() and not (sd / "final").exists()
+    # interruption artefacts: an unpublished newer generation and a torn metrics record
+    (sd / "ckpt-0000009.pt").write_bytes(b"partial")
+    with open(sd / "metrics.jsonl", "a") as f:
+        f.write('{"update": 6, "lo')
     tr.train(_cfg(run_id="split"), None, dev=cpu, data=data)
     wa = _weights(tiny / "runs" / "straight" / "final")
     wb = _weights(tiny / "runs" / "split" / "final")
@@ -227,7 +231,7 @@ def test_resume_matches_uninterrupted_and_rejects_corruption(tiny):
 
     # corrupted checkpoint is rejected
     tr.train(_cfg(run_id="bad", stop_after=3), None, dev=cpu, data=data)
-    ck = tiny / "runs" / "bad" / "last.pt"
+    ck = tiny / "runs" / "bad" / "ckpt-0000003.pt"
     raw = bytearray(ck.read_bytes())
     raw[len(raw) // 2] ^= 0xFF
     ck.write_bytes(bytes(raw))
@@ -236,3 +240,29 @@ def test_resume_matches_uninterrupted_and_rejects_corruption(tiny):
     # changed settings must fork, not resume
     with pytest.raises(ValueError, match="different identity"):
         tr.train(_cfg(run_id="split", lr=5e-4), None, dev=cpu, data=data)
+
+
+def test_checkpoint_carries_skip_counters(tiny):
+    data = FakeData()
+    tr.train(_cfg(run_id="cnt", stop_after=4), None, dev=torch.device("cpu"), data=data)
+    side = tr.read_json(tiny / "runs" / "cnt" / "last.json")
+    st = torch.load(tiny / "runs" / "cnt" / side["file"], weights_only=False)
+    assert st["rows_total"] == 4 * 2 * 4 and st["skipped_total"] >= 0
+
+
+def test_selection_modes():
+    with pytest.raises(ValueError, match="confirmation"):
+        _cfg(slot="confirm-1")
+    cfg = _cfg(slot="confirm-1", selection="final", guardrail_hard_lexical=0.60)
+    ev = [{"update": 10, "full": 0.90, "hard_lexical": 0.70},
+          {"update": 20, "full": 0.70, "hard_lexical": 0.50}]
+    sel, ok = tr.finalise_selection(ev, cfg)
+    assert sel["update"] == 20 and not ok  # final update regardless of the earlier peak
+    sel, ok = tr.finalise_selection(ev, _cfg(guardrail_hard_lexical=0.60))
+    assert sel["update"] == 10 and ok
+
+
+def test_guarded_selection_requires_guardrail(tiny):
+    with pytest.raises(ValueError, match="guardrail"):
+        tr.train(_cfg(run_id="g"), {"benchmark_id": "x"}, dev=torch.device("cpu"),
+                 data=FakeData())
