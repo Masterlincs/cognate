@@ -46,7 +46,7 @@ An array of up to `shard_size` card objects for indexes `NNN*shard_size ...`:
 
 ## `neighbours/NNN.json` (on demand, same sharding)
 
-An array aligned with the card shard. Element `j` is the neighbour list of card `NNN*shard_size + j`: up to `k` pairs `[neighbour_index, score]`, ordered by score descending, then by Oracle ID ascending. The score is a cosine rounded to 4 decimals: a ranking score, not a probability. The list never contains the card itself. A textless card has `[]`.
+An array aligned with the card shard. Element `j` is the neighbour list of card `NNN*shard_size + j`: up to `k` pairs `[neighbour_index, score]`, ordered by full-precision cosine descending, then by Oracle ID ascending. The stored score is that cosine rounded to 4 decimals, so equal rounded scores need not be in Oracle ID order: a ranking score, not a probability. The list never contains the card itself. A textless card has `[]`.
 
 ## Validation the app must perform
 

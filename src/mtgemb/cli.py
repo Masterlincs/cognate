@@ -27,6 +27,16 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--max-length", type=int, required=True)
     q.add_argument("--model-path")
     q.add_argument("--ds", default=DEFAULT_DS)
+    q = sub.add_parser("export", help="encode the catalogue and write a release bundle")
+    q.add_argument("backbone")
+    q.add_argument("--max-length", type=int, required=True)
+    q.add_argument("--label", required=True)
+    q.add_argument("--status", required=True,
+                   choices=["promoted", "experimental", "pretrained-fallback"])
+    q.add_argument("--model-path")
+    q.add_argument("--run-id")
+    q.add_argument("--web-dir")
+    q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("train", help="train or resume a run from a JSON config")
     q.add_argument("config")
     a = ap.parse_args(argv)
@@ -64,6 +74,11 @@ def main(argv: list[str] | None = None) -> None:
         from .baselines import eval_encoder
 
         out = eval_encoder(a.ds, a.name, a.backbone, a.max_length, a.model_path)["summary"]
+    elif a.cmd == "export":
+        from .export import export
+
+        out = export(a.ds, a.backbone, a.max_length, a.label, a.status, a.model_path,
+                     a.run_id, a.web_dir)
     elif a.cmd == "train":
         from .evaluate import bench_path
         from .train import TrainConfig, train
