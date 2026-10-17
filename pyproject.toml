@@ -1,0 +1,52 @@
+[project]
+name = "mtgemb"
+version = "0.1.0"
+description = "MTG effect-similarity embeddings: data, training, evaluation, export"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch==2.14.1",
+    "triton-xpu",  # torch+xpu transitive dep; listed so it resolves from the xpu index
+    "transformers>=5.20,<6",
+    "safetensors",
+    "numpy>=2",
+    "scipy",
+    "pandas>=2.2",
+    "pyarrow",
+    "scikit-learn",
+    "pydantic>=2",
+    "requests",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+mtgemb = "mtgemb.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+python-preference = "managed"
+
+[tool.uv.sources]
+torch = { index = "pytorch-xpu" }
+triton-xpu = { index = "pytorch-xpu" }
+
+[[tool.uv.index]]
+name = "pytorch-xpu"
+url = "https://download.pytorch.org/whl/xpu"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["real_model: needs downloaded model weights (deselected by default)"]
+addopts = "-m 'not real_model'"
