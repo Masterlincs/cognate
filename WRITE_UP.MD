@@ -106,7 +106,15 @@ A running account of what was done, in order. The numbers here come from generat
    - Selected checkpoint: update 2000 (guardrail passed). For comparison, pretrained E5 scores 0.5655 / 0.5391 and lexical 0.6042 / 0.5769.
    - These are selection-exposed dev tag-proxy numbers, not a promotion result.
    - The curve is still rising at the last update. The 2000-update budget is fixed, so this is noted, not acted on.
-3. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
+3. initial-2 (E5, lr 1e-5, scale 20) crashed at update 1743 (10:21 UTC):
+   - Cause: a native XPU runtime abort (`AssertHandler::printMessage`, no Python traceback). Memory was steady at 8.5 GB, so this is an infrastructure crash, not a recipe failure.
+   - Dev evals up to the last checkpoint: 0.6041/0.5806 (update 250) rising to 0.6739/0.6563 (update 1500).
+   - Crash output kept as `runs/initial-2-e5-lr1e-05-s20.crash-1.out`; a `CRASHED` event is logged in `runs/train.jsonl`.
+   - Code identity unchanged (46064545ace8be82). I restarted the chain for slots 2-6, and initial-2 resumed from the update-1500 checkpoint at 10:24 UTC (resume is bitwise deterministic per smoke 2).
+   - Same run_id, so this is not an extra run.
+   - Finished at 10:52 UTC. Selected update 2000: full 0.6806, hard-lexical 0.6634, guardrail passed.
+   - Under , initial-1 advances over initial-2 (full +0.030, hard-lexical +0.031), so initial-1 is the incumbent until initial-3 is in.
+4. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)
 
