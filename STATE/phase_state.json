@@ -2,22 +2,23 @@
   "phase": "P6",
   "status": "RUNNING",
   "last_completed": "P5",
-  "next_action": "Chain running initial-4..6 (BGE); initial-7..9 queued after initial-6 (queue_after.sh). Then P6 freeze -> P7 confirmation.",
+  "next_action": "Queue running initial-7..9 (best E5 = initial-1). Then P6 freeze -> P7 confirmation.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
   "smokes_used": 3,
-  "initial_runs_used": 6,
+  "initial_runs_used": 7,
   "extension_runs_used": 0,
   "confirmation_runs_used": 0,
-  "updated_utc": "2026-10-17T16:36:00Z",
-  "active_run": "initial-6-bge-lr3e-05-s50",
+  "updated_utc": "2026-10-17T17:19:00Z",
+  "active_run": "initial-7-e5-lr3e-05-s20-spec",
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
     "initial-3-e5-lr3e-05-s50",
     "initial-4-bge-lr3e-05-s20",
-    "initial-5-bge-lr1e-05-s20"
+    "initial-5-bge-lr1e-05-s20",
+    "initial-6-bge-lr3e-05-s50"
   ],
   "best_e5_recipe": "initial-1-e5-lr3e-05-s20"
 }
