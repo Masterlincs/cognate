@@ -81,15 +81,23 @@ def reference_check(v: np.ndarray, nidx: np.ndarray, rows: np.ndarray, atol: flo
 
 
 def ranking_parity(q: np.ndarray, v: np.ndarray, rows: np.ndarray, nidx: np.ndarray,
-                   k: int = 10) -> np.ndarray:
-    """Top-k set overlap per probe: CPU query rows q (for catalogue rows `rows`) ranked
-    against the device catalogue v, versus the device top-k in nidx."""
+                   k: int = 10, tol: float = 1e-4) -> np.ndarray:
+    """Tie-aware top-k agreement per probe: CPU query rows q (for catalogue rows `rows`)
+    ranked against the device catalogue v, versus the device top-k in nidx.
+
+    A CPU pick counts when it is in the device top-k or its device score is within tol of
+    the device k-th score (a near-tie swapped across the cut-off).
+    """
+    k = min(k, len(v) - 1)
     out = np.empty(len(rows))
     for i, r in enumerate(rows):
         sc = v @ q[i]
         sc[r] = -np.inf
         top = np.argsort(-sc, kind="stable")[:k]
-        out[i] = len(set(top.tolist()) & set(nidx[r, :k].tolist())) / k
+        dev_sc = v @ v[r]
+        kth = dev_sc[nidx[r, k - 1]]
+        dev_set = set(nidx[r, :k].tolist())
+        out[i] = np.mean([j in dev_set or dev_sc[j] >= kth - tol for j in top.tolist()])
     return out
 
 

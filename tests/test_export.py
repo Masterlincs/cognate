@@ -31,14 +31,31 @@ def test_topk_excludes_self_breaks_ties_by_index_and_blocks_agree():
 
 
 def test_ranking_parity_counts_top10_overlap():
-    v = np.eye(12, dtype=np.float32)[:, :12] + 0.01
+    v = np.random.default_rng(1).normal(size=(40, 6)).astype(np.float32)
     v /= np.linalg.norm(v, axis=1, keepdims=True)
     nidx, _ = topk_neighbours(v, k=10)
     rows = np.array([0, 5])
     assert ranking_parity(v[rows], v, rows, nidx).tolist() == [1.0, 1.0]
-    wrong = nidx.copy()
-    wrong[0, :2] = [0, 0]  # two device picks replaced: overlap 8/10 at most
-    assert ranking_parity(v[rows], v, rows, wrong)[0] <= 0.9
+    bad_q = -v[rows]  # a CPU encoder that disagrees: picks the device's least similar cards
+    assert (ranking_parity(bad_q, v, rows, nidx) < 0.5).all()
+    # fewer than k other cards: identical rankings still score 1
+    small = v[:5]
+    sidx, _ = topk_neighbours(small, k=10)
+    assert ranking_parity(small[:1], small, np.array([0]), sidx).tolist() == [1.0]
+
+
+def test_ranking_parity_tolerates_near_tie_at_cutoff():
+    # anchor e0; cards 1..3 score 0.9, 0.5, 0.5 - 1e-6: with k=2, a CPU query that ranks
+    # card 3 above card 2 is a near-tie swap, not a disagreement
+    def unit(c):
+        return np.array([c, np.sqrt(1 - c * c), 0.0])
+    v = np.stack([[1.0, 0, 0], unit(0.9), unit(0.5), unit(0.5 - 1e-6)])
+    nidx, _ = topk_neighbours(v, k=2)
+    assert nidx[0].tolist() == [1, 2]
+    q = np.array([[1.0, 0, 0]])
+    swapped = nidx.copy()
+    swapped[0] = [1, 3]  # pretend the device chose 3; CPU picks 2, within tol of the cut
+    assert ranking_parity(q, v, np.array([0]), swapped, k=2).tolist() == [1.0]
 
 
 def test_release_digest_binds_catalogue_and_encoder():
