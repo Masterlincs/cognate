@@ -42,6 +42,8 @@ def test_ranking_parity_counts_top10_overlap():
     small = v[:5]
     sidx, _ = topk_neighbours(small, k=10)
     assert ranking_parity(small[:1], small, np.array([0]), sidx).tolist() == [1.0]
+    one = v[:1]
+    assert ranking_parity(one, one, np.array([0]), np.empty((1, 0), np.int64)).tolist() == [1.0]
 
 
 def test_ranking_parity_tolerates_near_tie_at_cutoff():

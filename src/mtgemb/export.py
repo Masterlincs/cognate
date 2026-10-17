@@ -86,9 +86,12 @@ def ranking_parity(q: np.ndarray, v: np.ndarray, rows: np.ndarray, nidx: np.ndar
     ranked against the device catalogue v, versus the device top-k in nidx.
 
     A CPU pick counts when it is in the device top-k or its device score is within tol of
-    the device k-th score (a near-tie swapped across the cut-off).
+    the device k-th score (a near-tie swapped across the cut-off). tol is a chosen
+    tolerance, not derived from the vector parity bound.
     """
     k = min(k, len(v) - 1)
+    if k < 1:
+        return np.ones(len(rows))  # no other card to rank
     out = np.empty(len(rows))
     for i, r in enumerate(rows):
         sc = v @ q[i]

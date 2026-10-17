@@ -111,4 +111,7 @@ Sol (GPT-6.1 Sol) reviewed the exporter, app and report code and found six P2 is
    - Publication renames the bundle first and the artifacts last. A retry after a crash between the two adopts the partial artifacts only if they name the published `release.json`.
    - New query-side parity check: the top-10 of CPU-encoded probe cards against the device catalogue must overlap the device top-10 by at least 0.98 on average.
 3. Statistics (ff5cc27): `report.contrast` now pairs candidate and comparator runs by seed id, not list order.
-4. Sol round 2 (re-review) launched.
+4. Re-review rounds:
+   - Round 2: 1–4 and 6 resolved. #5 needed a tie-aware overlap (near-ties across rank 10/11) and k capped for small catalogues (1a2c6dc).
+   - Round 3: one more edge case, a one-card catalogue (d1185ac).
+   - Round 4: Sol accepts; all six resolved.
