@@ -1,6 +1,14 @@
 {
-  "phase": "P2",
+  "phase": "P5",
   "status": "RUNNING",
-  "last_completed": "P0",
-  "updated_utc": "2026-10-17T03:10:00Z"
+  "last_completed": "P4",
+  "next_action": "Integrate Sol review r2, then launch initial-1 (P6)",
+  "benchmark_id": "6f02d24d42efb042",
+  "dataset_id": "cbd5c12011c94e68",
+  "pairs_id": "795ebb1ae7ce8251",
+  "smokes_used": 3,
+  "initial_runs_used": 0,
+  "extension_runs_used": 0,
+  "confirmation_runs_used": 0,
+  "updated_utc": "2026-10-17T04:00:00Z"
 }

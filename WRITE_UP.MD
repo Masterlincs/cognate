@@ -26,3 +26,40 @@ A running account of what was done, in order. The numbers here come from generat
 5. `pairs.py` builds the fit-only pairs and lexical-negative pools:
    - 108,133 pairs from 1,841 of 1,851 eligible tags. 23,345 of 24,554 fit cards with text appear in at least one pair. Mean exposure is 9.3 pairs per card (cap 24).
    - 24,531 anchors with 200 lexical negatives each. Median char-TF-IDF cosine: rank 1 0.44, rank 20 0.30, rank 100 0.23.
+6. Froze the processed dataset `cbd5c12011c94e68` and pairs `795ebb1ae7ce8251` (108,220 pairs after the tag keep-list fix). Tag keep-list: Luna's data-layer tests showed that `tutors by name` had been dropped by a naming-meta pattern.
+7. Pair audit (`mtgemb audit`): 120 pairs across broad, mid and rare tags plus 45 lexical negatives. All structural checks pass: fit-only, no same-family pair, caps respected, negatives share no tag. My non-human spot read: pairs from broad tags often share only incidental features. Semantic quality is **unverified**, because no human labels exist.
+
+## P3/P4: evaluator, encoder, training (2026-10-17)
+
+1. `evaluate.py` implements the plan §5 metric:
+   - IDF gains from fit only; the eight views, each masked before both rankings.
+   - Stable tie-break by Oracle ID; nDCG/AP/MRR/recall@10.
+   - A paired cluster bootstrap with matched seed draws.
+   - 14 hand-calculated tests.
+2. `encoder.py` is the single encoder path, covering prefix, tokenisation, pooling and L2. Parity against sentence-transformers is ≥0.9999 cosine on fixtures for E5 at 512 and 94 tokens and for BGE at 92. XPU matches CPU (≥0.9999).
+3. max_length is the 99% fit coverage point: E5 94 and BGE 92 tokens, including prefix and special tokens.
+4. `train.py` handles the following:
+   - Symmetric masked InfoNCE, with multi-positive as an option.
+   - A deterministic batch schedule: no repeated card or family within a batch; hard negatives come from the anchor's lexical band.
+   - AdamW with warmup and decay; atomic checkpoints with identity checks; a device lock.
+   - The registered checkpoint rule.
+   - A tiny-BERT CPU test shows resume is bitwise equal to an uninterrupted run.
+5. Baselines on benchmark v1 (`8e727671bf7e2857`), dev nDCG@10 full / hard-lexical: lexical char 3-5 TF-IDF 0.6046 / 0.5773, pretrained E5 0.5659 / 0.5395, pretrained BGE 0.5406 / 0.5136. Binary MAP/MRR are near-saturated and recall@10 is about 0.007, because broad tags make most candidates "relevant". This is a limitation of the proxy.
+
+## P5: resource smokes and registration (2026-10-17)
+
+1. Memory probe on realistic batches: E5 fp32 at 32 pairs plus 32 negatives takes 2.2 s fwd+bwd and 7.2 GB; 64 pairs takes 14 GB, which is unsafe on shared memory; 128 pairs ran out of memory. bf16 was no faster. Chose 32 pairs, fp32.
+2. Smoke 1 (E5, 40 updates): 2.4 s/update, 8.5 GB peak, 1.3 GB checkpoint. Engineering only; not used for selection.
+3. Smoke 2 (E5, the same config interrupted at update 20 and resumed): the final weights are **bitwise equal** to smoke 1 on XPU (max abs diff 0.0).
+4. Smoke 3 (BGE, 40 updates): 1.24 s/update, 4.4 GB peak, 0.64 GB on disk. 3 of 8 smokes used.
+5. Sol (GPT-6.1) independent review r1 of the evaluator, training, split and pairs found 9 issues. All were accepted and fixed:
+   - Crash-safe checkpoint generations, a torn-metrics-line fix and checkpointed skip counters.
+   - Code identity in resume checks.
+   - Confirmation runs locked to the final checkpoint, and a guardrail required for pilot selection.
+   - float64 vector norms.
+   - Sealed rows filtered at the reader.
+   - Untagged candidates restored to the universe.
+   This last fix produced benchmark v2 `6f02d24d42efb042`.
+   Sol found no errors in the metric maths, the bootstrap, the loss/masks, the schedule or the split.
+6. Baselines on benchmark v2, full / hard-lexical: lexical 0.6042 / 0.5769, E5 0.5655 / 0.5391, BGE 0.5403 / 0.5133. The checkpoint guardrails are now E5 ≥ 0.5341 and BGE ≥ 0.5083 hard-lexical.
+7. Froze the training settings and registered the slots and statistics. Slot 10 is skipped as a proven no-op, because the slot 9 replay is the best-E5 run itself.

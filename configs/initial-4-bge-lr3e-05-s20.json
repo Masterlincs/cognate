@@ -1,0 +1,31 @@
+{
+ "run_id": "initial-4-bge-lr3e-05-s20",
+ "slot": "initial-4",
+ "hypothesis": "bge-small-en-v1.5 optimisation sensitivity arm lr=3e-05, scale=20",
+ "comparator": "pretrained bge-small-en-v1.5 (benchmark 6f02d24d42efb042)",
+ "backbone": "bge-small-en-v1.5",
+ "max_length": 92,
+ "lr": 3e-05,
+ "scale": 20.0,
+ "batch_pairs": 32,
+ "hard_negatives": 1,
+ "neg_band": [
+  1,
+  30
+ ],
+ "weight_decay": 0.01,
+ "total_updates": 2000,
+ "warmup_frac": 0.1,
+ "grad_clip": 1.0,
+ "eval_every": 250,
+ "seed": 0,
+ "data_seed": 0,
+ "objective": "masked_infonce",
+ "pair_weighting": "none",
+ "batch_mode": "random",
+ "precision": "fp32",
+ "max_skip_rate": 0.01,
+ "guardrail_hard_lexical": 0.5132680988484585,
+ "selection": "guarded_best",
+ "dataset_dir": "data/processed/2026-10-16_no_reminder_v1"
+}
