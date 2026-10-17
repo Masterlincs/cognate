@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { validateRelease, validateShard } from '../src/lib.js';
+import { validateRelease, validateReleasePointer, validateShard } from '../src/lib.js';
 
 const dir = path.resolve(process.argv[2] ?? '');
 if (!process.argv[2]) {
@@ -13,6 +13,13 @@ const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 try {
   const release = await readJson('release.json');
   const names = await readJson('names.json');
+  const pointerPath = path.join(dir, '..', 'current.json');
+  try {
+    await access(pointerPath);
+    validateReleasePointer(JSON.parse(await readFile(pointerPath, 'utf8')), release);
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error;
+  }
   validateRelease(release, names);
   const expectedFiles = ['names.json', ...Array.from({ length: Math.ceil(release.n_cards / release.shard_size) }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`]).flat()];
   for (const file of expectedFiles) {
@@ -22,7 +29,7 @@ try {
   }
   for (let shard = 0; shard < Math.ceil(release.n_cards / release.shard_size); shard += 1) {
     const number = String(shard).padStart(3, '0');
-    validateShard(await readJson(`cards/${number}.json`), await readJson(`neighbours/${number}.json`), release, shard);
+    validateShard(await readJson(`cards/${number}.json`), await readJson(`neighbours/${number}.json`), release, shard, names);
   }
   console.log(`Bundle valid: ${release.release_id} (${release.n_cards} cards)`);
 } catch (error) {

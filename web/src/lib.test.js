@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterNeighbours, normalize, parseUrl, searchNames, serializeUrl, validateRelease, validateShard } from './lib.js';
+import { filterNeighbours, normalize, parseUrl, searchNames, serializeUrl, validateRelease, validateReleasePointer, validateShard } from './lib.js';
 
 const names = { ids: ['a', 'b', 'c'], names: ['Café Lantern', 'Blue Door', 'Green Thread // Thread Unbound'], aliases: [['Thread Unbound', 2]] };
 const release = { schema: 'mtgemb-release-v1', n_cards: 3, shard_size: 2, k: 2 };
@@ -37,9 +37,20 @@ describe('bundle validation', () => {
     expect(() => validateRelease(release, { ...names, names: ['short'] })).toThrow(/counts/);
   });
 
+  it('rejects duplicate and non-ascending name IDs', () => {
+    expect(() => validateRelease(release, { ...names, ids: ['a', 'a', 'c'] })).toThrow(/unique and strictly ascending/);
+    expect(() => validateRelease(release, { ...names, ids: ['b', 'a', 'c'] })).toThrow(/unique and strictly ascending/);
+  });
+
+  it('rejects a current pointer that names a different release', () => {
+    expect(validateReleasePointer({ release_id: 'release-1' }, { release_id: 'release-1' })).toBe(true);
+    expect(() => validateReleasePointer({ release_id: 'release-2' }, { release_id: 'release-1' })).toThrow(/does not match/);
+  });
+
   it('checks shard lengths and neighbour index ranges', () => {
-    expect(validateShard(cards, [[[1, 0.9]], [[0, 0.8]]], release, 0)).toBe(true);
+    expect(validateShard(cards, [[[1, 0.9]], [[0, 0.8]]], release, 0, { ids: ['a', 'b'] })).toBe(true);
     expect(() => validateShard(cards, [[]], release, 0)).toThrow(/length/);
     expect(() => validateShard(cards, [[[3, 0.9]], [[0, 0.8]]], release, 0)).toThrow(/index/);
+    expect(() => validateShard([cards[1], cards[0]], [[[1, 0.9]], [[0, 0.8]]], release, 0, { ids: ['a', 'b'] })).toThrow(/Card ID does not match/);
   });
 });

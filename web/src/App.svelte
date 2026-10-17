@@ -1,5 +1,5 @@
 <script>
-  import { filterNeighbours, parseUrl, searchNames, serializeUrl, validateRelease, validateShard } from './lib.js';
+  import { filterNeighbours, parseUrl, searchNames, serializeUrl, validateRelease, validateReleasePointer, validateShard } from './lib.js';
 
   let release;
   let names;
@@ -36,7 +36,7 @@
       fetchJson(`${base}data/${release.release_id}/cards/${String(shard).padStart(3, '0')}.json`),
       fetchJson(`${base}data/${release.release_id}/neighbours/${String(shard).padStart(3, '0')}.json`)
     ]).then(([cards, neighbours]) => {
-      validateShard(cards, neighbours, release, shard);
+      validateShard(cards, neighbours, release, shard, names);
       return { cards, neighbours };
     }).catch((reason) => { cache.delete(shard); throw reason; }));
     return cache.get(shard);
@@ -122,7 +122,19 @@
     const state = parseUrl(location.search);
     color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type;
     if (state.card) selectId(state.card, false);
-    else { selectedCard = undefined; selectedIndex = -1; }
+    else {
+      token += 1;
+      filterToken += 1;
+      selectedCard = undefined;
+      selectedIndex = -1;
+      savedNeighbours = [];
+      visibleNeighbours = [];
+      query = '';
+      loading = false;
+      error = '';
+      unknownId = false;
+      imageFailed = false;
+    }
   };
 
   (async () => {
@@ -130,6 +142,7 @@
       const current = await fetchJson(`${base}data/current.json`);
       if (!current.release_id || current.release_id.includes('/') || current.release_id.includes('..')) throw new Error('Invalid release pointer.');
       release = await fetchJson(`${base}data/${current.release_id}/release.json`);
+      validateReleasePointer(current, release);
       names = await fetchJson(`${base}data/${current.release_id}/names.json`);
       validateRelease(release, names);
       const state = parseUrl(location.search);
