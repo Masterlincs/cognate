@@ -7,9 +7,12 @@
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
   "smokes_used": 3,
-  "initial_runs_used": 0,
+  "initial_runs_used": 2,
   "extension_runs_used": 0,
   "confirmation_runs_used": 0,
-  "updated_utc": "2026-10-17T07:05:00Z",
-  "active_run": "initial-1-e5-lr3e-05-s20"
+  "updated_utc": "2026-10-17T08:45:00Z",
+  "active_run": "initial-2-e5-lr1e-05-s20",
+  "completed_runs": [
+    "initial-1-e5-lr3e-05-s20"
+  ]
 }

@@ -88,6 +88,25 @@ A running account of what was done, in order. The numbers here come from generat
 ## P6: pilots (started 2026-10-17 06:45 UTC)
 
 1. Slots 1-6 run back to back through `.scratch/run_pilots.sh`, which stops at the first failure. The log is `runs/pilot_chain.log`.
+2. initial-1 (E5, lr 3e-5, scale 20) finished at 08:40 UTC:
+   - 2000 updates, 1.86 h, peak 8.5 GB, 0 skipped rows.
+   - Dev nDCG@10 (full / hard-lexical) by update:
+
+     | Update | Full | Hard-lexical |
+     |---|---|---|
+     | 250 | 0.6226 | 0.6014 |
+     | 500 | 0.6552 | 0.6380 |
+     | 750 | 0.6809 | 0.6638 |
+     | 1000 | 0.6932 | 0.6764 |
+     | 1250 | 0.7023 | 0.6863 |
+     | 1500 | 0.7052 | 0.6891 |
+     | 1750 | 0.7084 | 0.6928 |
+     | 2000 | 0.7102 | 0.6945 |
+
+   - Selected checkpoint: update 2000 (guardrail passed). For comparison, pretrained E5 scores 0.5655 / 0.5391 and lexical 0.6042 / 0.5769.
+   - These are selection-exposed dev tag-proxy numbers, not a promotion result.
+   - The curve is still rising at the last update. The 2000-update budget is fixed, so this is noted, not acted on.
+3. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)
 
