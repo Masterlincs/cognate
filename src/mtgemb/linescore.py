@@ -108,3 +108,19 @@ def run(ds_dir, release_dir) -> dict:
     log_event("eval", "LINESCORE_DONE", record=str(p),
               **{k: {m: v[m] for m in ("full", "hard_lexical")} for k, v in out.items()})
     return rec
+
+
+def topk(scorer: LineScorer, k: int, block: int = 256) -> tuple[np.ndarray, np.ndarray]:
+    """Exact top-k rows per row under the scorer, own row excluded; ties -> lower index."""
+    n = scorer.n
+    k = min(k, n - 1)
+    idx = np.empty((n, k), dtype=np.int64)
+    sco = np.empty((n, k))
+    for s in range(0, n, block):
+        rows = np.arange(s, min(n, s + block))
+        sc = scorer(rows)
+        sc[np.arange(len(rows)), rows] = -np.inf
+        order = np.argsort(-sc, axis=1, kind="stable")[:, :k]
+        idx[rows] = order
+        sco[rows] = np.take_along_axis(sc, order, axis=1)
+    return idx, sco

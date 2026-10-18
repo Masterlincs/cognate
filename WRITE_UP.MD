@@ -628,3 +628,20 @@ The ideas, as Delvefall describes them:
    - Untagged cards counted as sharing no tag (P2): fixed. Untagged means unknown, so such cards are neither anchors nor opener negatives.
    - `line 0` silently scored the last line (P2): fixed. The parser rejects line 0, and scoring rejects a line the anchor does not have.
    - Round 3 sent to Sol.
+9. **Sol review r3: PASS.** All round-1 and round-2 findings are resolved or withdrawn. The exam, the line-tag stream and the generators are accepted.
+10. **The user accepted all 51 exam items** (instruction of 2026-10-18; `e98fb26`, logged as ITEMS_ACCEPTED with the worksheet sha). Exam scores (`runs/exam/`):
+    - pretrained e5-base-v2 36/51; confirm-e5-s1 (deployed) 47/51; pretrained bge 37/51; confirm-bge-s1 46/51.
+    - The deployed model fails T001 (Deflecting Swat; margin −0.573), T021, T022 and T029. Pretrained e5 had T001 at −0.064, so fine-tuning made the rider-clause failure much worse.
+    - The dev-only subset has n = 0, so every score here includes exam cards the model trained on through the card pairs. This is weak evidence.
+11. **Line-based whole-card scoring (registered before scoring, outcome).** `linescore.py` scores a candidate from its lines against each of the anchor's lines: for each anchor line, take the best-matching candidate line, then average. `line_mean` is a plain mean; `line_invdf` weights each anchor line by 1/(number of cards with the same number-masked line), so common riders count less. The deployed release vectors were used; no training.
+
+    | Ranking | dev full nDCG@10 | hard-lexical | multi-line anchors | exam (of 50 whole-card items) |
+    |---|---|---|---|---|
+    | whole card (deployed) | 0.7055 | 0.6904 | 0.6974 | 46 |
+    | line_mean | 0.6642 | 0.6526 | 0.6350 | 46 |
+    | line_invdf | 0.6867 | 0.6748 | 0.6711 | 47 (fixes T001) |
+
+    Neither variant met the promotion rule (it had to beat whole-card on dev nDCG). Whole-card stays the default. `line_invdf` may ship only as an optional, labelled "exploratory" view. The tag proxy credits rider tags, so it penalises exactly the behaviour the user asked for; the human pilot labels are the evidence that can settle this.
+12. **Fresh-card test set.** `fresh.py` takes cards from a later Scryfall snapshot whose oracle ids are absent from the whole old raw snapshot, applies the corpus policy, requires release ≥ 45 days before the new snapshot (so community tags have settled), joins families by name-normalised text and keeps only frozen functional tags. It writes a test set only with ≥ 200 anchors. The 2026-10-18 snapshot has 108 new ids, all art-series cards, so there are 0 fresh cards today (logged FRESH_TOO_SMALL). The tooling is ready for the next set release plus 45 days.
+13. **Which tag belongs to which line (idea 8).** `tagattr.py`: a tag's centroid is the mean deployed vector of the fit one-line cards that carry it; each tag of a multi-line card goes to its nearest line (tags with fewer than 3 one-line examples stay card-level). Automatic check, no invented labels: where exactly one line of a card has a one-line "twin" card (same number-masked text) carrying the tag, that line is gold; the twin is left out of the centroid. Accuracy 0.944 on 12,919 cases vs 0.449 by uniform chance. 92.8% of 111,238 multi-line tag memberships get a line. The twin cases are the easy ones; accuracy on other lines is unmeasured.
+14. **Release v4 and app (delegated).** Sol (`gpt-6.1-sol`) builds export schema v4 (card tags, per-line tags, line-match neighbours from `line_invdf`, reusing the v3 vectors with hash checks). Luna (`gpt-6-luna`) adds tag chips, per-line tags and a "Whole card | Line match (exploratory)" toggle to the app. Each gets a review from the other model.

@@ -27,3 +27,13 @@ def test_line_scores_by_hand():
     # the redirect card now beats the shared-clause card (the T001 failure shape)
     assert s[0, 1] > s[0, 2]
     assert LineScorer(texts, v, "line_mean")(np.array([0]))[0, 1] < (1 + c(70)) / 2
+
+
+def test_topk_excludes_self_and_breaks_ties_by_index():
+    from mtgemb.linescore import topk
+
+    texts = ["A.", "B.", "C."]
+    v = np.stack([_u(0), _u(0), _u(90)])
+    idx, sco = topk(LineScorer(texts, v, "line_mean"), k=2)
+    assert idx.tolist() == [[1, 2], [0, 2], [0, 1]]
+    assert np.allclose(sco[0], [1, 0])
