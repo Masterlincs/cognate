@@ -248,18 +248,21 @@ def validate_vectors(x, n: int) -> object:
     return (x / norms[:, None]).astype(np.float32)
 
 
-def evaluate(bm: Benchmark, vectors, block: int = 256, top_n: int = 0) -> dict:
+def evaluate(bm: Benchmark, vectors, block: int = 256, top_n: int = 0,
+             scorer=None) -> dict:
     """Score every anchor in every view. Returns per-anchor rows and macro means.
 
     top_n > 0 also returns the full-view top-n neighbour ids per anchor (for error analysis).
+    scorer(anchor_rows) -> (len, n_universe) scores replaces the cosine; vectors=None.
     """
-    x = validate_vectors(vectors, len(bm.ids))
-    xt = x.T
+    if scorer is None:
+        x = validate_vectors(vectors, len(bm.ids))
+        xt = x.T
     rows, tops = [], {}
     a_all = bm.anchor_idx
     for s in range(0, len(a_all), block):
         a = a_all[s : s + block]
-        sc = x[a] @ xt
+        sc = scorer(a) if scorer is not None else x[a] @ xt
         sc = sc.toarray() if sp.issparse(sc) else np.asarray(sc)
         gains = bm.gains(a)
         masks = bm.masks(a)
