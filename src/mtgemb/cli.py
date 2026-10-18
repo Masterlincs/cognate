@@ -45,9 +45,17 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("train", help="train or resume a run from a JSON config")
     q.add_argument("config")
+    q = sub.add_parser("annotate", help="label an existing blinded human pilot pool locally")
+    q.add_argument("pool_dir")
+    q.add_argument("--port", type=int, default=8765)
     a = ap.parse_args(argv)
 
-    if a.cmd == "acquire":
+    if a.cmd == "annotate":
+        from .annotate import serve
+
+        serve(a.pool_dir, a.port)
+        return
+    elif a.cmd == "acquire":
         from .acquire import acquire
 
         out = acquire()
