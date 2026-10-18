@@ -1,8 +1,8 @@
 {
   "phase": "P10",
   "status": "COMPLETE",
-  "last_completed": "P10 (replay-eval exact at 996ef83, Sol accepted after 13 rounds; runs reconciled; clean clone verified; README and handoff filled)",
-  "next_action": "Awaiting user decisions at the gates: sealed (held-out) evaluation (optional) and publication. Optional P10.5 human labels and P11 are not started.",
+  "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
+  "next_action": "Awaiting the user's decision on publication (gate 2). Optional P10.5 human labels and P11 are not started. Sealed evaluation is done and must not be repeated.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T09:26:00Z",
+  "updated_utc": "2026-10-18T14:50:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
@@ -92,5 +92,37 @@
     "report": "runs/replay/8bf2f48c0bba3b2c/2026-10-18T092430Z-1792315470167881000.json",
     "scope": "evaluation replay from pinned embeddings; no retraining replay performed",
     "review": "Sol accepted (round 13, 996ef83)"
+  },
+  "sealed": {
+    "authorised": "user 'do 1', 2026-10-18 (gate 1)",
+    "decisions": [
+      "",
+      ""
+    ],
+    "benchmark_id": "c98bb619ea613672",
+    "anchors": 3170,
+    "eligible_clusters": 2954,
+    "universe": 30745,
+    "sealed_gate": "cleared",
+    "deployment_confirm_e5_s1": {
+      "full": 0.7052,
+      "hard_lexical": 0.6833
+    },
+    "report": "runs/sealed/c98bb619ea613672/report.json",
+    "attempts": [
+      {
+        "attempt": 1,
+        "commit": "aebb999",
+        "outcome": "XPU segfault (exit 139) after lexical; no encoder scored, no report",
+        "records": "runs/sealed/attempt-1-crashed/"
+      },
+      {
+        "attempt": 2,
+        "commit": "b01ecc4",
+        "outcome": "completed; lexical per-anchor identical to attempt 1; all encoder weight checks min cosine >= 0.9999997"
+      }
+    ],
+    "code_review": "Sol r1 2xP2 fixed (14af854), Sol r2 pass",
+    "qualifier": "registered gate re-tested once on sealed anchors (tag proxy); does not change the P7 decision"
   }
 }

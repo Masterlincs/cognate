@@ -489,3 +489,27 @@ The user authorised gate 1 ("do 1"): one evaluation of the frozen artifacts on t
    - **Seen so far:** the lexical baseline's sealed aggregate appeared in `runs/eval.jsonl` (full 0.6101, hard-lexical 0.5831). No per-card output was inspected.
    - **Provenance note:** the lock records `dirty: true`. The only uncommitted change was WRITE_UP steps 6-7; the code was at `aebb999`.
    - **Next:** by design (and the r1 fix), the lock blocks any rerun. Nothing was deleted or retried, and the user has been asked how to proceed.
+9. **User decision: fresh restart**.
+   - Attempt 1's lock and lexical record were moved unchanged into `runs/sealed/attempt-1-crashed/`. Nothing was deleted.
+   - Attempt 2 started at clean `b01ecc4` (14:26:41Z) and completed at 14:41:35Z without a crash, writing `runs/sealed-eval-2.out`.
+10. **Checks on attempt 2:**
+    - The lexical per-anchor frame (25,360 rows) is identical to attempt 1's.
+    - Every encoder's re-encoded vectors match its frozen dev vectors on the dev universe: min row cosine ≥ 0.9999997, all on XPU.
+11. **Sealed result** (`runs/sealed/c98bb619ea613672/report.json`, benchmark `c98bb619ea613672`):
+    - **Benchmark:** 3170 sealed anchors in 2954 families, 0 zero-positive exclusions, universe 30,745.
+    - **Fine-tuned E5, mean of 3 seeds:** full 0.7050, hard-lexical 0.6830.
+    - **Released seed 1:** full 0.7052, hard-lexical 0.6833.
+    - **Contrasts** (point, with the adjusted lower bound in brackets):
+
+      | Comparator | Full | Hard-lexical |
+      | --- | --- | --- |
+      | Pretrained E5 | +0.1329 (+0.1239) | +0.1435 (+0.1326) |
+      | Trained BGE | +0.0409 (+0.0360) | +0.0451 (+0.0386) |
+
+    - **Gate:** both comparators pass the plan's §5 thresholds, so the sealed gate is **cleared**.
+    - **Other systems:** lexical 0.6101 / 0.5831; pretrained BGE 0.5427 / 0.5082; trained BGE mean 0.6640 / 0.6378.
+12. **Interpretation.**
+    - The sealed numbers sit close to development: deployment model full 0.7055 → 0.7052, hard-lexical 0.6904 → 0.6833. Both contrasts keep their size, so the development promotion was not an artefact of selection on dev anchors.
+    - This is still tag-proxy evidence, not human relevance. It does not change .
+    - No tuning or per-card inspection followed.
+13. **Recorded:** the README sealed section, STATE `sealed` block, the IMPLEMENTATION_PLAN entry, and . Publication (gate 2) remains unapproved.

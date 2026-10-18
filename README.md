@@ -6,7 +6,7 @@ All relevance results are **tag-proxy results** based on Scryfall Tagger oracle 
 
 ## Status
 
-P0-P9 are complete; P10 (handoff) is in progress. Dataset `cbd5c12011c94e68`, benchmark `8bf2f48c0bba3b2c` (3016 development anchors in 2853 families).
+P0-P10 are complete. Dataset `cbd5c12011c94e68`, benchmark `8bf2f48c0bba3b2c` (3016 development anchors in 2853 families).
 
 **Promotion decision: promote** - a *provisional tag-proxy promotion on selection-exposed development*. The released model is `confirm-e5-s1`: fine-tuned `intfloat/e5-base-v2`, lr 3e-5, scale 20, 2000 updates, seed 1. Release `2026-10-16-e5-base-v2-fc4d438d`, bundle schema v2.
 
@@ -28,7 +28,31 @@ Registered contrasts for the fine-tuned E5, 3 seeds, cluster bootstrap over fami
 | vs pretrained E5 | +0.1409 (+0.1320) | +0.1518 (+0.1425) |
 | vs trained BGE | +0.0429 (+0.0376) | +0.0451 (+0.0398) |
 
-The sealed test split has **not** been evaluated. Nothing has been published.
+### Sealed held-out evaluation (one authorised run)
+
+The frozen systems were evaluated **once** on the sealed split, after promotion and with the user's authorisation. Sealed benchmark `c98bb619ea613672`: 3170 sealed anchors in 2954 families, candidate universe of 30,745 fit + development + sealed cards. Sealed cards played no part in training, selection or the release. Results are still tag-proxy results.
+
+Sealed nDCG@10, tag proxy:
+
+| System | Full | Hard-lexical |
+| --- | --- | --- |
+| Lexical (char 3-5 TF-IDF) | 0.6101 | 0.5831 |
+| Pretrained E5-base-v2 | 0.5721 | 0.5394 |
+| Pretrained BGE-small | 0.5427 | 0.5082 |
+| Trained BGE-small, 3 seeds (mean) | 0.6640 | 0.6378 |
+| **Fine-tuned E5, 3 seeds (mean)** | **0.7050** | **0.6830** |
+| Fine-tuned E5, seed 1 (released) | 0.7052 | 0.6833 |
+
+The same registered contrasts on sealed anchors (point estimate, with the M = 4 adjusted lower bound in brackets):
+
+| Contrast | Full | Hard-lexical |
+| --- | --- | --- |
+| vs pretrained E5 | +0.1329 (+0.1239) | +0.1435 (+0.1326) |
+| vs trained BGE | +0.0409 (+0.0360) | +0.0451 (+0.0386) |
+
+The fine-tuned E5 **cleared the registered promotion gate on sealed anchors** against both comparators (`runs/sealed/c98bb619ea613672/report.json`). This confirms the development result on unseen cards under the tag proxy; it does not change the P7 decision and is not a human-relevance result. `mtgemb sealed-eval` refuses to run again.
+
+Nothing has been published.
 
 ## Requirements
 
@@ -109,12 +133,12 @@ The bundle checker directory is the release bundle to validate. Fixture content 
 
 ## Evaluation and data rules
 
-The sealed test split is excluded by default and is never loaded for routine training or evaluation. Do not evaluate held-out data without separate authorisation. Training ceilings are **10 initial runs**, **3 extension runs** and **9 confirmation runs**; these are caps, not targets.
+The sealed test split is excluded by default and is never loaded for routine training or evaluation. It has been evaluated once; do not evaluate it again or tune in response to it. Training ceilings are **10 initial runs**, **3 extension runs** and **9 confirmation runs**; these are caps, not targets.
 
 ## Limitations
 
 - Relevance labels are Scryfall Tagger tag proxies, not human judgements.
-- Development results are selection-exposed because they inform model and checkpoint choices.
+- Development results are selection-exposed because they inform model and checkpoint choices. The sealed results come from one run and are not selection-exposed, but they use the same tag proxy.
 - App filters apply only to the **50 saved neighbours**; they do not search the full catalogue.
 - Cosine scores are ranking scores, not probabilities.
 - Three training seeds give only weak information about training variability.
