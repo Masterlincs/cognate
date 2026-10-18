@@ -300,6 +300,12 @@ def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dic
                                                   dirs for i in range(shards)]
             if absent := sorted(set(need) - set(man["files"])):
                 probs.append(f"bundle manifest incomplete: {absent[:5]}")
+        if man.get("schema") == "mtgemb-release-v3":  # the ability artifacts behind the shards
+            for f, k in (("ability_vectors.npy", "ability_vectors_sha256"),
+                         ("ability_lines.json", "ability_lines_sha256")):
+                p = meta_p.parent / f
+                if not meta.get(k) or not p.exists() or sha256_file(p) != meta[k]:
+                    probs.append(f"{f} hash mismatch or missing")
     enc_meta = meta["encoder"]
     enc_meta = dict(enc_meta) if isinstance(enc_meta, dict) else None  # never coerce a list
     ml = enc_meta.pop("max_length", None) if enc_meta is not None else None

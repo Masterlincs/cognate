@@ -71,9 +71,7 @@ def test_replay_passes_on_untouched_records_and_matching_release(tmp_path, monke
     assert len(list((tmp_path / "runs" / "replay").rglob("*.json"))) == 2
 
 
-@pytest.mark.parametrize("missing", [None, "abilities/000.json", "abilities/001.json"])
-def test_replay_v3_requires_every_ability_shard(tmp_path, monkeypatch, missing):
-    v, _ = _setup(tmp_path, monkeypatch)
+def _v3_release(tmp_path, v, missing=None):
     art, bundle = _release(tmp_path, v)
     man = json.loads((bundle / "release.json").read_text("utf-8"))
     man.update(schema="mtgemb-release-v3", shard_size=(man["n_cards"] + 1) // 2)
@@ -85,13 +83,40 @@ def test_replay_v3_requires_every_ability_shard(tmp_path, monkeypatch, missing):
         if name != missing:
             man["files"][name] = {"sha256": sha256_file(path), "bytes": path.stat().st_size}
     (bundle / "release.json").write_text(json.dumps(man), "utf-8")
+    np.save(art / "ability_vectors.npy", v)
+    (art / "ability_lines.json").write_text("[]", "utf-8")
     _edit_json(art / "release_meta.json", lambda m: m.update(
-        release_json_sha256=sha256_file(bundle / "release.json")))
+        release_json_sha256=sha256_file(bundle / "release.json"),
+        ability_vectors_sha256=sha256_file(art / "ability_vectors.npy"),
+        ability_lines_sha256=sha256_file(art / "ability_lines.json")))
+    return art
+
+
+@pytest.mark.parametrize("missing", [None, "abilities/000.json", "abilities/001.json"])
+def test_replay_v3_requires_every_ability_shard(tmp_path, monkeypatch, missing):
+    v, _ = _setup(tmp_path, monkeypatch)
+    _v3_release(tmp_path, v, missing)
     result = baselines.replay_evals("ds")
     assert result["passed"] == (missing is None)
     if missing:
         assert any("bundle manifest incomplete" in p and missing in p
                    for p in result["releases"]["r1"]["problems"])
+
+
+@pytest.mark.parametrize("fault", ["vectors_tampered", "lines_missing", "hash_absent"])
+def test_replay_v3_verifies_ability_artifacts(tmp_path, monkeypatch, fault):
+    v, _ = _setup(tmp_path, monkeypatch)
+    art = _v3_release(tmp_path, v)
+    if fault == "vectors_tampered":
+        np.save(art / "ability_vectors.npy", v[::-1].copy())
+    elif fault == "lines_missing":
+        (art / "ability_lines.json").unlink()
+    else:
+        _edit_json(art / "release_meta.json", lambda m: m.pop("ability_vectors_sha256"))
+    result = baselines.replay_evals("ds")
+    assert not result["passed"]
+    name = "ability_lines.json" if fault == "lines_missing" else "ability_vectors.npy"
+    assert f"{name} hash mismatch or missing" in result["releases"]["r1"]["problems"]
 
 
 def _tamper_vectors(tmp_path, v, d):
