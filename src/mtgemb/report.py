@@ -125,28 +125,38 @@ def best_recipe(rows: list[dict]) -> dict | None:
 
 
 def _check_eval(bench_id: str, name: str, backbone: str, max_length: int,
-                model_path: Path | None) -> None:
-    meta = read_json(RUNS / "eval" / bench_id / name / "summary.json")["meta"]
+                model_path: Path | None, recipe: dict) -> None:
+    rec = read_json(RUNS / "eval" / bench_id / name / "summary.json")
+    meta = rec["meta"]
     got = Path(meta["model_path"]).resolve() if meta["model_path"] else None
     want = model_path.resolve() if model_path else None
-    if (meta["backbone"], meta["max_length"], got) != (backbone, max_length, want):
+    if (rec["benchmark_id"], meta["backbone"], meta["max_length"], meta["recipe"], got) != (
+            bench_id, backbone, max_length, recipe, want):
         raise ValueError(f"{name}: eval was not made from {want or 'the pretrained model'} "
-                         f"with {backbone} at max_length {max_length}")
+                         f"with {backbone} {recipe} at max_length {max_length} on {bench_id}")
 
 
 def _check_confirm_run(bench_id: str, name: str, seed: int, recipe_run: str) -> None:
     res = read_json(RUNS / name / "result.json")
-    cfg = read_json(RUNS / name / "manifest.json")["config"]
-    ref = read_json(RUNS / recipe_run / "manifest.json")["config"]
+    man, ref = read_json(RUNS / name / "manifest.json"), read_json(RUNS / recipe_run /
+                                                                   "manifest.json")
+    cfg = man["config"]
     if not (res["finished"] and res["selection"] == "final" == cfg["selection"]):
         raise ValueError(f"{name}: not a finished selection='final' run")
     if cfg["seed"] != seed or cfg["data_seed"] != seed:
         raise ValueError(f"{name}: seed/data_seed {cfg['seed']}/{cfg['data_seed']} != {seed}")
-    diff = sorted(k for k in cfg.keys() | ref.keys()
-                  if k not in CONFIRM_FREE and cfg.get(k) != ref.get(k))
+    diff = sorted(k for k in cfg.keys() | ref["config"].keys()
+                  if k not in CONFIRM_FREE and cfg.get(k) != ref["config"].get(k))
+    # identity: dataset, pairs, model recipe/revision, trainer code, benchmark ("config" is
+    # the hash of the config, which differs by design in the CONFIRM_FREE keys)
+    diff += sorted(f"identity.{k}" for k in man["identity"].keys() | ref["identity"].keys()
+                   if k != "config" and man["identity"].get(k) != ref["identity"].get(k))
+    if man["identity"].get("benchmark_id") != bench_id:
+        diff.append("identity.benchmark_id != report benchmark")
     if diff:
         raise ValueError(f"{name}: differs from frozen recipe {recipe_run} in {diff}")
-    _check_eval(bench_id, name, cfg["backbone"], cfg["max_length"], RUNS / name / "final")
+    _check_eval(bench_id, name, cfg["backbone"], cfg["max_length"], RUNS / name / "final",
+                man["identity"]["recipe"])
 
 
 def confirmation_report(bench_id: str) -> dict:
@@ -166,23 +176,28 @@ def confirmation_report(bench_id: str) -> dict:
     for s in seeds:
         _check_confirm_run(bench_id, cand[s], s, CONFIRM["recipe_from"]["candidate"])
         _check_confirm_run(bench_id, bge[s], s, CONFIRM["recipe_from"]["bge"])
+    e5_recipe = read_json(RUNS / CONFIRM["recipe_from"]["candidate"] /
+                          "manifest.json")["identity"]["recipe"]
     _check_eval(bench_id, CONFIRM["pretrained"], CONFIRM["pretrained_backbone"],
-                CONFIRM["pretrained_max_length"], None)
+                CONFIRM["pretrained_max_length"], None, e5_recipe)
     per = pd.read_parquet(RUNS / "eval" / bench_id / cand[seeds[0]] / "per_anchor.parquet")
     families = per[per["view"] == "full"].set_index("anchor")["family"]
     excluded = {v: int(((per["view"] == v) & (per["n_rel"] == 0)).sum()) for v in VIEWS}
+    # relevance (n_rel) comes from the frozen benchmark, so eligibility is the same for
+    # every system; check adequacy before bootstrapping (an empty cohort cannot be resampled)
+    eligible = per[per["n_rel"] > 0]
+    clusters = {v: int(eligible.loc[eligible["view"] == v, "family"].nunique()) for v in VIEWS}
     comps = {"pretrained_e5": CONFIRM["pretrained"], "trained_bge": bge}
     m = len(comps) * len(VIEWS)
+    adequate = min(clusters.values()) >= MIN_CLUSTERS
     contrasts = {}
-    for key, comp in comps.items():
+    for key, comp in comps.items() if adequate else ():
         c = {v: contrast(cand, comp, v, bench_id, m, families) for v in VIEWS}
         for x in c.values():
             x["diff_seed_range"] = [min(x["per_seed"]), max(x["per_seed"])]
             x["cand_seed_range"] = [min(x["cand_seed_means"]), max(x["cand_seed_means"])]
-        contrasts[key] = {**c, "passes": promotion(c["full"], c["hard_lexical"]),
-                          "interpretable": all(x["n_clusters"] >= MIN_CLUSTERS
-                                               for x in c.values())}
-    if not all(c["interpretable"] for c in contrasts.values()):
+        contrasts[key] = {**c, "passes": promotion(c["full"], c["hard_lexical"])}
+    if not adequate:
         decision = "inconclusive"
     elif all(c["passes"] for c in contrasts.values()):
         decision = "promote"
@@ -191,7 +206,8 @@ def confirmation_report(bench_id: str) -> dict:
     dep = cand[CONFIRM["deploy_seed"]]
     rep = {"benchmark_id": bench_id, "m_contrasts": m, "contrasts": contrasts,
            "decision": decision, "qualifier": QUALIFIER,
-           "excluded_zero_positive": excluded, "min_clusters": MIN_CLUSTERS,
+           "excluded_zero_positive": excluded, "eligible_clusters": clusters,
+           "min_clusters": MIN_CLUSTERS,
            "deployment": {"seed": CONFIRM["deploy_seed"], "run_id": dep,
                           **{v: float(_ndcg(bench_id, dep, v).mean()) for v in VIEWS}},
            "design": {**CONFIRM, "decisions": ["", "", ""]},
