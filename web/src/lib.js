@@ -2,21 +2,21 @@ export function normalize(value) {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
 }
 
-export function searchNames(query, names, limit = 12) {
+export function searchNames(query, names, ids = null, limit = 12) {
   const q = normalize(query);
   if (!q) return [];
   const exacts = [];
   const prefixes = [];
   const substrings = [];
-  const aliases = Array.from({ length: names.ids.length }, () => []);
+  const aliases = Array.from({ length: names.names.length }, () => []);
   for (const [name, index] of names.aliases) aliases[index].push(name);
-  for (let i = 0; i < names.ids.length; i += 1) {
+  for (let i = 0; i < names.names.length; i += 1) {
     const strings = [names.names[i], ...aliases[i]].map(normalize);
     if (strings.some((s) => s === q)) exacts.push(i);
     else if (strings.some((s) => s.startsWith(q))) prefixes.push(i);
     else if (strings.some((s) => s.includes(q))) substrings.push(i);
   }
-  return [...exacts, ...prefixes, ...substrings].slice(0, limit).map((index) => ({ index, id: names.ids[index], name: names.names[index] }));
+  return [...exacts, ...prefixes, ...substrings].slice(0, limit).map((index) => ({ index, id: ids?.[index] ?? '', name: names.names[index] }));
 }
 
 export function filterNeighbours(entries, cardByIndex, filters) {
@@ -52,12 +52,20 @@ export function serializeUrl(state) {
 }
 
 export function validateRelease(release, names) {
-  if (release?.schema !== 'mtgemb-release-v1') throw new Error('Unsupported release schema.');
-  if (!Number.isInteger(release.n_cards) || release.n_cards < 1 || names?.ids?.length !== release.n_cards || names?.names?.length !== release.n_cards) throw new Error('Name index counts do not match release.json.');
+  if (release?.schema !== 'mtgemb-release-v2') throw new Error(`Unsupported release schema: ${release?.schema ?? 'missing'}; expected mtgemb-release-v2.`);
+  if (!Number.isInteger(release.n_cards) || release.n_cards < 1) throw new Error('Invalid card count in release.json.');
   if (!Number.isInteger(release.shard_size) || release.shard_size < 1) throw new Error('Invalid shard_size.');
+  if (!names) return true;
+  if (!Array.isArray(names.names) || names.names.length !== release.n_cards || 'ids' in names) throw new Error('Name index counts do not match release.json or contains IDs.');
   if (!Array.isArray(names.aliases)) throw new Error('Name aliases are missing or malformed.');
-  if (new Set(names.ids).size !== names.ids.length || names.ids.some((id, index) => typeof id !== 'string' || (index > 0 && names.ids[index - 1] >= id))) throw new Error('Name IDs must be unique and strictly ascending.');
   for (const [name, index] of names.aliases) if (typeof name !== 'string' || !Number.isInteger(index) || index < 0 || index >= release.n_cards) throw new Error('Name alias index is outside the card catalogue.');
+  return true;
+}
+
+export function validateIds(release, data) {
+  const ids = data?.ids;
+  if (!Array.isArray(ids) || ids.length !== release?.n_cards) throw new Error('ID count does not match release.json.');
+  if (ids.some((id, index) => typeof id !== 'string' || !id || (index > 0 && ids[index - 1] >= id))) throw new Error('IDs must be unique and strictly ascending.');
   return true;
 }
 
@@ -66,7 +74,7 @@ export function validateReleasePointer(current, release) {
   return true;
 }
 
-export function validateShard(cards, neighbours, release, shard, names) {
+export function validateShard(cards, neighbours, release, shard, ids) {
   const expected = Math.min(release.shard_size, release.n_cards - shard * release.shard_size);
   if (expected < 0 || !Array.isArray(cards) || cards.length !== expected) throw new Error(`Card shard ${shard} has the wrong length.`);
   if (!Array.isArray(neighbours) || neighbours.length !== expected) throw new Error(`Neighbour shard ${shard} has the wrong length.`);
@@ -74,7 +82,7 @@ export function validateShard(cards, neighbours, release, shard, names) {
     const card = cards[offset];
     const index = shard * release.shard_size + offset;
     if (!card || typeof card.id !== 'string' || card.id !== undefined && card.id.length === 0 || !Array.isArray(card.faces) || typeof card.color_identity !== 'string' || typeof card.mv !== 'number' || typeof card.type_line !== 'string' || typeof card.is_creature !== 'boolean' || typeof card.has_text !== 'boolean') throw new Error(`Card ${index} is malformed.`);
-    if (names && card.id !== names.ids[index]) throw new Error(`Card ID does not match name index at ${index}.`);
+    if (ids && card.id !== ids[index]) throw new Error(`Card ID does not match ID index at ${index}.`);
     const list = neighbours[offset];
     if (!Array.isArray(list) || list.length > release.k) throw new Error(`Neighbour list ${index} is malformed.`);
     let previous = Infinity;

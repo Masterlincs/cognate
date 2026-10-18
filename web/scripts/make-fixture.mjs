@@ -23,11 +23,12 @@ const writeJson = async (relative, value, files = null) => {
 const ids = Array.from({ length: count }, (_, i) => `fixture-${String(i).padStart(4, '0')}`);
 const names = ids.map((_, i) => i % 31 === 0 ? `${inventedNouns[i % 20]} Fold // ${inventedNouns[(i + 7) % 20]} Unfold` : `${inventedNouns[i % 20]} ${typeKinds[i % typeKinds.length].split(' ')[0]} ${String(i).padStart(3, '0')}`);
 const aliases = names.flatMap((name, i) => name.includes(' // ') ? name.split(' // ').map((face) => [face, i]) : []);
-const nameIndex = { ids, names, aliases };
+const nameIndex = { names, aliases };
 const files = {};
 await mkdir(path.join(dir, 'cards'), { recursive: true });
 await mkdir(path.join(dir, 'neighbours'), { recursive: true });
 await writeJson('names.json', nameIndex, files);
+await writeJson('ids.json', { ids }, files);
 for (let shard = 0; shard < Math.ceil(count / shardSize); shard += 1) {
   const start = shard * shardSize;
   const length = Math.min(shardSize, count - start);
@@ -54,7 +55,7 @@ for (let shard = 0; shard < Math.ceil(count / shardSize); shard += 1) {
   await writeJson(`neighbours/${shardName}.json`, neighbours, files);
 }
 await writeJson('release.json', {
-  schema: 'mtgemb-release-v1', release_id: releaseId, fixture: true, snapshot_date: '2026-10-17', created_utc: '2026-10-17T00:00:00Z',
+  schema: 'mtgemb-release-v2', release_id: releaseId, fixture: true, snapshot_date: '2026-10-17', created_utc: '2026-10-17T00:00:00Z',
   model: { label: 'Synthetic fixture ranking', status: 'experimental', backbone: 'synthetic', run_id: 'fixture-v1', decision: 'Fixture data only; no model claim.' },
   n_cards: count, k, shard_size: shardSize, files,
   attribution: 'Invented synthetic names and rules text for software testing only; no affiliation with Wizards of the Coast or Scryfall.'

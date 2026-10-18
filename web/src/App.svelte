@@ -1,8 +1,10 @@
 <script>
-  import { filterNeighbours, parseUrl, searchNames, serializeUrl, validateRelease, validateReleasePointer, validateShard } from './lib.js';
+  import { filterNeighbours, parseUrl, searchNames, serializeUrl, validateIds, validateRelease, validateReleasePointer, validateShard } from './lib.js';
 
   let release;
   let names;
+  let ids;
+  let idsReady;
   let selectedIndex = -1;
   let selectedCard;
   let savedNeighbours = [];
@@ -36,7 +38,7 @@
       fetchJson(`${base}data/${release.release_id}/cards/${String(shard).padStart(3, '0')}.json`),
       fetchJson(`${base}data/${release.release_id}/neighbours/${String(shard).padStart(3, '0')}.json`)
     ]).then(([cards, neighbours]) => {
-      validateShard(cards, neighbours, release, shard, names);
+      validateShard(cards, neighbours, release, shard, ids?.ids);
       return { cards, neighbours };
     }).catch((reason) => { cache.delete(shard); throw reason; }));
     return cache.get(shard);
@@ -69,6 +71,8 @@
     imageFailed = false;
     selectedIndex = index;
     try {
+      if (!ids) await idsReady;
+      if (request !== token) return;
       const [card, shardData] = await Promise.all([getCard(index), getShard(shardFor(index))]);
       if (request !== token) return;
       selectedCard = card;
@@ -77,15 +81,19 @@
       if (card.has_text) await refreshFilters('none', request);
       if (request !== token) return;
       loading = false;
-      if (push) updateUrl(true, names.ids[index]);
+      if (push) updateUrl(true, ids.ids[index]);
     } catch (reason) {
       if (request !== token) return;
       error = reason.message;
       loading = false;
     }
   };
-  const selectId = (id, push = true) => {
-    const index = names?.ids.indexOf(id) ?? -1;
+  const selectId = async (id, push = true) => {
+    const request = ++token;
+    try { if (!ids) await idsReady; }
+    catch (reason) { if (request === token) { error = reason.message; loading = false; } return; }
+    if (request !== token) return;
+    const index = ids?.ids.indexOf(id) ?? -1;
     if (index < 0) {
       token += 1;
       selectedIndex = -1;
@@ -103,7 +111,7 @@
   };
   const onSearch = (event) => {
     query = event.currentTarget.value;
-    suggestions = searchNames(query, names ?? { ids: [], names: [], aliases: [] });
+    suggestions = searchNames(query, names ?? { names: [], aliases: [] }, ids?.ids);
     activeSuggestion = suggestions.length ? 0 : -1;
   };
   const chooseSuggestion = (suggestion) => {
@@ -143,12 +151,26 @@
       if (!current.release_id || current.release_id.includes('/') || current.release_id.includes('..')) throw new Error('Invalid release pointer.');
       release = await fetchJson(`${base}data/${current.release_id}/release.json`);
       validateReleasePointer(current, release);
-      names = await fetchJson(`${base}data/${current.release_id}/names.json`);
-      validateRelease(release, names);
+      validateRelease(release);
+      const bundle = `${base}data/${current.release_id}/`;
+      const namesReady = fetchJson(`${bundle}names.json`).then((loadedNames) => {
+        validateRelease(release, loadedNames);
+        names = loadedNames;
+        suggestions = searchNames(query, names, ids?.ids);
+        loading = false;
+      });
+      idsReady = fetchJson(`${bundle}ids.json`).then((loadedIds) => {
+        validateIds(release, loadedIds);
+        ids = loadedIds;
+        suggestions = searchNames(query, names ?? { names: [], aliases: [] }, ids.ids);
+      });
+      idsReady.catch((reason) => { error = reason.message; loading = false; });
+      await namesReady;
       const state = parseUrl(location.search);
       color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type;
-      loading = false;
-      if (state.card) selectId(state.card, false);
+      const startupToken = token;
+      await idsReady;
+      if (state.card && startupToken === token) selectId(state.card, false);
     } catch (reason) { error = reason.message; loading = false; }
   })();
   addEventListener('popstate', onHistory);
@@ -206,7 +228,7 @@
             <label class="type-filter">Type text<input type="search" placeholder="e.g. artifact" bind:value={type} oninput={onFilter} /></label>
           </div>
           {#if visibleNeighbours.length}
-            <ol class="neighbour-list">{#each visibleNeighbours as [index, score], position}<li><button type="button" class="neighbour" onclick={() => selectIndex(index)}><span class="rank">{String(position + 1).padStart(2, '0')}</span><span class="neighbour-name">{names.names[index]}<small>{names.ids[index]}</small></span><span class="score"><strong>{score.toFixed(3)}</strong><small>cosine (ranking score, not a probability)</small></span><span class="arrow">↗</span></button></li>{/each}</ol>
+          <ol class="neighbour-list">{#each visibleNeighbours as [index, score], position}<li><button type="button" class="neighbour" onclick={() => selectIndex(index)}><span class="rank">{String(position + 1).padStart(2, '0')}</span><span class="neighbour-name">{names.names[index]}<small>{ids.ids[index]}</small></span><span class="score"><strong>{score.toFixed(3)}</strong><small>cosine (ranking score, not a probability)</small></span><span class="arrow">↗</span></button></li>{/each}</ol>
           {:else}<div class="notice empty"><strong>No matches in this list</strong><span>Try changing or clearing one of the filters.</span></div>{/if}
         {/if}
       </section>
