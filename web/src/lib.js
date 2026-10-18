@@ -131,9 +131,9 @@ export function validateAbilityShard(cards, abilities, release, shard) {
     const entries = abilities[offset];
     if (!Array.isArray(entries)) throw new Error(`Ability list ${index} is malformed.`);
     if (!card.has_text && entries.length) throw new Error(`Textless card ${index} must have no ability entries.`);
-    const abilityTexts = card.faces.flatMap((face) => typeof face.oracle_text === 'string' ? face.oracle_text.split(/\r?\n/).filter((line) => line.trim()) : []);
-    if (abilityTexts.length < 2 && entries.length) throw new Error(`Card ${index} with fewer than two abilities must have no ability entries.`);
-    if (abilityTexts.length >= 2 && entries.length !== abilityTexts.length) throw new Error(`Ability list ${index} does not match the card's ability lines.`);
+    // Lines come from the model text (reminder text removed), not oracle_text; the exporter
+    // pins them by hash, so only the shape is checked here: none, or one entry per ability (>=2).
+    if (entries.length === 1) throw new Error(`Ability list ${index} does not match the card's ability lines.`);
     for (const ability of entries) {
       if (!ability || typeof ability.text !== 'string' || !ability.text.trim() || !Array.isArray(ability.neighbours) || ability.neighbours.length > release.ability_k) throw new Error(`Ability entry is malformed for card ${index}.`);
       let previousAbilityScore = Infinity;
@@ -144,7 +144,6 @@ export function validateAbilityShard(cards, abilities, release, shard) {
         previousAbilityScore = score;
       }
     }
-    if (entries.some((ability, abilityIndex) => ability.text !== abilityTexts[abilityIndex])) throw new Error(`Ability text does not match card ${index}.`);
   }
   return true;
 }

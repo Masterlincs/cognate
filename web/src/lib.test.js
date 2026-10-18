@@ -108,5 +108,9 @@ describe('bundle validation', () => {
     expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[{ ...v3Abilities[0][0], neighbours: [[2, 0.9]] }, v3Abilities[0][1]], []])).toThrow(/Ability neighbour index or score/);
     expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[v3Abilities[0][0]], []])).toThrow(/does not match/);
     expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [v3Abilities[0], [{ text: 'Invented line.', neighbours: [] }]])).toThrow(/Textless card/);
+    // exporter lines are the reminder-free model text, so they need not equal oracle_text lines
+    const reminder = [{ ...v3Cards[0], faces: [{ oracle_text: 'Flying (This creature can block.)\n(Reminder only.)\nDraw a card.' }] }, v3Cards[1]];
+    const modelLines = [[{ text: 'Flying', neighbours: [[1, 0.9]] }, { text: 'Draw a card.', neighbours: [] }], []];
+    expect(validateShard(reminder, v3Neighbours, v3, 0, ['a', 'b'], modelLines)).toBe(true);
   });
 });
