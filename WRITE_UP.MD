@@ -472,3 +472,20 @@ The user authorised gate 1 ("do 1"): one evaluation of the frozen artifacts on t
    - Verification: 112 tests pass.
 3. **Dev unchanged.** The real dev benchmark rebuilt with the new code keeps id `8bf2f48c0bba3b2c`. `replay-eval` on clean `bbbdd8a` passed: 9 evals and 3 releases, tolerance 1e-9 (`runs/replay-eval-bbbdd8a.out`).
 4. **Pre-run review.** Sent to Sol (`p10-sealed-review-r1`) for a code-only review. Sol is barred from touching sealed data.
+5. **Sol r1: two P2 findings, both fixed in `14af854`.**
+   - **Finding 1:** resume after a crash trusted unverified sealed eval records.
+   - **Finding 2:** the one-shot check allowed two concurrent launches to both score.
+   - **Fix:** resume is removed. The run first creates `runs/sealed/run.lock` exclusively and never removes it. Any second launch, or any existing sealed records, is refused. A crashed run therefore needs a human decision, not an automatic recovery.
+   - **Tests:** `tests/test_sealed.py`. 114 tests pass. Sent for the r2 review.
+6. **Sol r2: PASS**, no blocking findings in `bbbdd8a..14af854`. Sol's overlap and crash probes passed on temporary fixtures.
+7. **Single run started** at `aebb999` (clean tree, pushed): `uv run mtgemb sealed-eval`, with output in `runs/sealed-eval.out` and errors in `runs/sealed-eval.err`. Before the run, there was no `runs/sealed/` directory and no sealed spec.
+8. **Attempt 1 crashed** (2026-10-18 14:10:39Z, exit 139, segmentation fault). stderr shows the Intel XPU runtime's `AssertHandler::printMessage`, the same intermittent driver crash behind the 11 earlier `runs/*.crash-1.out` files.
+   - **What it left:**
+     - Sealed benchmark `c98bb619ea613672` (`benchmark_v3_sealed.json`).
+     - The lexical sealed eval, complete.
+     - `runs/sealed/run.lock`.
+     - The STARTED, then CRASHED events in `runs/sealed.jsonl`.
+   - **Not reached:** the failure came right after the pretrained-E5 weights loaded. No encoder was scored on sealed, and no report was written.
+   - **Seen so far:** the lexical baseline's sealed aggregate appeared in `runs/eval.jsonl` (full 0.6101, hard-lexical 0.5831). No per-card output was inspected.
+   - **Provenance note:** the lock records `dirty: true`. The only uncommitted change was WRITE_UP steps 6-7; the code was at `aebb999`.
+   - **Next:** by design (and the r1 fix), the lock blocks any rerun. Nothing was deleted or retried, and the user has been asked how to proceed.
