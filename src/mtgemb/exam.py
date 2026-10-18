@@ -301,7 +301,8 @@ def guard(old: dict, new: dict) -> dict:
 
 
 def exam_score(ds_dir, name: str, backbone: str, max_length: int,
-               model_path: str | None = None, path: Path = EXAM) -> dict:
+               model_path: str | None = None, path: Path = EXAM,
+               text_version: str = "no_reminder_v1") -> dict:
     """Score one encoder (on CPU) on the accepted items; one new record per call."""
     import time
 
@@ -309,16 +310,18 @@ def exam_score(ds_dir, name: str, backbone: str, max_length: int,
 
     from . import encoder as enc
     from .data import load_dataset
+    from .selfname import apply_text_version
     from .util import RUNS, atomic_write_json, git_identity, log_event, sha256_file, utcnow
 
     items = parse(path.read_text("utf-8"))
-    cards = load_dataset(ds_dir)["cards"].set_index("oracle_id")
+    cards = apply_text_version(load_dataset(ds_dir)["cards"], text_version).set_index("oracle_id")
     recipe = enc.RECIPES[backbone]
     tok, model = enc.load(recipe, model_path)
     cpu = torch.device("cpu")
     model.to(cpu)
     out = score(items, cards, lambda t: enc.encode(model, tok, t, recipe, max_length, dev=cpu))
     out.update(name=name, backbone=backbone, max_length=max_length, model_path=model_path,
+               text_version=text_version,
                worksheet_sha256=sha256_file(path), n_proposed=sum(
                    it["status"] == "proposed" for it in items),
                code=git_identity(), created_utc=utcnow())
@@ -326,5 +329,5 @@ def exam_score(ds_dir, name: str, backbone: str, max_length: int,
     rec.parent.mkdir(parents=True, exist_ok=True)
     atomic_write_json(rec, out)
     log_event("eval", "EXAM_SCORED", name=name, passed=out["passed"], n=out["n"],
-              record=str(rec))
+              text_version=text_version, record=str(rec))
     return out

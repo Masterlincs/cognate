@@ -93,3 +93,53 @@ def test_guard_compares_identical_items_only():
     g = exam.guard(old, new)
     assert g == {"n_compared": 2, "regressed": ["T001"], "fixed": ["T002"],
                  "only_old": ["T003", "T004"], "only_new": ["T003", "T005"]}
+
+
+@pytest.mark.parametrize("version", ["no_reminder_v1", "no_reminder_v2"])
+def test_exam_score_text_version(tmp_path, monkeypatch, selfname_cards, version):
+    from mtgemb import data, encoder, selfname, util
+
+    cards = selfname_cards
+    ids = cards["oracle_id"].tolist()
+    worksheet = tmp_path / "traps.md"
+    items = [{"id": "T001", "section": "user", "status": "accepted", "anchor": ids[0],
+              "line": 2, "match": ids[1], "trap": ids[2]},
+             {"id": "T002", "section": "user", "status": "accepted", "anchor": ids[0],
+              "line": None, "match": ids[1], "trap": ids[2]}]
+    worksheet.write_text(exam.HEADER + "\n".join(
+        exam.render(it, cards.set_index("oracle_id")) for it in items), "utf-8")
+    seen = []
+
+    class Model:
+        def to(self, dev):
+            assert dev.type == "cpu"
+
+    def encode(model, tok, texts, *args, **kwargs):
+        assert kwargs["dev"].type == "cpu"
+        seen.append(texts)
+        return np.tile([1., 0.], (len(texts), 1))
+
+    monkeypatch.setattr(data, "load_dataset", lambda _: {"cards": cards})
+    monkeypatch.setattr(encoder, "load", lambda *_: (None, Model()))
+    monkeypatch.setattr(encoder, "encode", encode)
+    monkeypatch.setattr(util, "RUNS", tmp_path / "exam-records")
+    kwargs = {} if version == "no_reminder_v1" else {"text_version": version}
+    out = exam.exam_score("unused", "fixture", "e5-base-v2", 94, path=worksheet, **kwargs)
+    expected = selfname.apply_text_version(cards, version)["text"].tolist()
+    assert seen == [[expected[0].split("\n")[1]], [expected[1]], [expected[2]], expected[:3]]
+    assert out["text_version"] == version and out["n"] == 2
+
+
+@pytest.mark.parametrize("args,expected", [([], "no_reminder_v1"),
+                                         (["--text-version", "no_reminder_v2"],
+                                          "no_reminder_v2")])
+def test_exam_cli_passes_text_version(monkeypatch, capsys, args, expected):
+    from mtgemb import cli
+
+    def score(*a, **kw):
+        assert kw["text_version"] == expected
+        return dict(name="fixture", n=0, passed=0, sections={}, dev_only={}, n_proposed=0)
+
+    monkeypatch.setattr(exam, "exam_score", score)
+    cli.main(["exam-score", "fixture", "e5-base-v2", "--max-length", "94", *args])
+    assert '"fixture"' in capsys.readouterr().out

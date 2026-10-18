@@ -1,4 +1,5 @@
 import math
+from contextlib import nullcontext
 
 import numpy as np
 import pytest
@@ -338,3 +339,226 @@ def test_aux_keeps_card_schedule_and_resumes_exactly(tiny):
     assert st["rows_total"] == 12 * (2 * 4 + 2 * 4)  # card rows and aux rows both counted
     man = tr.read_json(tiny / "runs" / "aux" / "manifest.json")
     assert man["identity"]["aux_rows"] == data.line_tag_rows()["hash"]
+
+
+def test_synth_loss_masks_family_positives_and_keeps_all_negatives(monkeypatch):
+    # A0=A1=(1,0); P0=(1,0), P1=(0,1); N0=(-1,0), N1=(0,-1).
+    # Same-family P1/P0 are masked. Both negatives compete for each anchor:
+    # Row 0: log(exp(1)+exp(-1)+1)-1; row 1: log(1+exp(-1)+1).
+    vectors = torch.tensor([[1., 0.], [1., 0.], [1., 0.], [0., 1.], [-1., 0.], [0., -1.]],
+                           requires_grad=True)
+    rows = {"anchors": ["a0", "a1"], "positives": ["p0", "p1"],
+            "negatives": ["n0", "n1"], "families": ["f", "f"]}
+    seen = []
+
+    def tokenize(tok, texts, recipe, max_length):
+        seen.extend(texts)
+        return {}
+
+    monkeypatch.setattr(enc, "tokenize", tokenize)
+    monkeypatch.setattr(enc, "embed", lambda *_: vectors)
+    loss, stats = tr.synth_loss(None, None, {}, 16, rows, np.arange(2), 1., "cpu", nullcontext())
+    expected = (math.log(math.e + math.exp(-1) + 1) - 1
+                + math.log(1 + math.exp(-1) + 1)) / 2
+    assert float(loss.detach()) == pytest.approx(expected, rel=1e-6)
+    assert stats["skipped"] == 0 and stats["rows"] == 2 and stats["eff_neg_mean"] == 2
+    assert seen == ["a0", "a1", "p0", "p1", "n0", "n1"]
+    loss.backward()
+    assert (vectors.grad[4:, 0] > 0).all()  # both negatives repel both anchors
+
+
+@pytest.mark.parametrize("families,skipped", [(["f", "f"], 2), (["f", "g"], 0)])
+def test_synth_loss_without_explicit_negatives(monkeypatch, families, skipped):
+    vectors = torch.tensor([[1., 0.], [0., 1.], [1., 0.], [0., 1.]], requires_grad=True)
+    monkeypatch.setattr(enc, "tokenize", lambda *_: {})
+    monkeypatch.setattr(enc, "embed", lambda *_: vectors)
+    rows = {"anchors": ["a", "b"], "positives": ["p", "q"],
+            "negatives": [None, None], "families": families}
+    loss, stats = tr.synth_loss(None, None, {}, 16, rows, np.arange(2), 1., "cpu", nullcontext())
+    assert stats["skipped"] == skipped
+    assert float(loss.detach()) == pytest.approx(0 if skipped else math.log1p(math.exp(-1)))
+    loss.backward()
+    assert torch.isfinite(vectors.grad).all()
+
+
+def test_synth_loss_masks_positives_of_anchors_sharing_a_tag(monkeypatch):
+    # different families, but the anchors share an eligible tag: the other positive is masked,
+    # so with no explicit negatives both rows have nothing to compete against
+    vectors = torch.tensor([[1., 0.], [0., 1.], [1., 0.], [0., 1.]], requires_grad=True)
+    monkeypatch.setattr(enc, "tokenize", lambda *_: {})
+    monkeypatch.setattr(enc, "embed", lambda *_: vectors)
+    rows = {"anchors": ["a", "b"], "positives": ["p", "q"],
+            "negatives": [None, None], "families": ["f", "g"]}
+    shared = np.ones((2, 2), dtype=bool)
+    _, stats = tr.synth_loss(None, None, {}, 16, rows, np.arange(2), 1., "cpu", nullcontext(),
+                             shared)
+    assert stats["skipped"] == 2
+
+
+def test_synth_loss_single_row_without_negative_is_skipped(monkeypatch):
+    vectors = torch.tensor([[1., 0.], [1., 0.]], requires_grad=True)
+    monkeypatch.setattr(enc, "tokenize", lambda *_: {})
+    monkeypatch.setattr(enc, "embed", lambda *_: vectors)
+    rows = {"anchors": ["a"], "positives": ["p"], "negatives": [None], "families": ["f"]}
+    loss, stats = tr.synth_loss(None, None, {}, 16, rows, np.array([0]), 1., "cpu", nullcontext())
+    assert float(loss.detach()) == 0 and stats["skipped"] == stats["rows"] == 1
+    assert stats["masked_frac"] == 0
+    loss.backward()
+    assert torch.equal(vectors.grad, torch.zeros_like(vectors))
+
+
+class SynthData(AuxData):
+    def synth_rows(self):
+        import pandas as pd
+
+        from mtgemb import synth
+
+        n = 12
+        cards = pd.DataFrame({"oracle_id": [f"s{i:02d}" for i in range(n)], "split": "fit",
+                              "text_status": "ok", "family_id": [f"sf{i}" for i in range(n)],
+                              "text": [f"word{i % 7} enters, scry 1." for i in range(n)]})
+        mem = pd.DataFrame({"oracle_id": cards["oracle_id"], "tag_id": "scry"})
+        rows = synth.build({"cards": cards, "memberships": mem}, {"scry"}, set())
+        rows["card_rows"] = np.arange(len(rows["anchors"]))  # stand-ins among FakeData rows
+        return rows
+
+
+@pytest.mark.parametrize("aux", ["none", "line_tag"])
+def test_synth_keeps_schedules_and_resumes_exactly(tiny, monkeypatch, aux):
+    data, cpu = SynthData(), torch.device("cpu")
+    batches_seen, started = {}, []
+    original = tr._train_locked
+
+    def capture(cfg, *args):
+        batches_seen[cfg.run_id] = args[6]
+        return original(cfg, *args)
+
+    monkeypatch.setattr(tr, "_train_locked", capture)
+    monkeypatch.setattr(tr, "log_event", lambda *args, **kw: started.append((args, kw)))
+    base = tr.train(_cfg(run_id="plain"), None, dev=cpu, data=data)
+    compare = tr.train(_cfg(run_id="compare", aux=aux, aux_batch=4), None, dev=cpu, data=data)
+    kw = dict(aux=aux, aux_batch=4, synth=True, synth_batch=4)
+    full = tr.train(_cfg(run_id="synth", **kw), None, dev=cpu, data=data)
+    assert full["card_schedule_hash"] == compare["card_schedule_hash"] == base["schedule_hash"]
+    assert full["schedule_hash"] != compare["schedule_hash"]
+    for b, c in zip(batches_seen["synth"], batches_seen["compare"], strict=True):
+        for key in ("anchors", "positives", "negatives", "pairs", "aux"):
+            if key in c:
+                assert np.array_equal(b[key], c[key])
+    tr.train(_cfg(run_id="split", stop_after=5, **kw), None, dev=cpu, data=data)
+    split = tr.train(_cfg(run_id="split", **kw), None, dev=cpu, data=data)
+    assert split["schedule_hash"] == full["schedule_hash"]
+    wa = _weights(tiny / "runs" / "synth" / "final")
+    wb = _weights(tiny / "runs" / "split" / "final")
+    assert all(torch.equal(wa[k], wb[k]) for k in wa)
+    wc = _weights(tiny / "runs" / "compare" / "final")
+    assert any(not torch.equal(wa[k], wc[k]) for k in wa)
+    records = [tr.json.loads(line) for line in
+               (tiny / "runs" / "synth" / "metrics.jsonl").read_text().splitlines()]
+    resumed = [tr.json.loads(line) for line in
+               (tiny / "runs" / "split" / "metrics.jsonl").read_text().splitlines()]
+    assert len(resumed) == 12
+    for a, b in zip(records, resumed, strict=True):
+        assert {k: v for k, v in a.items() if k != "sec"} == {
+            k: v for k, v in b.items() if k != "sec"}
+    assert records[0]["synth_loss"] > 0 and records[0]["synth_skipped"] == 0
+    side = tr.read_json(tiny / "runs" / "synth" / "last.json")
+    st = torch.load(tiny / "runs" / "synth" / side["file"], weights_only=False)
+    assert st["rows_total"] == 12 * (8 + (8 if aux == "line_tag" else 0) + 4)
+    man = tr.read_json(tiny / "runs" / "synth" / "manifest.json")
+    assert man["identity"]["synth_rows"] == data.synth_rows()["hash"]
+    event = next(kw for args, kw in started if args == ("train", "STARTED")
+                 and kw["run_id"] == "synth")
+    assert event["synth_rows"] == data.synth_rows()["hash"] and event["synth_count"] == 12
+
+
+def test_synth_skips_are_checkpointed_and_trip_the_shared_guard(tiny, monkeypatch):
+    original = tr.synth_loss
+
+    def skipped(*args):
+        loss, stats = original(*args)
+        return loss * 0, {**stats, "skipped": stats["rows"]}
+
+    monkeypatch.setattr(tr, "synth_loss", skipped)
+    kw = dict(run_id="skip", synth=True, synth_batch=4, total_updates=50)
+    data, cpu = SynthData(), torch.device("cpu")
+    tr.train(_cfg(stop_after=4, **kw), None, dev=cpu, data=data)
+    side = tr.read_json(tiny / "runs" / "skip" / "last.json")
+    st = torch.load(tiny / "runs" / "skip" / side["file"], weights_only=False)
+    assert st["skipped_total"] == 4 * 4 and st["rows_total"] == 4 * (8 + 4)
+    with pytest.raises(RuntimeError, match="skipped-row rate"):
+        tr.train(_cfg(**kw), None, dev=cpu, data=data)
+
+
+def test_text_version_train_data_streams(selfname_cards, monkeypatch):
+    import pandas as pd
+
+    ids = selfname_cards["oracle_id"].tolist()
+    ds = {"cards": selfname_cards, "ident": {"dataset_id": "fixture"},
+          "memberships": pd.DataFrame({"oracle_id": ids, "tag_id": "t"}),
+          "tags": pd.DataFrame({"tag_id": ["t"], "label": ["life"], "description": [None]})}
+    files = {"pairs.parquet": pd.DataFrame({"a": [ids[1]], "b": [ids[2]],
+                                           "tag_id": ["t"], "spec_weight": [1.]}),
+             "pair_tags.parquet": pd.DataFrame({"tag_id": ["t"]}),
+             "negatives.parquet": pd.DataFrame({"anchor": [ids[1]], "negative": [ids[3]],
+                                               "rank": [1]})}
+    monkeypatch.setattr(tr, "load_dataset", lambda _: dict(ds))
+    monkeypatch.setattr(tr, "read_json", lambda _: {"files": {}, "pairs_id": "fixture"})
+    monkeypatch.setattr(pd, "read_parquet", lambda p: files[p.name])
+    monkeypatch.setattr(tr.exam, "exam_cards", set)
+    v1, v2 = tr.TrainData("unused"), tr.TrainData("unused", "no_reminder_v2")
+    assert v1.fit_texts_changed == 0 and v2.fit_texts_changed == 3
+    assert v1.texts[0] == "Ally gains 2 life."
+    assert v2.texts[v2.a[0]] == "This creature gains 2 life."
+    assert v2.texts[v2.b[0]] == "This creature loses 2 life."
+    assert "This creature gains 2 life." in v2.line_tag_rows()["lines"]
+    rows = v2.synth_rows()
+    assert "This creature gains 2 life." in rows["anchors"]
+    assert all("Ally" not in t and "Trap" not in t for key in
+               ("anchors", "positives", "negatives") for t in rows[key] if t is not None)
+    assert ds["cards"].loc[11, "text"] == "Ally gains 2 life."
+    for attr in ("ids", "identity"):
+        assert getattr(v1, attr) == getattr(v2, attr)
+    for attr in ("a", "b", "family", "pair_tag", "spec_weight"):
+        np.testing.assert_array_equal(getattr(v1, attr), getattr(v2, attr))
+
+
+def test_text_version_keeps_schedule_hash():
+    cfg, data = _cfg(), FakeData()
+    assert schedule_hash(build_schedule(cfg, data)) == (
+        "aeebcf111bb4d9dc37f9bf4c743d851ae2c94f0c5b514029d78b3fba0a1726a6")
+    assert schedule_hash(build_schedule(_cfg(text_version="no_reminder_v2"), data)) == (
+        schedule_hash(build_schedule(cfg, data)))
+    assert tr.sha256_json(cfg.model_dump()) != tr.sha256_json(
+        _cfg(text_version="no_reminder_v2").model_dump())
+    assert "selfname.py" in tr._CODE_FILES
+
+
+@pytest.mark.parametrize("version", ["no_reminder_v1", "no_reminder_v2"])
+def test_training_eval_text_version(tiny, monkeypatch, selfname_cards, version):
+    from types import SimpleNamespace
+
+    data = FakeData()
+    data.text_version = version
+    data.fit_texts_changed = 3 if version == "no_reminder_v2" else 0
+    cards = selfname_cards[selfname_cards["text_status"] == "ok"]
+    spec = {"benchmark_id": "unchanged"}
+    bm = SimpleNamespace(spec=spec, ids=cards["oracle_id"].tolist(), texts=cards["text"].tolist())
+    seen, events = [], []
+
+    def encode(model, tok, texts, *args, **kwargs):
+        seen.extend(texts)
+        return np.tile([1., 0.], (len(texts), 1))
+
+    monkeypatch.setattr(tr, "load_benchmark", lambda _: (bm, {"cards": cards}))
+    monkeypatch.setattr(enc, "encode", encode)
+    monkeypatch.setattr(tr, "evaluate", lambda *_: {"summary": {
+        k: {"ndcg@10": .7} for k in ("full", "hard", "hard_lexical")}})
+    monkeypatch.setattr(tr, "log_event", lambda *a, **kw: events.append((a, kw)))
+    tr.train(_cfg(total_updates=1, eval_every=1, guardrail_hard_lexical=.5,
+                  text_version=version), spec, dev=torch.device("cpu"), data=data)
+    expected = tr.selfname.apply_text_version(cards, version)["text"].tolist()
+    assert seen == expected and bm.spec == spec
+    started = next(kw for a, kw in events if a == ("train", "STARTED"))
+    assert started["text_version"] == version
+    assert started["fit_texts_changed"] == data.fit_texts_changed

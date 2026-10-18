@@ -51,6 +51,8 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("backbone")
     q.add_argument("--max-length", type=int, required=True)
     q.add_argument("--model-path")
+    q.add_argument("--text-version", choices=["no_reminder_v1", "no_reminder_v2"],
+                   default="no_reminder_v1")
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("exam-guard", help="items that passed in OLD and fail in NEW (#10)")
     q.add_argument("old")
@@ -68,7 +70,8 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "exam-score":
         from .exam import exam_score
 
-        out = exam_score(a.ds, a.name, a.backbone, a.max_length, a.model_path)
+        out = exam_score(a.ds, a.name, a.backbone, a.max_length, a.model_path,
+                         text_version=a.text_version)
         out = {k: out[k] for k in ("name", "n", "passed", "sections", "dev_only", "n_proposed")}
     elif a.cmd == "exam-guard":
         from .exam import guard

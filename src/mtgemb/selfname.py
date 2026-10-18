@@ -1,8 +1,8 @@
 """Self-name normalisation, `no_reminder_v2` (idea 7, credited to Delvefall).
 
-Inference-only diagnosis first: the same frozen encoder on v1 and v2 inputs over the dev
-benchmark (selection-exposed; the benchmark, its views and its labels are unchanged; only
-the encoder input changes). A training run on v2 would be ext-3 and needs registration.
+Shared training/exam text swap and an inference-only diagnosis over the selection-exposed
+dev benchmark. Its views and labels stay fixed; only encoder inputs change. A training
+run on v2 would be ext-3 and needs registration.
 """
 
 from __future__ import annotations
@@ -11,8 +11,9 @@ import json
 
 import pandas as pd
 
+from .abilities import split_abilities
 from .data import _self_names
-from .text import no_reminder_v2
+from .text import VERSION, VERSION_V2, no_reminder_v2
 
 
 def v2_texts(cards: pd.DataFrame) -> pd.Series:
@@ -23,6 +24,25 @@ def v2_texts(cards: pd.DataFrame) -> pd.Series:
         t = no_reminder_v2(faces, _self_names(r.name, faces))
         out[r.oracle_id] = t["text"] if t["status"] == "ok" else None
     return pd.Series(out)
+
+
+def apply_text_version(cards: pd.DataFrame, version: str) -> pd.DataFrame:
+    """Copy cards, changing only usable encoder texts; ability indices stay fixed."""
+    if version not in (VERSION, VERSION_V2):
+        raise ValueError(f"unknown text version: {version}")
+    out = cards.copy()
+    if version == VERSION:
+        return out
+    ok = cards["text_status"] == "ok"
+    texts = cards.loc[ok, "oracle_id"].map(v2_texts(cards.loc[ok]))
+    for oid, before, after in zip(cards.loc[ok, "oracle_id"], cards.loc[ok, "text"],
+                                  texts, strict=True):
+        if after is None or pd.isna(after):
+            raise ValueError(f"{oid}: v2 text is not ok")
+        if len(split_abilities(before)) != len(split_abilities(after)):
+            raise ValueError(f"{oid}: v2 changed ability-line count")
+    out.loc[ok, "text"] = texts
+    return out
 
 
 def diagnose(ds_dir, name: str, backbone: str, max_length: int,
@@ -36,8 +56,8 @@ def diagnose(ds_dir, name: str, backbone: str, max_length: int,
     from .util import RUNS, atomic_write_json, git_identity, log_event, utcnow
 
     bm, ds = load_benchmark(ds_dir)
-    v2 = v2_texts(ds["cards"].set_index("oracle_id").loc[bm.ids].reset_index())
-    t2 = [v2[o] if v2[o] is not None else t for o, t in zip(bm.ids, bm.texts, strict=True)]
+    cards = apply_text_version(ds["cards"], VERSION_V2)
+    t2 = cards.set_index("oracle_id").loc[bm.ids, "text"].tolist()
     changed = [a != b for a, b in zip(bm.texts, t2, strict=True)]
     recipe = enc.RECIPES[backbone]
     log_event("eval", "STARTED", task="selfname-diagnosis", name=name, model_path=model_path)

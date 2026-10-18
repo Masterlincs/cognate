@@ -23,7 +23,7 @@ import torch
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from . import encoder as enc
-from . import exam, linetag
+from . import exam, linetag, selfname, synth
 from .data import load_dataset
 from .evaluate import Benchmark, evaluate, load_benchmark
 from .util import (
@@ -63,10 +63,14 @@ class TrainConfig(BaseModel):
     objective: Literal["masked_infonce", "multi_positive"] = "masked_infonce"
     pair_weighting: Literal["none", "specificity"] = "none"
     batch_mode: Literal["random", "tag_grouped"] = "random"
+    text_version: Literal["no_reminder_v1", "no_reminder_v2"] = "no_reminder_v1"
     # ideas 1-2 (Delvefall): a line<->tag stream beside the unchanged card schedule
     aux: Literal["none", "line_tag"] = "none"
     aux_weight: float = 1.0
     aux_batch: int = 32
+    synth: bool = False
+    synth_weight: float = 1.0
+    synth_batch: int = 32
     precision: Literal["fp32", "bf16"] = "fp32"
     grad_checkpointing: bool = False
     max_skip_rate: float = 0.01
@@ -89,8 +93,14 @@ class TrainConfig(BaseModel):
 class TrainData:
     """Fit cards with text, positive pairs, eligible-tag incidence and negative pools."""
 
-    def __init__(self, ds_dir: str | Path):
+    def __init__(self, ds_dir: str | Path, text_version: str = "no_reminder_v1"):
         ds = load_dataset(ds_dir)
+        cards = selfname.apply_text_version(ds["cards"], text_version)
+        fit_ok = (cards["split"] == "fit") & (cards["text_status"] == "ok")
+        self.fit_texts_changed = int((cards.loc[fit_ok, "text"] !=
+                                     ds["cards"].loc[fit_ok, "text"]).sum())
+        self.text_version = text_version
+        ds["cards"] = cards
         pdir = Path(ds_dir) / "pairs_v1"
         self.pairs_rec = read_json(pdir / "pairs.json")
         for name, h in self.pairs_rec["files"].items():
@@ -132,6 +142,13 @@ class TrainData:
     def line_tag_rows(self) -> dict:
         """aux rows; every trap-exam card's family is kept out (exam.exam_cards)."""
         return linetag.build(self._ds, self._elig, exam.exam_cards())
+
+    def synth_rows(self) -> dict:
+        """rule-made rows, with whole exam families excluded."""
+        rows = synth.build(self._ds, self._elig, exam.exam_cards())
+        pos = {o: i for i, o in enumerate(self.ids)}
+        rows["card_rows"] = np.array([pos[o] for o in rows["anchor_ids"]])
+        return rows
 
     def known_pos(self, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
         """Shares at least one pair-eligible tag."""
@@ -296,7 +313,7 @@ def contrastive_loss(q: torch.Tensor, c: torch.Tensor, known: torch.Tensor,
     loss = (row_loss * w).sum() / w.sum().clamp(min=1e-12)
     stats = {"rows": r, "skipped": int((~valid).sum()),
              "eff_neg_mean": float(eff_neg.float().mean()),
-             "masked_frac": float((known | excluded).float().sum() / (r * (cn - 1))),
+             "masked_frac": float((known | excluded).float().sum() / max(1, r * (cn - 1))),
              "multi_pos_rows": int(((known & ~excluded).sum(1) > 0).sum())}
     return loss, stats
 
@@ -462,7 +479,8 @@ def finalise_selection(evals: list[dict], cfg: TrainConfig, tol: float = 0.005):
     return select_checkpoint(evals, cfg.guardrail_hard_lexical, tol)
 
 
-_CODE_FILES = ("train.py", "encoder.py", "evaluate.py", "text.py", "linetag.py")
+_CODE_FILES = ("train.py", "encoder.py", "evaluate.py", "text.py", "linetag.py",
+               "synth.py", "augment.py", "selfname.py")
 
 
 def code_identity() -> str:
@@ -481,17 +499,22 @@ def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | No
     dev = dev or enc.device()
     out = run_dir(cfg.run_id)
     out.mkdir(parents=True, exist_ok=True)
-    data = data or TrainData(cfg.dataset_dir)
+    data = data or TrainData(cfg.dataset_dir, cfg.text_version)
+    if getattr(data, "text_version", "no_reminder_v1") != cfg.text_version:
+        raise ValueError("training data text_version does not match config")
     recipe = enc.RECIPES[cfg.backbone]
     if bench and cfg.selection == "guarded_best" and cfg.guardrail_hard_lexical is None:
         raise ValueError("guarded_best selection needs guardrail_hard_lexical "
                          "(the backbone's pretrained hard-lexical nDCG)")
     cfg_hash = sha256_json(cfg.model_dump(mode="json", exclude={"stop_after"}))
     aux = data.line_tag_rows() if cfg.aux == "line_tag" else None
+    synth_rows = data.synth_rows() if cfg.synth else None
     identity = {"config": cfg_hash, **data.identity, "recipe": recipe, "code": code_identity(),
                 "benchmark_id": bench["benchmark_id"] if bench else None}
     if aux is not None:
         identity["aux_rows"] = aux["hash"]
+    if synth_rows is not None:
+        identity["synth_rows"] = synth_rows["hash"]
     manifest_path = out / "manifest.json"
     if manifest_path.exists():
         man = read_json(manifest_path)
@@ -512,9 +535,14 @@ def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | No
         for b, rows in zip(batches, aux_sched, strict=True):
             b["aux"] = rows
         sched_hash = sha256_json([card_hash, [r.tolist() for r in aux_sched]])
+    if synth_rows is not None:
+        synth_sched = synth.schedule(synth_rows, cfg.synth_batch, cfg.total_updates, cfg.data_seed)
+        for b, rows in zip(batches, synth_sched, strict=True):
+            b["synth"] = rows
+        sched_hash = sha256_json([sched_hash, [r.tolist() for r in synth_sched]])
     with DeviceLock():
         return _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_hash,
-                             aux, card_hash)
+                             aux, card_hash, synth_rows)
 
 
 def aux_loss(model, tok, recipe, max_length, aux: dict, rows: np.ndarray, scale: float,
@@ -539,8 +567,32 @@ def aux_loss(model, tok, recipe, max_length, aux: dict, rows: np.ndarray, scale:
                              "masked_frac": s1["masked_frac"]}
 
 
+def synth_loss(model, tok, recipe, max_length, synth_rows: dict, rows: np.ndarray, scale: float,
+               dev, autocast, shared: np.ndarray | None = None) -> tuple[torch.Tensor, dict]:
+    """Anchor->positive InfoNCE; all negatives compete.
+
+    Another row's positive is masked (never a negative) when its anchor is in the same
+    family or, via `shared` (n x n), shares a pair-eligible tag, as in the card loss.
+    """
+    texts = [synth_rows["anchors"][i] for i in rows]
+    texts += [synth_rows["positives"][i] for i in rows]
+    texts += [synth_rows["negatives"][i] for i in rows if synth_rows["negatives"][i] is not None]
+    tb = {k: v.to(dev) for k, v in enc.tokenize(tok, texts, recipe, max_length).items()}
+    with autocast:
+        v = enc.embed(model, tb, recipe).float()
+    n = len(rows)
+    families = np.array(synth_rows["families"])[rows]
+    known = torch.zeros(n, len(texts) - n, dtype=torch.bool, device=dev)
+    same = families[:, None] == families[None, :]
+    if shared is not None:
+        same = same | shared
+    known[:, :n] = torch.from_numpy(same).to(dev)
+    known[torch.arange(n), torch.arange(n)] = False
+    return contrastive_loss(v[:n], v[n:], known, torch.zeros_like(known), scale, "masked_infonce")
+
+
 def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_hash,
-                  aux=None, card_hash=None):
+                  aux=None, card_hash=None, synth_rows=None):
     torch.manual_seed(cfg.seed)
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -568,12 +620,20 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
         _truncate_metrics(out / "metrics.jsonl", 0)  # restart before any checkpoint
         log_event("train", "STARTED", run_id=cfg.run_id, slot=cfg.slot,
                   schedule_hash=sched_hash, card_schedule_hash=card_hash,
-                  aux_rows=aux["hash"] if aux else None, config=cfg.model_dump(mode="json"))
+                  aux_rows=aux["hash"] if aux else None,
+                  synth_rows=synth_rows["hash"] if synth_rows else None,
+                  synth_count=len(synth_rows["anchors"]) if synth_rows else 0,
+                  text_version=cfg.text_version,
+                  fit_texts_changed=getattr(data, "fit_texts_changed", 0),
+                  config=cfg.model_dump(mode="json"))
     bm = None
     if bench:
-        bm = load_benchmark(cfg.dataset_dir)[0]
+        bm, ds = load_benchmark(cfg.dataset_dir)
         if bm.spec["benchmark_id"] != bench["benchmark_id"]:
             raise ValueError("benchmark changed since the run was configured")
+        # Keep v1 lexical masks/labels frozen, as in selfname.diagnose; swap encoder inputs only.
+        cards = selfname.apply_text_version(ds["cards"], cfg.text_version)
+        bm.texts = cards.set_index("oracle_id").loc[bm.ids, "text"].tolist()
     metrics_f = open(out / "metrics.jsonl", "a", encoding="utf-8")
     autocast = torch.autocast(device_type=dev.type, dtype=torch.bfloat16,
                               enabled=cfg.precision == "bf16")
@@ -606,6 +666,11 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
                 la, sa = aux_loss(model, tok, recipe, cfg.max_length, aux, b["aux"], cfg.scale,
                                   dev, autocast)
                 loss = loss + cfg.aux_weight * la
+            if synth_rows is not None:
+                cr = synth_rows["card_rows"][b["synth"]]
+                ls, ss = synth_loss(model, tok, recipe, cfg.max_length, synth_rows, b["synth"],
+                                    cfg.scale, dev, autocast, data.known_pos(cr, cr))
+                loss = loss + cfg.synth_weight * ls
             opt.zero_grad(set_to_none=True)
             loss.backward()
             gn = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip))
@@ -619,6 +684,9 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
             if aux is not None:  # aux rows count toward the same skip guard
                 skipped_total += sa["skipped"]
                 rows_total += 2 * len(b["aux"])
+            if synth_rows is not None:
+                skipped_total += ss["skipped"]
+                rows_total += ss["rows"]
             with torch.no_grad():
                 off = (q @ q.T).fill_diagonal_(float("nan"))
                 off_mean = float(torch.nanmean(off))
@@ -629,6 +697,8 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
                    "n_neg": int(len(neg)), "offdiag_cos": off_mean,
                    **({"aux_loss": float(la.detach()), "aux_skipped": sa["skipped"],
                        "aux_masked_frac": sa["masked_frac"]} if aux is not None else {}),
+                   **({"synth_loss": float(ls.detach()), "synth_skipped": ss["skipped"]}
+                      if synth_rows is not None else {}),
                    "sec": round(time.time() - t_last, 3),
                    "peak_mem_gb": round(torch.xpu.max_memory_allocated() / 1e9, 2)
                    if dev.type == "xpu" else None}
