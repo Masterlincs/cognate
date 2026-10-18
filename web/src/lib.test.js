@@ -1,11 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { filterNeighbours, normalize, parseUrl, searchNames, serializeUrl, validateIds, validateRelease, validateReleasePointer, validateShard } from './lib.js';
+import { filterNeighbours, normalize, parseUrl, searchNames, serializeUrl, validateIds, validateRelease, withIds, validateReleasePointer, validateShard } from './lib.js';
 
 const names = { names: ['Café Lantern', 'Blue Door', 'Green Thread // Thread Unbound'], aliases: [['Thread Unbound', 2]] };
 const ids = { ids: ['a', 'b', 'c'] };
 const release = { schema: 'mtgemb-release-v2', n_cards: 3, shard_size: 2, k: 2 };
 
 describe('search and ranking helpers', () => {
+  it('adds IDs to open suggestions without reopening a dismissed list', () => {
+    const open = searchNames('thread', names);
+    expect(open[0].id).toBe('');
+    expect(withIds(open, ids.ids)).toEqual([{ index: 2, id: 'c', name: 'Green Thread // Thread Unbound' }]);
+    expect(withIds([], ids.ids)).toEqual([]);
+  });
   it('normalizes accents and searches prefixes before substring matches', () => {
     expect(normalize(' CAFÉ ')).toBe('cafe');
     expect(searchNames('thread unbound', names, ids.ids)[0]).toMatchObject({ index: 2, id: 'c' });
@@ -37,6 +43,7 @@ describe('bundle validation', () => {
   it('validates names without waiting for the separate ID list', () => {
     expect(validateRelease(release, names)).toBe(true);
     expect(validateRelease(release)).toBe(true);
+    for (const bad of [null, [], 'names', 0]) expect(() => validateRelease(release, bad)).toThrow(/missing or malformed/);
     expect(() => validateRelease(release, { ...names, names: ['short'] })).toThrow(/counts/);
     expect(() => validateRelease(release, { ...names, ids: ids.ids })).toThrow(/counts/);
   });

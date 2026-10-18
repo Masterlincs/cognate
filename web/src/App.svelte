@@ -1,5 +1,5 @@
 <script>
-  import { filterNeighbours, parseUrl, searchNames, serializeUrl, validateIds, validateRelease, validateReleasePointer, validateShard } from './lib.js';
+  import { filterNeighbours, parseUrl, searchNames, serializeUrl, validateIds, withIds, validateRelease, validateReleasePointer, validateShard } from './lib.js';
 
   let release;
   let names;
@@ -163,7 +163,7 @@
       idsReady = namesReady.then(() => fetchJson(`${bundle}ids.json`)).then((loadedIds) => {
         validateIds(release, loadedIds);
         ids = loadedIds;
-        suggestions = searchNames(query, names ?? { names: [], aliases: [] }, ids.ids);
+        suggestions = withIds(suggestions, ids.ids);
       });
       idsReady.catch((reason) => { error = reason.message; loading = false; });
       await namesReady;

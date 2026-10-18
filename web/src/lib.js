@@ -55,11 +55,17 @@ export function validateRelease(release, names) {
   if (release?.schema !== 'mtgemb-release-v2') throw new Error(`Unsupported release schema: ${release?.schema ?? 'missing'}; expected mtgemb-release-v2.`);
   if (!Number.isInteger(release.n_cards) || release.n_cards < 1) throw new Error('Invalid card count in release.json.');
   if (!Number.isInteger(release.shard_size) || release.shard_size < 1) throw new Error('Invalid shard_size.');
-  if (!names) return true;
+  if (names === undefined) return true;  // release-only check before names.json arrives
+  if (!names || typeof names !== 'object' || Array.isArray(names)) throw new Error('Name index is missing or malformed.');
   if (!Array.isArray(names.names) || names.names.length !== release.n_cards || 'ids' in names) throw new Error('Name index counts do not match release.json or contains IDs.');
   if (!Array.isArray(names.aliases)) throw new Error('Name aliases are missing or malformed.');
   for (const [name, index] of names.aliases) if (typeof name !== 'string' || !Number.isInteger(index) || index < 0 || index >= release.n_cards) throw new Error('Name alias index is outside the card catalogue.');
   return true;
+}
+
+// fill IDs into the open suggestions only; a dismissed (empty) list stays dismissed
+export function withIds(suggestions, ids) {
+  return suggestions.map((entry) => ({ ...entry, id: ids?.[entry.index] ?? '' }));
 }
 
 export function validateIds(release, data) {

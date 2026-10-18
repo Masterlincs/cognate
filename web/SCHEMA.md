@@ -6,7 +6,7 @@ All files are UTF-8 JSON. Card order is fixed by `ids.json.ids` (Oracle ID ascen
 
 ## Loading order
 
-The app loads `current.json`, then the selected `release.json`. It validates the v2 schema and starts fetching `names.json` and `ids.json` in parallel. Name lookup becomes available as soon as `names.json` passes validation; it does not wait for the larger Oracle ID list. Card selection, share-link resolution and shard ID checks wait for `ids.json` validation. A failed or unsupported bundle displays the bundle error; fixture data is never substituted.
+The app loads `current.json`, then the selected `release.json`. It validates the v2 schema and fetches `names.json`, then `ids.json` once the names have arrived, so the larger, poorly compressing Oracle ID list does not share bandwidth with the lookup index. Name lookup becomes available as soon as `names.json` passes validation; it does not wait for `ids.json`. Card selection, share-link resolution and shard ID checks wait for `ids.json` validation. A failed or unsupported bundle displays the bundle error; fixture data is never substituted.
 
 ## `release.json` (loaded first)
 
@@ -35,7 +35,7 @@ The app loads `current.json`, then the selected `release.json`. It validates the
 
 `names[i]` is the card's full name: multi-face cards use `"A // B"`. `aliases` maps extra lookup strings (individual face names) to card indexes. This file has no IDs.
 
-## `ids.json` (parallel startup identity index)
+## `ids.json` (identity index, fetched after `names.json`)
 
 ```json
 {"ids": ["oracle-id-0", "oracle-id-1", "..."]}
