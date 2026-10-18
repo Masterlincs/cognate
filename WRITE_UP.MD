@@ -163,6 +163,8 @@ What the pilots show, within their limits:
 5. Every curve was still rising at update 2000.
 
 Freeze: no extension runs; one E5 candidate (initial-1 recipe); BGE control = initial-4 recipe; 2000 updates, final checkpoint; seeds 1-3 (seed = data_seed), matched per seed; deployment seed 1; M = 4 registered contrasts. Six confirmation runs, interleaved E5/BGE by seed.
+
+Confirmation started 22:54 UTC. confirm-e5-s1 hit the native XPU abort at 00:08 UTC on 18 Oct, 12 min after its update-1250 eval (one interval about 12 min, so at or just before the 1500 eval). Auto-resume 1/3 continued it from update 1250; an exact continuation stays in the same slot, and XPU resume is bitwise deterministic (smoke 2), so the final model is the one an uninterrupted run would give.
 6. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)
