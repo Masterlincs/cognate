@@ -14,6 +14,7 @@ import torch
 
 from . import encoder as enc
 from .evaluate import Benchmark, bench_path, cohort_summary, evaluate, load_benchmark
+from .export import K
 from .lexical import LEXICAL_RECIPE, fit_vectorizer
 from .train import DeviceLock
 from .util import (
@@ -261,8 +262,17 @@ def _check_v4_shards(bundle: Path, man: dict, n: int) -> list[str]:
         if not isinstance(labels, list) or not all(isinstance(t, str) for t in labels):
             raise ValueError("invalid tag labels")
         ss, k = man["shard_size"], man["line_k"]
-        if type(ss) is not int or ss <= 0 or type(k) is not int or k < 0:
-            raise ValueError("invalid line_k or shard_size")
+        if (type(ss) is not int or ss <= 0 or type(k) is not int or k != K or
+                type(man.get("ability_k")) is not int or man["ability_k"] != K):
+            raise ValueError("invalid line_k, ability_k or shard_size")
+        for key in ("line_status", "tags_status", "abilities_status"):
+            if not isinstance(man.get(key), str) or not man[key].startswith("exploratory"):
+                raise ValueError(f"invalid {key}: must start with exploratory")
+        card_shards = [read_json(bundle / "cards" / f"{start // ss:03d}.json")
+                       for start in range(0, n, ss)]
+        has_text = [card["has_text"] for cards in card_shards for card in cards]
+        if len(has_text) != n:
+            raise ValueError("v4 card count mismatch")
 
         def tags(value):
             if (not isinstance(value, list) or
@@ -273,7 +283,7 @@ def _check_v4_shards(bundle: Path, man: dict, n: int) -> list[str]:
 
         for start in range(0, n, ss):
             name = f"{start // ss:03d}.json"
-            cards = read_json(bundle / "cards" / name)
+            cards = card_shards[start // ss]
             abilities = read_json(bundle / "abilities" / name)
             lines = read_json(bundle / "lines" / name)
             size = min(ss, n - start)
@@ -294,7 +304,8 @@ def _check_v4_shards(bundle: Path, man: dict, n: int) -> list[str]:
                     if not isinstance(pair, list) or len(pair) != 2:
                         raise ValueError("invalid line neighbour pair")
                     j, score = pair
-                    if (type(j) is not int or not 0 <= j < n or j == start + offset or j in seen or
+                    if (type(j) is not int or not 0 <= j < n or has_text[j] is not True or
+                            j == start + offset or j in seen or
                             type(score) not in (int, float) or not np.isfinite(score) or
                             score > previous):
                         raise ValueError("invalid line neighbour index, self, duplicate or order")

@@ -127,6 +127,19 @@ def test_replay_v3_verifies_ability_artifacts(tmp_path, monkeypatch, fault):
     ("line_range", "invalid line neighbour index"),
     ("line_order", "invalid line neighbour index"),
     ("line_long", "invalid line neighbour list length"),
+    ("line_textless", "invalid line neighbour index"),
+    ("line_nan", "invalid line neighbour index"),
+    ("line_inf", "invalid line neighbour index"),
+    ("line_duplicate", "invalid line neighbour index"),
+    ("textless_tags", "textless card has tags"),
+    ("textless_lines", "textless card has tags"),
+    ("line_k_zero", "invalid line_k"),
+    ("line_k_bool", "invalid line_k"),
+    ("ability_k_wrong", "invalid line_k"),
+    ("ability_k_missing", "invalid line_k"),
+    *[(f"{key}_{fault}", f"invalid {key}")
+      for key in ("line_status", "tags_status", "abilities_status")
+      for fault in ("missing", "empty", "wrong", "type")],
     ("missing_line", "bundle manifest incomplete"),
     ("tags_hash", "bundle file mismatch or missing: tags.json"),
 ])
@@ -135,7 +148,9 @@ def test_replay_v4_checks_tags_and_line_neighbours(tmp_path, monkeypatch, fault,
     art = _v3_release(tmp_path, v)
     bundle = tmp_path / "bundle-r1"
     man = json.loads((bundle / "release.json").read_text("utf-8"))
-    man.update(schema="mtgemb-release-v4", line_k=2)
+    man.update(schema="mtgemb-release-v4", line_k=50, ability_k=50,
+               line_status="exploratory: line match", tags_status="exploratory: tags",
+               abilities_status="exploratory: abilities")
     payloads = {"tags.json": {"labels": ["first", "second"]}}
     n, ss = man["n_cards"], man["shard_size"]
     for start in range(0, n, ss):
@@ -144,6 +159,10 @@ def test_replay_v4_checks_tags_and_line_neighbours(tmp_path, monkeypatch, fault,
         payloads[f"cards/{name}"] = [{"tags": [0], "has_text": True} for _ in range(size)]
         payloads[f"abilities/{name}"] = [[{"tags": [0]}] for _ in range(size)]
         payloads[f"lines/{name}"] = [[] for _ in range(size)]
+    # A textless card in the second shard must never be a line-match target.
+    payloads["cards/001.json"][-1] = {"tags": [], "has_text": False}
+    payloads["abilities/001.json"][-1] = []
+    payloads["lines/000.json"][0] = [[1, 0.8], [2, 0.5]]
     # Mutations are rehashed, so semantic checks must catch them.
     if fault == "tag_range":
         payloads["cards/000.json"][0]["tags"] = [2]
@@ -156,7 +175,34 @@ def test_replay_v4_checks_tags_and_line_neighbours(tmp_path, monkeypatch, fault,
     elif fault == "line_order":
         payloads["lines/000.json"][0] = [[1, 0.2], [2, 0.8]]
     elif fault == "line_long":
-        payloads["lines/000.json"][0] = [[1, 0.8], [2, 0.5], [3, 0.2]]
+        payloads["lines/000.json"][0] = [[1, 0.8]] * 51
+    elif fault == "line_textless":
+        payloads["lines/000.json"][0] = [[n - 1, 0.8]]
+    elif fault in ("line_nan", "line_inf"):
+        payloads["lines/000.json"][0] = [[1, float(fault.removeprefix("line_"))]]
+    elif fault == "line_duplicate":
+        payloads["lines/000.json"][0] = [[1, 0.8], [1, 0.5]]
+    elif fault == "textless_tags":
+        payloads["cards/001.json"][-1]["tags"] = [0]
+    elif fault == "textless_lines":
+        payloads["lines/001.json"][-1] = [[0, 0.5]]
+    elif fault == "line_k_zero":
+        man["line_k"] = 0
+        for name, rows in payloads.items():
+            if name.startswith("lines/"):
+                rows[:] = [[] for _ in rows]
+    elif fault == "line_k_bool":
+        man["line_k"] = True
+    elif fault == "ability_k_wrong":
+        man["ability_k"] = 49
+    elif fault == "ability_k_missing":
+        man.pop("ability_k")
+    elif fault and "_status_" in fault:
+        key, value = fault.rsplit("_", 1)
+        if value == "missing":
+            man.pop(key)
+        else:
+            man[key] = {"empty": "", "wrong": "validated", "type": 1}[value]
     for name, value in payloads.items():
         if fault == "missing_line" and name == "lines/001.json":
             continue

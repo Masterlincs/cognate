@@ -195,8 +195,12 @@ def _reuse_vectors(release_id: str, dataset_id: str, model_hash: str, encoder: d
         if (values.ndim != 2 or values.shape[0] != n or
                 not np.issubdtype(values.dtype, np.floating) or not np.isfinite(values).all()):
             raise ValueError("source release vectors have invalid shape, dtype or values")
-    if v.shape[1] != lv.shape[1]:
+    if v.shape[1] != lv.shape[1] or v.shape[1] != encoder["dim"]:
         raise ValueError("source release vector dimensions mismatch")
+    for values in (v, lv):
+        if not np.allclose(np.linalg.norm(values.astype(np.float64), axis=1), 1,
+                           atol=1e-3, rtol=0):
+            raise ValueError("source release vectors are not unit-norm")
     return v, lv, meta
 
 

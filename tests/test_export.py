@@ -161,6 +161,8 @@ def test_export_v4_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
     monkeypatch.setattr(exporter, "git_identity", lambda: {})
     monkeypatch.setattr(exporter.enc, "load", lambda *a: (None, torch.nn.Identity()))
     monkeypatch.setattr(exporter.enc, "device", lambda: torch.device("cpu"))
+    monkeypatch.setitem(exporter.enc.RECIPES, "e5-base-v2",
+                        {**exporter.enc.RECIPES["e5-base-v2"], "dim": 2})
     vectors = {"A": [1, 0], "B": [0, 1], "A\n//\nB": [1, 0],
                "C": [0.6, 0.8], "D": [1, 0], "E": [1, 0]}
     monkeypatch.setattr(exporter.enc, "encode", lambda model, tok, lines, *a, **kw: np.array(
@@ -251,16 +253,35 @@ def test_export_v4_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
                         from_release="source-v3")
 
 
-@pytest.mark.parametrize("fault", ["dataset_id", "model_hash", "recipe", "max_length",
-                                   "oracle_id", "line_text", "line_hash", "line_vectors_hash"])
+@pytest.mark.parametrize("fault", [None, "dataset_id", "model_hash", "recipe", "max_length",
+                                   "oracle_id", "line_text", "line_hash", "line_vectors_hash",
+                                   "wrong_width", "whole_width", "line_width", "whole_norm",
+                                   "line_norm", "zero_whole", "zero_line", "near_unit"])
 def test_reuse_rejects_incompatible_source(tmp_path, monkeypatch, fault):
     import mtgemb.export as exporter
 
     monkeypatch.setattr(exporter, "ARTIFACTS", tmp_path)
     root = tmp_path / "releases" / "source"
     root.mkdir(parents=True)
-    np.save(root / "vectors.npy", np.array([[1.0, 0.0]], np.float32))
-    np.save(root / "ability_vectors.npy", np.array([[1.0, 0.0]], np.float32))
+    v = np.array([[1.0, 0.0]], np.float32)
+    lv = v.copy()
+    if fault in ("wrong_width", "whole_width"):
+        v = np.array([[1.0, 0.0, 0.0]], np.float32)
+    if fault in ("wrong_width", "line_width"):
+        lv = np.array([[1.0, 0.0, 0.0]], np.float32)
+    if fault == "whole_norm":
+        v *= 1.002
+    elif fault == "line_norm":
+        lv *= 0.998
+    elif fault == "zero_whole":
+        v *= 0
+    elif fault == "zero_line":
+        lv *= 0
+    elif fault == "near_unit":
+        v *= 1.0005
+        lv *= 0.9995
+    np.save(root / "vectors.npy", v)
+    np.save(root / "ability_vectors.npy", lv)
     lines = [{"text": "A", "oracle_id": "a"}]
     if fault == "oracle_id":
         lines[0]["oracle_id"] = "other"
@@ -268,7 +289,7 @@ def test_reuse_rejects_incompatible_source(tmp_path, monkeypatch, fault):
         lines[0]["text"] = "B"
     (root / "ability_lines.json").write_text(json.dumps(lines), "utf-8")
     meta = {"dataset_id": "ds", "model_hash": "model",
-            "encoder": {"model_id": "m", "max_length": 94},
+            "encoder": {"model_id": "m", "max_length": 94, "dim": 2},
             "vectors_sha256": sha256_file(root / "vectors.npy"),
             "ability_vectors_sha256": sha256_file(root / "ability_vectors.npy"),
             "ability_lines_sha256": sha256_file(root / "ability_lines.json")}
@@ -283,8 +304,17 @@ def test_reuse_rejects_incompatible_source(tmp_path, monkeypatch, fault):
     elif fault == "line_vectors_hash":
         meta["ability_vectors_sha256"] = "other"
     (root / "release_meta.json").write_text(json.dumps(meta), "utf-8")
-    with pytest.raises(ValueError, match="mismatch"):
-        exporter._reuse_vectors("source", "ds", "model", {"model_id": "m", "max_length": 94},
+    encoder = {"model_id": "m", "max_length": 94, "dim": 2}
+    if fault in (None, "near_unit"):
+        actual_v, actual_lv, _ = exporter._reuse_vectors(
+            "source", "ds", "model", encoder, ["A"], ["a"])
+        np.testing.assert_array_equal(actual_v, v)
+        np.testing.assert_array_equal(actual_lv, lv)
+        return
+    problem = "unit-norm" if fault in (
+        "whole_norm", "line_norm", "zero_whole", "zero_line") else "mismatch"
+    with pytest.raises(ValueError, match=problem):
+        exporter._reuse_vectors("source", "ds", "model", encoder,
                                 ["A"], ["a"])
 
 
