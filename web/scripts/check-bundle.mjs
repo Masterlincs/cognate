@@ -24,15 +24,18 @@ try {
   }
   validateRelease(release, names);
   validateIds(release, ids);
-  const expectedFiles = ['names.json', 'ids.json', ...Array.from({ length: Math.ceil(release.n_cards / release.shard_size) }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(release.schema === 'mtgemb-release-v3' ? [`abilities/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
+  const v3plus = release.schema !== 'mtgemb-release-v2';
+  const v4 = release.schema === 'mtgemb-release-v4';
+  const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: Math.ceil(release.n_cards / release.shard_size) }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
   for (const file of expectedFiles) {
     const bytes = await readFile(path.join(dir, file));
     const entry = release.files?.[file];
     if (!entry || entry.bytes !== bytes.byteLength || entry.sha256 !== digest(bytes)) throw new Error(`Hash or byte count mismatch: ${file}`);
   }
+  const tags = v4 ? await readJson('tags.json') : undefined;
   for (let shard = 0; shard < Math.ceil(release.n_cards / release.shard_size); shard += 1) {
     const number = String(shard).padStart(3, '0');
-    validateShard(await readJson(`cards/${number}.json`), await readJson(`neighbours/${number}.json`), release, shard, ids.ids, release.schema === 'mtgemb-release-v3' ? await readJson(`abilities/${number}.json`) : null);
+    validateShard(await readJson(`cards/${number}.json`), await readJson(`neighbours/${number}.json`), release, shard, ids.ids, v3plus ? await readJson(`abilities/${number}.json`) : null, v4 ? await readJson(`lines/${number}.json`) : undefined, tags);
   }
   console.log(`Bundle valid: ${release.release_id} (${release.n_cards} cards)`);
 } catch (error) {

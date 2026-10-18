@@ -114,7 +114,9 @@
       if (rank === 'line' && release.schema === 'mtgemb-release-v4') activeAbility = null;
       if (rank === 'line' && release.schema === 'mtgemb-release-v4') {
         const lineShard = await getLines(shard);
-        savedNeighbours = lineShard[index % release.shard_size];
+        if (request !== token) return;
+        // the user may have switched back to whole-card or an ability while lines loaded
+        if (rank === 'line') savedNeighbours = lineShard[index % release.shard_size];
       } else savedNeighbours = activeAbility === null ? wholeCardNeighbours : abilityEntries[activeAbility].neighbours;
       visibleNeighbours = savedNeighbours;
       if (card.has_text) await refreshFilters('none', request);
@@ -183,7 +185,7 @@
         const request = token;
         const shard = shardFor(selectedIndex);
         const lineShard = await getLines(shard);
-        if (request !== token) return;
+        if (request !== token || rank !== 'line') return;
         savedNeighbours = lineShard[selectedIndex % release.shard_size];
         refreshFilters('push').catch((reason) => { error = reason.message; });
       } catch (reason) { error = reason.message; }
