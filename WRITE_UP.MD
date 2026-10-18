@@ -509,7 +509,8 @@ The user authorised gate 1 ("do 1"): one evaluation of the frozen artifacts on t
     - **Gate:** both comparators pass the plan's §5 thresholds, so the sealed gate is **cleared**.
     - **Other systems:** lexical 0.6101 / 0.5831; pretrained BGE 0.5427 / 0.5082; trained BGE mean 0.6640 / 0.6378.
 12. **Interpretation.**
-    - The sealed numbers sit close to development: deployment model full 0.7055 → 0.7052, hard-lexical 0.6904 → 0.6833. Both contrasts keep their size, so the development promotion was not an artefact of selection on dev anchors.
+    - The sealed numbers sit close to development: deployment model full 0.7055 → 0.7052, hard-lexical 0.6904 → 0.6833. Both contrasts keep a similar size. The frozen candidate also cleared the registered gate on sealed anchors; development results remain selection-exposed (Sol claims check: "not an artefact of selection" was an overclaim, corrected).
     - This is still tag-proxy evidence, not human relevance. It does not change .
     - No tuning or per-card inspection followed.
 13. **Recorded:** the README sealed section, STATE `sealed` block, the IMPLEMENTATION_PLAN entry, and . Publication (gate 2) remains unapproved.
+14. **Sol claims check** (`p10-sealed-claims-r1`): all numbers, seed means and "cleared" match the aggregates, and export is fit+dev only. One P2 overclaim was fixed (step 12 and the README wording). Sol did not verify the per-card equality of the archived attempt under its access restrictions; the lead checked it (step 10).

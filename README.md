@@ -50,7 +50,7 @@ The same registered contrasts on sealed anchors (point estimate, with the M = 4 
 | vs pretrained E5 | +0.1329 (+0.1239) | +0.1435 (+0.1326) |
 | vs trained BGE | +0.0409 (+0.0360) | +0.0451 (+0.0386) |
 
-The fine-tuned E5 **cleared the registered promotion gate on sealed anchors** against both comparators (`runs/sealed/c98bb619ea613672/report.json`). This confirms the development result on unseen cards under the tag proxy; it does not change the P7 decision and is not a human-relevance result. `mtgemb sealed-eval` refuses to run again.
+The fine-tuned E5 **cleared the registered promotion gate on sealed anchors** against both comparators (`runs/sealed/c98bb619ea613672/report.json`). The development results remain selection-exposed; this one sealed run shows the gate also holds on unseen cards under the tag proxy. It does not change the P7 decision and is not a human-relevance result. `mtgemb sealed-eval` refuses to run again.
 
 Nothing has been published.
 
