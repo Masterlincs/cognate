@@ -2,7 +2,7 @@
   "phase": "P10",
   "status": "COMPLETE",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "Awaiting the user's decision on publication (gate 2). Optional P10.5 human labels and P11 are not started. Sealed evaluation is done and must not be repeated.",
+  "next_action": "User labels the pilot pool (P10.5) with `mtgemb annotate runs/labels/471bafd58c8d`; then the lead runs human.analyse. Publication (gate 2) still awaits the user's decision. Sealed evaluation is done and must not be repeated.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T15:05:00Z",
+  "updated_utc": "2026-10-18T16:05:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
@@ -52,11 +52,15 @@
     "deployment_run": "confirm-e5-s1",
     "report": "runs/confirmation/8bf2f48c0bba3b2c/report.json"
   },
-  "release_id": "2026-10-16-e5-base-v2-fc4d438d",
+  "release_id": "2026-10-16-e5-base-v2-e6fef183",
   "superseded_releases": [
     {
       "release_id": "2026-10-16-e5-base-v2-d4c393ee",
       "reason": "bundle schema v1; superseded by v2 layout, same vectors"
+    },
+    {
+      "release_id": "2026-10-16-e5-base-v2-fc4d438d",
+      "reason": "schema v2; superseded by v3 with per-ability neighbours, same card vectors; kept for rollback"
     }
   ],
   "p9": {
@@ -132,5 +136,27 @@
       "caveats": "sealed split already used, so any longer model has selection-exposed dev evidence only; new recipe/version; confirmation would use the last 3 slots; ~15-20 h",
       "status": "saved for later by the user, 2026-10-18; not started"
     }
-  ]
+  ],
+  "abilities": {
+    "decision": "",
+    "schema": "mtgemb-release-v3",
+    "release_id": "2026-10-16-e5-base-v2-e6fef183",
+    "status": "exploratory: not evaluated on the tag proxy",
+    "reviews": "exporter: Luna r1 (#2 fixed f4ea848, #1 declined); web: Sol r1 P1 fixed ba91fc4, r2 pass",
+    "replay": "passed 2026-10-18T15:57:18Z",
+    "rollback_release": "2026-10-16-e5-base-v2-fc4d438d"
+  },
+  "human_pilot": {
+    "decision": "",
+    "pool_id": "471bafd58c8d",
+    "dir": "runs/labels/471bafd58c8d",
+    "items": {
+      "calibration": 83,
+      "scored": 1067,
+      "repeat": 106
+    },
+    "labels": 0,
+    "tool": "uv run mtgemb annotate runs/labels/471bafd58c8d (annotate 1451e6c, Luna review pass)",
+    "status": "awaiting user labels"
+  }
 }
