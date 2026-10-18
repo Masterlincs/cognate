@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T06:54:00Z",
+  "updated_utc": "2026-10-18T07:20:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
@@ -52,5 +52,37 @@
     "deployment_run": "confirm-e5-s1",
     "report": "runs/confirmation/8bf2f48c0bba3b2c/report.json"
   },
-  "release_id": "2026-10-16-e5-base-v2-d4c393ee"
+  "release_id": "2026-10-16-e5-base-v2-fc4d438d",
+  "superseded_releases": [
+    {
+      "release_id": "2026-10-16-e5-base-v2-d4c393ee",
+      "reason": "bundle schema v1; superseded by v2 layout, same vectors"
+    }
+  ],
+  "p9": {
+    "browser_checks": "pass (v1 and v2)",
+    "payload_core_gzip_kb": {
+      "v1": 872,
+      "v2_startup_transfer": 288
+    },
+    "usable_lookup_slow4g_s": {
+      "v1": [
+        5.34,
+        5.33,
+        5.33
+      ],
+      "v2": [
+        2.52,
+        2.46,
+        2.52,
+        2.46,
+        2.48,
+        2.48,
+        2.49,
+        2.47
+      ]
+    },
+    "warm_selection_ms": "25-33 cached, 137-174 with shard fetch",
+    "review": "Sol r1 pending"
+  }
 }

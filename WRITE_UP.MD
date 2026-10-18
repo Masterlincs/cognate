@@ -241,3 +241,44 @@ Sol (GPT-6.1 Sol) reviewed the exporter, app and report code and found six P2 is
    - Round 2: 1–4 and 6 resolved. #5 needed a tie-aware overlap (near-ties across rank 10/11) and k capped for small catalogues (1a2c6dc).
    - Round 3: one more edge case, a one-card catalogue (d1185ac).
    - Round 4: Sol accepts; all six resolved.
+
+## P9: browser checks on the promoted release (2026-10-18)
+
+Served `web/dist`, built with `current.json` → `2026-10-16-e5-base-v2-d4c393ee` (schema v1), via `vite preview` on port 4173. I drove it with the T3 preview browser.
+
+1. **Search → details → neighbour → share link.** Typing "Lightning Bolt" offers the card plus the face alias "Emeritus of Conflict // Lightning Bolt". Enter opens the card: image, cost, type, text, colour identity, MV and Scryfall link. It shows 50 neighbours (Lightning Strike 0.987, Volcanic Hammer, Precision Bolt, Searing Spear…), the badge "promoted", and the footer "e5-base-v2 fine-tuned (confirm-e5-s1)". The URL becomes `?card=<oracle id>`.
+2. **Reference neighbours.** For the 20 seeded cards in `release_meta.json` `reference_neighbours` (exact float64 top-50), I loaded each card's share link and read the rendered list:
+   - 17/20 lists are identical;
+   - 3/20 hold the same 50 cards with near-tied neighbours swapped;
+   - top-10 overlap is 10/10 for all 20.
+
+   This matches the export's tie-aware reference check (17 exact, 0 failures).
+3. **Back/forward** restore the right card. **Unknown ID** (all-zero UUID, and a garbage string with `<script>`) shows "Card not found". **Rapid selections:** 20 selections 3 ms apart; the last one wins and its list matches the reference.
+4. **Every included face layout** renders, 14 layouts, one card each: normal, class, saga, meld, transform, modal_dfc, split, adventure, mutate, prepare, leveler, case, flip, prototype. Multi-face layouts show one heading per face.
+5. **375px width:** no horizontal overflow (document width 360). **Missing image** → "Card image unavailable" placeholder. **Disabled WebGL:** not applicable; the app draws no canvas and uses no WebGL. **Malformed bundle** (truncated `release.json`) → "Bundle could not be loaded: Unexpected end of JSON input", no fixture fallback. **Non-root base path:** served `web/` with `python -m http.server`; the app works from `/dist/` (all requests under `/dist/`, home link `/dist/`).
+6. **Keyboard only:** Tab reaches search; typing, ArrowDown and Enter selects a card; Tab reaches the filters, then the neighbour list; Enter on a neighbour selects it. Minor: neighbour focus is only a background tint (`#edeee7`), not an outline.
+7. **Performance** (plan targets: core shell + name index ≤5 MB compressed; usable lookup ≤3 s on a recorded throttled mobile profile; warm selection ≤300 ms on the test desktop).
+   - Payload, gzip -9: JS 22.5 KB, CSS 2.6 KB, HTML 0.3 KB, `release.json` 11.0 KB, `names.json` 835.8 KB, about 872 KB in total. **Pass.**
+   - Warm selection (in-app timing, test laptop): 25–33 ms with shards cached, 137–174 ms when shards had to be fetched. **Pass.** A selection fetches about 40 card+neighbour shard pairs, because neighbour filters need each neighbour's card record.
+   - Usable lookup measured with `.scratch/throttle.mjs`: headless Chrome over CDP, 375×812 mobile, cache disabled, gzip served by `vite preview`, "usable" = typing returns suggestions.
+     - Lighthouse mobile profile (150 ms RTT, 1.6 Mbps down, 675 kbps up, 4× CPU): **5.34 / 5.33 / 5.33 s. Fail** (target 3 s).
+     - Unthrottled: 0.27 / 0.26 s.
+     - Startup transfer 851 KB, almost all `names.json`: ids 584 KB gzip, names 234 KB, aliases 17 KB.
+   - Fix: bundle schema v2 moves the ids to `ids.json`, fetched in parallel; lookup needs only the names. Target and profile unchanged. Luna took the web side; I changed the exporter (c0423b0; the schema string now enters the release digest, so v2 gets a new release_id and v1 stays as it is).
+8. **Schema v2 implementation.**
+   - Luna (GPT-6 Luna) changed the app, validators, fixture and SCHEMA.md (3d9d488). I read the diff and re-ran its tests: 8 vitest tests pass, build OK.
+   - First XPU export attempt: native crash (`AssertHandler::printMessage`, exit 139) while encoding. Nothing was published; log kept as `runs/export-v2.crash-1.out`.
+   - The retry succeeded: release **`2026-10-16-e5-base-v2-fc4d438d`**. Vectors sha256, model hash, dataset id, card count and the 20 reference lists are identical to v1; only the layout differs. Parity matches v1: min cosine 0.99999982, CPU-query top-10 overlap 1.0, reference 20/20 (17 exact). `check-bundle` validates it. `current.json` now points at it (cfa4891).
+   - The v1 release `d4c393ee` stays on disk unchanged; the v2 app rejects it by schema.
+9. **Re-measurement** (same script and profile).
+   - With ids fetched in parallel: 3.96 / 3.81 / 3.87 s, still failing. The 584 KB ids download shared the 1.6 Mbps link with `names.json`.
+   - Changed the app to fetch `ids.json` after `names.json` (cfa4891).
+   - Then the runs split into 2.5 s and 3.8 s groups. Resource timings showed `names.json` itself taking 2.6 s instead of 1.4 s in the slow runs: the previous run's `ids.json` download was still draining through the throttled link. This is a harness artefact; a real cold visit has no earlier page.
+   - With a 6 s gap between runs (`P9_GAP_MS=6000`): **2.52 / 2.46 / 2.52 / 2.46 / 2.48 / 2.48 / 2.49 / 2.47 s over 8 runs. Pass** (≤3 s). Startup transfer is 288 KB (`names.json` 250 KB). Unthrottled: 0.15–0.19 s.
+   - The v1 numbers (5.33 s) are unaffected by that artefact: v1 had no download left in flight after lookup became usable.
+   - Information only (no target): a cold share link (`?card=`) renders its card in 6.10–6.14 s on the same profile, since it needs ids plus about 40 shard pairs. Transfer 954 KB.
+10. **v2 browser re-check:**
+    - 20 reference cards: 17 exact, all sets 50/50, all top-10 10/10.
+    - Back and forward, rapid selections (last wins), unknown ID, cold share link (Ulvenwald Captive, 50 neighbours), and search with alias and IDs then Enter all pass.
+    - The footer shows confirm-e5-s1.
+11. Sent the v2 change (c0423b0, 3d9d488, cfa4891) to Sol for independent review.
