@@ -282,3 +282,33 @@ Served `web/dist`, built with `current.json` → `2026-10-16-e5-base-v2-d4c393ee
     - Back and forward, rapid selections (last wins), unknown ID, cold share link (Ulvenwald Captive, 50 neighbours), and search with alias and IDs then Enter all pass.
     - The footer shows confirm-e5-s1.
 11. Sent the v2 change (c0423b0, 3d9d488, cfa4891) to Sol for independent review.
+12. **Sol review of schema v2, round 1:** accept after fixes. I accepted all three findings and fixed them myself (f722310):
+    - P1: a `null` `names.json` passed validation and check-bundle.
+    - P2: IDs arriving after the user had dismissed or chosen a suggestion reopened the dropdown. Reproduced with headless Chrome on the throttled profile: Escape right after lookup, wait 6 s for ids, 0 options before and after (2 runs); lookup still 2.5 s.
+    - P3: SCHEMA.md and the wording still said the fetch was parallel. is amended with a dated note.
+
+    9 vitest tests pass, the build passes, and both the fixture and the real v2 bundle validate. Round 2 has been sent to Sol.
+
+## P10: reproduction and handoff (2026-10-18)
+
+1. **Evaluation replay from pinned embeddings.** I added `mtgemb replay-eval` (7554041, with 3 tests: untouched records pass, tampered vectors fail, a release whose vectors are not the evaluated model fails). For every recorded eval on benchmark `8bf2f48c0bba3b2c` it:
+   - verifies the recorded file hashes;
+   - re-scores the saved `vectors.npy` (lexical: refit on fit text);
+   - compares every per-anchor metric, the NaN pattern and the integer counts.
+
+   For each exported release, it checks the vectors sha256 and compares the vectors with the evaluated run's vectors.
+
+   Result: all 9 evals (6 confirmation, 3 baselines) replay with max abs per-anchor difference **0.0** and no hash mismatches. Both promoted releases (`d4c393ee`, v1; `fc4d438d`, v2) hold vectors **bitwise identical** to the evaluated `confirm-e5-s1` vectors, so the released model is the evaluated model. First report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T072329Z.json` (made from uncommitted code); re-run from the commit for clean provenance.
+2. **Run reconciliation.** 18 run directories: 3 smoke, 9 initial, 6 confirmation. Every one has STARTED and COMPLETED events in `runs/train.jsonl`, `finished: true`, a selected update and a passed guardrail.
+   - Crashes, each followed by RESUMED: initial-2, 3, 4, 6, 8; confirm-e5-s1, e5-s3, bge-s2, bge-s3.
+   - initial-3 also has one PAUSED/RESUMED pair.
+   - Run counts against the caps: initial 9/10, extension 0/3, confirmation 6/9.
+   - Export crashes (no partial output published): v2 attempt 1. The earlier `9a16efe0` is the P8 dry-run export of the pretrained model (`run_id` null); `9a16efe0.failed-1` is a failed attempt, kept and not deleted.
+3. **Clean environment.** Fresh `git clone` of origin at 7554041 into a temp dir:
+   - `uv sync` 19 s, with a warm uv cache, so not a cold network install;
+   - `ruff check` clean; `pytest -q` 73 passed, 4 real-model tests deselected; the tiny resume test `test_resume_matches_uninterrupted_and_rejects_corruption` passes;
+   - `npm ci`, 9 vitest tests and the build pass.
+
+   A fresh clone's `current.json` names the real release, which is git-ignored, so the app needs `npm run fixture` or an export first (documented in `web/README.md`).
+4. **No full retraining replay** has been performed; the evaluation replay is not equivalent.
+5. README status, results tables and limitations updated. All numbers were re-read from the eval summaries and the confirmation report.

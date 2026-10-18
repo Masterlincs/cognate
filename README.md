@@ -1,21 +1,34 @@
 # MTG effect-similarity
 
-A work-in-progress project for finding Magic: The Gathering cards with similar main effects. It fine-tunes `intfloat/e5-base-v2`, compares it with pretrained E5, a freshly trained BGE-small control and lexical retrieval, and provides a static card discovery app.
+A project for finding Magic: The Gathering cards with similar main effects. It fine-tunes `intfloat/e5-base-v2`, compares it with pretrained E5, a freshly trained BGE-small control and lexical retrieval, and provides a static card discovery app.
 
 All relevance results are **tag-proxy results** based on Scryfall Tagger oracle tags. They are not human judgements.
 
 ## Status
 
-P6 pilots are running. Results tables and the promotion decision are **pending P7**. No model has been promoted. The current dataset ID is `cbd5c12011c94e68`; the benchmark ID is `8bf2f48c0bba3b2c`.
+P0-P9 are complete; P10 (handoff) is in progress. Dataset `cbd5c12011c94e68`, benchmark `8bf2f48c0bba3b2c` (3016 development anchors in 2853 families).
 
-| System | Tag-proxy results |
-| --- | --- |
-| Lexical | Pending P7 |
-| Pretrained E5 | Pending P7 |
-| Fine-tuned E5 | Pending P7 |
-| Trained BGE-small | Pending P7 |
+**Promotion decision: promote** - a *provisional tag-proxy promotion on selection-exposed development*. The released model is `confirm-e5-s1`: fine-tuned `intfloat/e5-base-v2`, lr 3e-5, scale 20, 2000 updates, seed 1. Release `2026-10-16-e5-base-v2-fc4d438d`, bundle schema v2.
 
-**Promotion decision:** Pending P7.
+Development nDCG@10, tag proxy (higher is better):
+
+| System | Full | Hard-lexical |
+| --- | --- | --- |
+| Lexical (char 3-5 TF-IDF) | 0.6042 | 0.5769 |
+| Pretrained E5-base-v2 | 0.5655 | 0.5391 |
+| Pretrained BGE-small | 0.5403 | 0.5133 |
+| Trained BGE-small, 3 seeds (mean) | 0.6635 | 0.6458 |
+| **Fine-tuned E5, 3 seeds (mean)** | **0.7064** | **0.6909** |
+| Fine-tuned E5, seed 1 (released) | 0.7055 | 0.6904 |
+
+Registered contrasts for the fine-tuned E5, 3 seeds, cluster bootstrap over families. Each cell is the point estimate, with the one-sided lower bound adjusted for M = 4 in brackets:
+
+| Contrast | Full | Hard-lexical |
+| --- | --- | --- |
+| vs pretrained E5 | +0.1409 (+0.1320) | +0.1518 (+0.1425) |
+| vs trained BGE | +0.0429 (+0.0376) | +0.0451 (+0.0398) |
+
+The sealed test split has **not** been evaluated. Nothing has been published.
 
 ## Requirements
 
@@ -47,6 +60,12 @@ Evaluation replay uses an existing processed dataset and benchmark; it does not 
 uv run mtgemb eval-lexical --ds <dataset_dir>   # refuses if the lexical record exists
 uv run mtgemb eval-encoder replay-e5-base-v2 e5-base-v2 --max-length 94 --ds <dataset_dir>
 uv run mtgemb eval-encoder replay-bge-small-en-v1.5 bge-small-en-v1.5 --max-length 92 --ds <dataset_dir>
+```
+
+To re-score every recorded evaluation from its saved vectors (no encoding, no training), and check that each exported release's vectors equal the evaluated run's vectors:
+
+```sh
+uv run mtgemb replay-eval --ds <dataset_dir>   # writes runs/replay/<benchmark_id>/<utc>-<ns>.json
 ```
 
 To evaluate a fine-tuned checkpoint, pass its model directory with `--model-path` and use a distinct evaluation name. The encoder names and lengths above match the configured baseline recipes.
@@ -98,6 +117,10 @@ The sealed test split is excluded by default and is never loaded for routine tra
 - Development results are selection-exposed because they inform model and checkpoint choices.
 - App filters apply only to the **50 saved neighbours**; they do not search the full catalogue.
 - Cosine scores are ranking scores, not probabilities.
+- Three training seeds give only weak information about training variability.
+- Every training curve was still rising at 2000 updates, so the released model is probably under-trained for this recipe. Longer training was not tested.
+- No full retraining replay has been performed. The evaluation replay re-scores saved vectors only.
+- On the test laptop's Intel Arc iGPU (torch XPU), training and encoding sometimes abort with a native error (`AssertHandler::printMessage`). Training resumes exactly from the last checkpoint.
 
 ## Attribution
 
