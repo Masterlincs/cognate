@@ -27,6 +27,8 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--max-length", type=int, required=True)
     q.add_argument("--model-path")
     q.add_argument("--ds", default=DEFAULT_DS)
+    q = sub.add_parser("replay-eval", help="re-score recorded evaluations from saved vectors")
+    q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("export", help="encode the catalogue and write a release bundle")
     q.add_argument("backbone")
     q.add_argument("--max-length", type=int, required=True)
@@ -76,6 +78,10 @@ def main(argv: list[str] | None = None) -> None:
         from .baselines import eval_encoder
 
         out = eval_encoder(a.ds, a.name, a.backbone, a.max_length, a.model_path)["summary"]
+    elif a.cmd == "replay-eval":
+        from .baselines import replay_evals
+
+        out = replay_evals(a.ds)
     elif a.cmd == "export":
         from .export import export
 

@@ -4,15 +4,26 @@ and store immutable evaluation records under runs/eval/<benchmark_id>/<name>/.""
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import torch
 
 from . import encoder as enc
 from .evaluate import Benchmark, cohort_summary, evaluate, load_benchmark
 from .lexical import LEXICAL_RECIPE, fit_vectorizer
 from .train import DeviceLock
-from .util import RUNS, atomic_write_json, git_identity, log_event, sha256_file, utcnow
+from .util import (
+    ARTIFACTS,
+    RUNS,
+    atomic_write_json,
+    git_identity,
+    log_event,
+    read_json,
+    sha256_file,
+    utcnow,
+)
 
 
 def save_eval(name: str, bm: Benchmark, res: dict, meta: dict, vectors=None,
@@ -36,13 +47,15 @@ def save_eval(name: str, bm: Benchmark, res: dict, meta: dict, vectors=None,
     return rec
 
 
-def eval_lexical(ds_dir, name="lexical-char35-tfidf") -> dict:
-    bm, ds = load_benchmark(ds_dir)
+def _lexical_vectors(bm: Benchmark, ds: dict):
     c = ds["cards"]
     fit = c[(c["split"] == "fit") & (c["text_status"] == "ok")]
-    vec = fit_vectorizer(fit["text"].tolist())
-    x = vec.transform(bm.texts)
-    res = evaluate(bm, x)
+    return fit_vectorizer(fit["text"].tolist()).transform(bm.texts)
+
+
+def eval_lexical(ds_dir, name="lexical-char35-tfidf") -> dict:
+    bm, ds = load_benchmark(ds_dir)
+    res = evaluate(bm, _lexical_vectors(bm, ds))
     return save_eval(name, bm, res, {"system": "lexical", "recipe": LEXICAL_RECIPE,
                                      "fitted_on": "fit text only"})
 
@@ -67,3 +80,69 @@ def eval_encoder(ds_dir, name: str, backbone: str, max_length: int,
             "truncated_universe": len(truncated),
             "truncated_dev_anchors": int(sum(bm.ids[i] in truncated for i in bm.anchor_idx))}
     return save_eval(name, bm, res, meta, vectors=v, truncated=truncated)
+
+
+def replay_evals(ds_dir, tol: float = 1e-9) -> dict:
+    """P10 evaluation replay from pinned embeddings; no encoding, no training.
+
+    For every recorded evaluation on the current benchmark: verify the recorded file hashes,
+    re-score the saved vectors (lexical: refit on fit text), and compare per-anchor metrics
+    with the record. For every exported release with a run_id, check its vectors equal that
+    run's evaluated vectors row for row. Writes runs/replay/<benchmark_id>/<utc>.json.
+    """
+    bm, ds = load_benchmark(ds_dir)
+    bid = bm.spec["benchmark_id"]
+    evals, vecs = {}, {}
+    for d in sorted(p for p in (RUNS / "eval" / bid).iterdir() if (p / "summary.json").exists()):
+        rec = read_json(d / "summary.json")
+        bad_hash = sorted(f for f, h in rec["files"].items() if sha256_file(d / f) != h)
+        if "vectors.npy" in rec["files"]:
+            vecs[d.name] = np.load(d / "vectors.npy")
+            res = evaluate(bm, vecs[d.name])
+        elif rec["meta"].get("system") == "lexical":
+            res = evaluate(bm, _lexical_vectors(bm, ds))
+        else:
+            evals[d.name] = {"hash_mismatch": bad_hash, "replayed": False}
+            continue
+        old = pd.read_parquet(d / "per_anchor.parquet").set_index(["anchor", "view"]).sort_index()
+        new = res["per_anchor"].set_index(["anchor", "view"]).sort_index()
+        cols = [c for c in old.columns if pd.api.types.is_float_dtype(old[c])]
+        ints = ["n_rel", "n_candidates"]
+        # rows, NaN pattern (zero-positive anchors) and integer counts must all match exactly
+        same_rows = bool(old.index.equals(new.index)
+                         and (old[cols].isna().to_numpy() == new[cols].isna().to_numpy()).all()
+                         and (old[ints].to_numpy() == new[ints].to_numpy()).all())
+        diff = (float(np.nanmax(np.abs(old[cols].to_numpy() - new[cols].to_numpy())))
+                if same_rows else None)
+        evals[d.name] = {"hash_mismatch": bad_hash, "replayed": True, "same_rows": same_rows,
+                         "max_abs_diff": diff,
+                         "recorded": {v: rec["summary"][v]["ndcg@10"] for v in ("full",
+                                                                               "hard_lexical")},
+                         "replayed_ndcg@10": {v: res["summary"][v]["ndcg@10"] for v in
+                                              ("full", "hard_lexical")}}
+    releases = {}
+    for meta_p in sorted(Path(ARTIFACTS / "releases").glob("*/release_meta.json")):
+        meta = read_json(meta_p)
+        rows = ds["cards"].sort_values("oracle_id")
+        rows = rows.loc[rows["text_status"] == "ok", "oracle_id"].tolist()
+        v = np.load(meta_p.parent / "vectors.npy")
+        r = {"run_id": meta["run_id"], "vectors_sha256_ok":
+             sha256_file(meta_p.parent / "vectors.npy") == meta["vectors_sha256"],
+             "rows_are_benchmark_universe": rows == list(bm.ids)}
+        if meta["run_id"] in vecs and r["rows_are_benchmark_universe"]:
+            r["max_abs_diff_vs_eval"] = float(np.abs(v - vecs[meta["run_id"]]).max())
+        releases[meta["release_id"]] = r
+    ok = all(not e["hash_mismatch"] and e.get("replayed") and e["same_rows"]
+             and e["max_abs_diff"] <= tol for e in evals.values()) and all(
+        r["vectors_sha256_ok"] and r.get("max_abs_diff_vs_eval", 0.0) <= tol
+        for r in releases.values())
+    out = {"benchmark_id": bid, "dataset_id": ds["ident"]["dataset_id"], "tolerance": tol,
+           "passed": ok, "evals": evals, "releases": releases, "code": git_identity(),
+           "created_utc": utcnow(),
+           "scope": "evaluation replay from pinned embeddings; not a retraining replay"}
+    # unique name: a replay report is never overwritten by a later replay
+    path = RUNS / "replay" / bid / f"{out['created_utc'].replace(':', '')}-{time.time_ns()}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(path, out)
+    log_event("eval", "REPLAYED", benchmark_id=bid, passed=ok, report=str(path))
+    return out
