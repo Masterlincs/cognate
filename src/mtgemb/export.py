@@ -279,8 +279,8 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     model_meta = {"label": label, "status": status, "backbone": recipe["model_id"],
                   "revision": recipe["revision"], "run_id": run_id}
     if status == "promoted":
-        model_meta["decision"] = ("provisional tag-proxy promotion on selection-exposed "
-                                  "development")
+        model_meta["decision"] = ("tag-proxy promotion on selection-exposed development "
+                                  "; gate also cleared on one sealed run")
     release = {"schema": SCHEMA, "release_id": release_id, "fixture": False,
                "snapshot_date": snapshot, "created_utc": utcnow(), "model": model_meta,
                "n_cards": len(cards), "k": K, "shard_size": SHARD, "files": files,

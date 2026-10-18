@@ -543,3 +543,13 @@ The user looked at the running app (release `fc4d438d`) and reported two bad nei
    - Hand-worked tests pass.
    - The pool is built after the v3 export, because ability lists come from the release itself.
    - The annotation tool is delegated next.
+3. **Delegated work landed and was checked.**
+   - **Sol exporter, `7f54e57`:** I read the diff and re-ran the suite. Ability neighbours are written as `abilities/NNN.json` shards. A CPU-parity check and a float64 reference check run at export. The ability vectors and lines are pinned by hash in `release_meta.json`.
+   - **Luna web UI, `ada1cf2`:** the vitest suite and the build pass, and `fixture-v3` validates.
+   - **Sol annotation tool, `1451e6c`:** `mtgemb annotate <pool_dir>` serves `pool.json` on 127.0.0.1. It never reads `key.json`. Labels are validated server-side and appended to `labels.jsonl` in the format `human.last_labels` reads. I read the diff; its tests are in the suite.
+4. **Luna's review of the exporter (`p12-export-v3-review-r1`), two P2 findings.**
+   - **#1, tie order checked against the float64 reference: declined.** Ties are broken by stable argsort, which is unit-tested (`tests/test_abilities.py`). A float64 recomputation cannot arbitrate float32 ties. The reference check therefore compares scores tie-aware, which is the same rule as the card-level reference check accepted at P8.
+   - **#2, replay did not verify the v3 ability artifacts: fixed by me, `f4ea848`.** For a v3 bundle, replay now requires `ability_vectors.npy` and `ability_lines.json` to be present and to match their hashes in `release_meta.json`. Three new tests cover a tampered file, a missing file and a missing hash. 168 tests pass.
+5. **Release decision text (`a4930d5`).** The promoted release's `model.decision` read "provisional ... on selection-exposed development". That text predates the sealed run, so it now reads "tag-proxy promotion on selection-exposed development; gate also cleared on one sealed run". The claim is still a tag-proxy claim.
+6. **Reviews launched:** Luna is reviewing the annotation tool and the replay fix (`p12-annotate-replay-review-luna-r1`). Sol is reviewing the web change (`p12-web-v3-review-sol-r1`).
+7. **Real v3 export started** (the one GPU job), at code `a4930d5`: `uv run mtgemb export e5-base-v2 --max-length 94 --label "e5-base-v2 fine-tuned (confirm-e5-s1)" --status promoted --model-path runs/confirm-e5-s1/final --run-id confirm-e5-s1`. Output is in `runs/export-v3.out`.
