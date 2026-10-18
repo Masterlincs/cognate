@@ -3,13 +3,15 @@
 Reads runs/queue.txt (one config path per line) again before each run, so lines can be
 appended while it works. Skips a run that has result.json, waits while the GPU lock is held
 by a live process, and resumes a crashed run once. Stops when runs/queue.stop exists or
-nothing is left after an hour of idling.
+nothing is left for ten hours. A line "HOLD <ISO time>" pauses the queue there
+until that time (so the lead can merge code between runs).
 """
 
 import json
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 from mtgemb.train import _pid_alive
@@ -20,10 +22,15 @@ QUEUE, STOP, LOCK = ROOT / "runs/queue.txt", ROOT / "runs/queue.stop", ROOT / "r
 
 
 def pending(failed: dict) -> list[str]:
+    """Configs still to run. A line "HOLD <ISO UTC time>" stops the scan until that time."""
     out = []
     for line in QUEUE.read_text().splitlines():
         cfg = line.strip()
         if not cfg or cfg.startswith("#"):
+            continue
+        if cfg.startswith("HOLD "):
+            if datetime.now(UTC) < datetime.fromisoformat(cfg.split()[1]):
+                break
             continue
         run_id = json.loads((ROOT / cfg).read_text())["run_id"]
         if not (ROOT / "runs" / run_id / "result.json").exists() and failed.get(cfg, 0) < 2:
@@ -42,7 +49,7 @@ def main() -> None:
         todo = pending(failed)
         if not todo or gpu_busy():
             idle = idle + 1 if not todo else 0
-            if idle > 60:
+            if idle > 600:  # ten hours with nothing to run
                 break
             time.sleep(60)
             continue
