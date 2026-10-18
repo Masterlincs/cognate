@@ -71,6 +71,29 @@ def test_replay_passes_on_untouched_records_and_matching_release(tmp_path, monke
     assert len(list((tmp_path / "runs" / "replay").rglob("*.json"))) == 2
 
 
+@pytest.mark.parametrize("missing", [None, "abilities/000.json", "abilities/001.json"])
+def test_replay_v3_requires_every_ability_shard(tmp_path, monkeypatch, missing):
+    v, _ = _setup(tmp_path, monkeypatch)
+    art, bundle = _release(tmp_path, v)
+    man = json.loads((bundle / "release.json").read_text("utf-8"))
+    man.update(schema="mtgemb-release-v3", shard_size=(man["n_cards"] + 1) // 2)
+    for name in ("cards/001.json", "neighbours/001.json",
+                 "abilities/000.json", "abilities/001.json"):
+        path = bundle / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_text("[]", "utf-8")
+        if name != missing:
+            man["files"][name] = {"sha256": sha256_file(path), "bytes": path.stat().st_size}
+    (bundle / "release.json").write_text(json.dumps(man), "utf-8")
+    _edit_json(art / "release_meta.json", lambda m: m.update(
+        release_json_sha256=sha256_file(bundle / "release.json")))
+    result = baselines.replay_evals("ds")
+    assert result["passed"] == (missing is None)
+    if missing:
+        assert any("bundle manifest incomplete" in p and missing in p
+                   for p in result["releases"]["r1"]["problems"])
+
+
 def _tamper_vectors(tmp_path, v, d):
     np.save(d / "vectors.npy", v[::-1].copy())
 

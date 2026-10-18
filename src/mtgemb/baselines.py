@@ -119,7 +119,8 @@ METRICS = ["ndcg", "ap", "mrr", "recall"]
 COUNTS = ["n_rel", "n_candidates"]
 # files every release bundle must list besides its card and neighbour shards
 BUNDLE_FILES = {"mtgemb-release-v1": ["names.json"],
-                "mtgemb-release-v2": ["names.json", "ids.json"]}
+                "mtgemb-release-v2": ["names.json", "ids.json"],
+                "mtgemb-release-v3": ["names.json", "ids.json"]}
 
 
 def _num_diff(a, b) -> float:
@@ -292,8 +293,11 @@ def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dic
             probs.append(f"bundle shard_size {ss!r} is not a positive integer")
         else:
             shards = -(-n_cat // ss)
+            dirs = ("cards", "neighbours")
+            if man["schema"] == "mtgemb-release-v3":
+                dirs += ("abilities",)
             need = BUNDLE_FILES[man["schema"]] + [f"{d}/{i:03d}.json" for d in
-                                                  ("cards", "neighbours") for i in range(shards)]
+                                                  dirs for i in range(shards)]
             if absent := sorted(set(need) - set(man["files"])):
                 probs.append(f"bundle manifest incomplete: {absent[:5]}")
     enc_meta = meta["encoder"]

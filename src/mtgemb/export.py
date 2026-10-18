@@ -17,6 +17,7 @@ import numpy as np
 import torch
 
 from . import encoder as enc
+from .abilities import flatten, maxsim_reference, maxsim_topk
 from .data import load_dataset
 from .train import DeviceLock
 from .util import (
@@ -31,7 +32,7 @@ from .util import (
     utcnow,
 )
 
-SCHEMA = "mtgemb-release-v2"  # ids.json split from names.json
+SCHEMA = "mtgemb-release-v3"  # per-ability neighbours
 K = 50
 SHARD = 256
 ATTRIBUTION = ("Card data and images © Wizards of the Coast; data from Scryfall (scryfall.com). "
@@ -105,10 +106,52 @@ def ranking_parity(q: np.ndarray, v: np.ndarray, rows: np.ndarray, nidx: np.ndar
 
 
 def release_digest(dataset_id: str, ids: list[str], encoder: dict, model_hash: str,
-                   vec_hash: str, schema: str = SCHEMA) -> str:
+                   vec_hash: str, schema: str = SCHEMA,
+                   ability_vec_hash: str | None = None) -> str:
     """Everything that defines a release's content and layout; same inputs -> same id."""
-    return sha256_json([schema, dataset_id, sha256_json(ids), encoder, model_hash,
-                        vec_hash])[:8]
+    content = [schema, dataset_id, sha256_json(ids), encoder, model_hash, vec_hash]
+    if ability_vec_hash is not None:
+        content.append(ability_vec_hash)
+    return sha256_json(content)[:8]
+
+
+def ability_neighbours(texts: list[str], encode, parity_n: int = 64,
+                       ref_n: int = 20) -> dict:
+    """Encode lines and check max-sim picks; encode(lines, cpu=bool) is injectable.
+
+    Neighbour indices and owners here are text rows, mapped to catalogue rows on export.
+    The caller holds DeviceLock for both CPU and device encoding.
+    """
+    lines, owner, starts = flatten(texts)
+    rng = np.random.default_rng(20261017)
+    probe = np.sort(rng.choice(len(lines), size=min(max(1, parity_n), len(lines)), replace=False))
+    cpu = encode([lines[i] for i in probe], cpu=True)
+    v = encode(lines, cpu=False)
+    cos = (cpu * v[probe]).sum(1)
+    if not np.isfinite(cos).all() or cos.min() < 0.9999:
+        raise ValueError(f"ability device/CPU parity failed: min cosine {cos.min():.6f}")
+    counts = np.diff(np.r_[starts, len(lines)])
+    queries = np.flatnonzero(counts[owner] >= 2)
+    idx, sco = maxsim_topk(v[queries], owner[queries], v, starts, K)
+    ref_rows = np.sort(rng.choice(len(queries), size=min(max(20, ref_n), len(queries)),
+                                 replace=False))
+    exact = 0
+    for r in ref_rows:
+        q = queries[r]
+        sc = maxsim_reference(v[q], int(owner[q]), v, owner, len(texts))
+        order = np.lexsort((np.arange(len(texts)), -sc))[:idx.shape[1]]
+        if not np.allclose(sc[idx[r]], sc[order], rtol=0, atol=1e-6):
+            raise ValueError(f"ability block top-k disagrees with float64 reference on line {q}")
+        exact += int(np.array_equal(idx[r], order))
+    rows: list[list] = [[] for _ in texts]
+    for r, q in enumerate(queries):
+        rows[owner[q]].append({"text": lines[q], "neighbours": [
+            [int(j), round(float(s), 4)] for j, s in zip(idx[r], sco[r], strict=True)]})
+    return {"lines": lines, "owner": owner, "vectors": v, "rows": rows,
+            "n_queries": int(len(queries)),
+            "parity": {"cpu_vs_device_min_cos": float(cos.min()), "n_probe": int(len(probe)),
+                       "topk_reference_rows": int(len(ref_rows)), "topk_reference_failures": 0,
+                       "topk_reference_exact_lists": exact}}
 
 
 def finish_interrupted(final_out: Path, art: Path, final_art: Path) -> None:
@@ -153,6 +196,13 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
                          dev=torch.device("cpu"))
         model.to(dev)
         v = enc.encode(model, tok, texts, recipe, max_length, batch_size=128, dev=dev)
+
+        def encode_lines(lines, *, cpu):
+            target = torch.device("cpu") if cpu else dev
+            model.to(target)
+            return enc.encode(model, tok, lines, recipe, max_length, batch_size=256, dev=target)
+
+        ability = ability_neighbours(texts, encode_lines, parity_n, ref_n)
     cos = (cpu * v[probe]).sum(1)
     if cos.min() < 0.9999:
         raise ValueError(f"device/CPU parity failed: min cosine {cos.min():.6f}")
@@ -166,13 +216,14 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
         raise ValueError(f"block top-k disagrees with float64 reference on rows {bad[:5]}")
 
     vec_hash = hashlib.sha256(v.tobytes()).hexdigest()
+    ability_vec_hash = hashlib.sha256(ability["vectors"].tobytes()).hexdigest()
     model_hash = sha256_json(recipe) if model_path is None else sha256_file(
         Path(model_path) / "model.safetensors")
     snapshot = ds["ident"].get("snapshot") or Path(ds_dir).name.split("_")[0]
     encoder_meta = {**recipe, "max_length": max_length}
     release_id = f"{snapshot}-{backbone}-" + release_digest(
         ds["ident"]["dataset_id"], cards["oracle_id"].tolist(), encoder_meta, model_hash,
-        vec_hash)
+        vec_hash, ability_vec_hash=ability_vec_hash)
     web = Path(web_dir or ROOT / "web" / "public")
     final_out = web / "data" / release_id
     final_art = ARTIFACTS / "releases" / release_id
@@ -191,12 +242,16 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
             shutil.rmtree(p)  # leftover from a failed export; never published
     (out / "cards").mkdir(parents=True)
     (out / "neighbours").mkdir(parents=True)
+    (out / "abilities").mkdir(parents=True)
     art.mkdir(parents=True)
 
     neigh: list[list] = [[] for _ in range(len(cards))]
+    ability_rows: list[list] = [[] for _ in range(len(cards))]
     for r, ci in enumerate(ti):  # text-subset row r is catalogue card ci
         neigh[ci] = [[int(ti[j]), round(float(s), 4)] for j, s in zip(nidx[r], nsco[r],
                                                                       strict=True)]
+        ability_rows[ci] = [{"text": a["text"], "neighbours": [
+            [int(ti[j]), score] for j, score in a["neighbours"]]} for a in ability["rows"][r]]
     files = {}
     aliases = []
     recs = []
@@ -220,6 +275,7 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
         nn = f"{s // SHARD:03d}.json"
         files[f"cards/{nn}"] = _dump(out / "cards" / nn, recs[s:s + SHARD])
         files[f"neighbours/{nn}"] = _dump(out / "neighbours" / nn, neigh[s:s + SHARD])
+        files[f"abilities/{nn}"] = _dump(out / "abilities" / nn, ability_rows[s:s + SHARD])
     model_meta = {"label": label, "status": status, "backbone": recipe["model_id"],
                   "revision": recipe["revision"], "run_id": run_id}
     if status == "promoted":
@@ -228,16 +284,26 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     release = {"schema": SCHEMA, "release_id": release_id, "fixture": False,
                "snapshot_date": snapshot, "created_utc": utcnow(), "model": model_meta,
                "n_cards": len(cards), "k": K, "shard_size": SHARD, "files": files,
+               "ability_k": K,
+               "abilities_status": "exploratory: not evaluated on the tag proxy",
                "attribution": ATTRIBUTION}
     atomic_write_json(out / "release.json", release)
 
     np.save(art / "vectors.npy", v)
+    np.save(art / "ability_vectors.npy", ability["vectors"])
+    atomic_write_json(art / "ability_lines.json", [
+        {"text": line, "oracle_id": cards.loc[ti[own], "oracle_id"]}
+        for line, own in zip(ability["lines"], ability["owner"], strict=True)])
     meta = {"release_id": release_id, "dataset_id": ds["ident"]["dataset_id"],
             "encoder": encoder_meta, "model_path": model_path,
             "model_hash": model_hash, "run_id": run_id, "dim": int(v.shape[1]),
             "vector_rows": "catalogue cards with has_text, in oracle_id order",
             "vectors_sha256": sha256_file(art / "vectors.npy"),
             "n_cards": len(cards), "n_with_text": int(len(ti)),
+            "ability_vectors_sha256": sha256_file(art / "ability_vectors.npy"),
+            "ability_lines_sha256": sha256_file(art / "ability_lines.json"),
+            "n_ability_lines": len(ability["lines"]), "n_ability_queries": ability["n_queries"],
+            "ability_parity": {"device": str(dev), **ability["parity"]},
             "parity": {"device": str(dev), "cpu_vs_device_min_cos": float(cos.min()),
                        "n_probe": int(len(probe)),
                        "cpu_query_top10_overlap_mean": float(overlap.mean()),
