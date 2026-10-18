@@ -333,5 +333,8 @@ def test_aux_keeps_card_schedule_and_resumes_exactly(tiny):
     assert any(not torch.equal(wa[k], wp[k]) for k in wa)  # the aux stream changed training
     rec = tr.json.loads((tiny / "runs" / "aux" / "metrics.jsonl").read_text().splitlines()[0])
     assert rec["aux_loss"] > 0 and rec["aux_skipped"] == 0
+    side = tr.read_json(tiny / "runs" / "aux" / "last.json")
+    st = torch.load(tiny / "runs" / "aux" / side["file"], weights_only=False)
+    assert st["rows_total"] == 12 * (2 * 4 + 2 * 4)  # card rows and aux rows both counted
     man = tr.read_json(tiny / "runs" / "aux" / "manifest.json")
     assert man["identity"]["aux_rows"] == data.line_tag_rows()["hash"]

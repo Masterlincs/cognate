@@ -63,12 +63,16 @@ def parse(md: str) -> list[dict]:
     items, cur = [], None
     for n, raw in enumerate(md.splitlines(), 1):
         line = raw.strip()
-        if h := _HEAD.match(line):
+        if line.startswith("##"):  # an item heading; a malformed one must not be skipped
+            if not (h := _HEAD.match(line)):
+                raise ValueError(f"line {n}: malformed item heading: {line}")
             if h.group(2) not in SECTIONS or h.group(3) not in STATUSES:
                 raise ValueError(f"line {n}: unknown section or status: {line}")
             cur = {"id": h.group(1), "section": h.group(2), "status": h.group(3)}
             items.append(cur)
         elif cur is not None and (r := _ROLE.match(line)):
+            if r.group(1) in cur:
+                raise ValueError(f"line {n}: {cur['id']} repeats its {r.group(1)}")
             cur[r.group(1)] = r.group(2)
             if r.group(1) == "anchor":
                 cur["line"] = int(r.group(3)) if r.group(3) else None
@@ -96,7 +100,12 @@ def render(item: dict, cards) -> str:
 
 
 def exam_cards(path: Path = EXAM) -> set[str]:
-    """Every card named in the worksheet, whatever its status: excluded from training."""
+    """Every card named in the worksheet, whatever its status.
+
+    Their families are kept out of every NEW training input (aux rows, augmentations).
+    Fit exam cards stay in the existing card pairs, shared by the comparator and the new
+    runs, so the exam is not held out for them; dev-only items are reported separately.
+    """
     if not path.exists():
         return set()
     return {it[r] for it in parse(path.read_text("utf-8")) for r in ("anchor", "match", "trap")}
@@ -214,7 +223,8 @@ Each item: an anchor (a whole card, or `line N` of it), a true **match** and a *
 A model passes when it scores the match above the trap. Only the user changes `proposed` to
 `accepted` or `rejected` in an item's heading. Only accepted items are scored. Never edit
 ids or card ids; to change an item, reject it and add a new one with the next id.
-Every card named here is excluded from training. Sealed cards never appear.
+Every card named here (and its family) is kept out of new training inputs.
+Sealed cards never appear.
 
 """
 

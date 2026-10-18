@@ -616,6 +616,9 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
             sch.step()
             skipped_total += s1["skipped"] + s2["skipped"]
             rows_total += s1["rows"] + s2["rows"]
+            if aux is not None:  # aux rows count toward the same skip guard
+                skipped_total += sa["skipped"]
+                rows_total += 2 * len(b["aux"])
             with torch.no_grad():
                 off = (q @ q.T).fill_diagonal_(float("nan"))
                 off_mean = float(torch.nanmean(off))

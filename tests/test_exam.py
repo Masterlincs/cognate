@@ -34,6 +34,10 @@ def test_render_parse_round_trip_and_status_rules():
         exam.parse(md.replace("· proposed", "· maybe"))
     with pytest.raises(ValueError, match="needs anchor"):
         exam.parse(md.replace("trap: ", "trapp: "))
+    with pytest.raises(ValueError, match="malformed item heading"):
+        exam.parse(md + "\n## T002 · user · proposed # note\n")
+    with pytest.raises(ValueError, match="repeats its anchor"):
+        exam.parse(md.replace("match: ", "anchor: "))
     with pytest.raises(ValueError, match="duplicate"):
         exam.parse(md + "\n" + exam.render(item, cards))
 

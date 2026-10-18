@@ -8,7 +8,8 @@ Each item: an anchor (a whole card, or `line N` of it), a true **match** and a *
 A model passes when it scores the match above the trap. Only the user changes `proposed` to
 `accepted` or `rejected` in an item's heading. Only accepted items are scored. Never edit
 ids or card ids; to change an item, reject it and add a new one with the next id.
-Every card named here is excluded from training. Sealed cards never appear.
+Every card named here (and its family) is kept out of new training inputs.
+Sealed cards never appear.
 
 ## T001 · user · proposed
 anchor: ae120613-97d6-4393-b39d-c3e6c076f5d6 | Deflecting Swat (dev) | If you control a commander, you may cast this spell without paying its mana cost. / You may choose new targets for target spell or ability.
