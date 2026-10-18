@@ -13,7 +13,7 @@ import pandas as pd
 import torch
 
 from . import encoder as enc
-from .evaluate import Benchmark, cohort_summary, evaluate, load_benchmark
+from .evaluate import Benchmark, bench_path, cohort_summary, evaluate, load_benchmark
 from .lexical import LEXICAL_RECIPE, fit_vectorizer
 from .train import DeviceLock
 from .util import (
@@ -27,6 +27,10 @@ from .util import (
     sha256_file,
     utcnow,
 )
+
+CLAIM_SCOPE = {"dev": "tag-proxy relevance on selection-exposed development anchors",
+               "sealed": "tag-proxy relevance on sealed anchors (authorised final evaluation)"}
+COS_MIN = 0.9999  # sealed re-encoding must reproduce the frozen dev vectors
 
 
 def save_eval(name: str, bm: Benchmark, res: dict, meta: dict, vectors=None,
@@ -43,7 +47,7 @@ def save_eval(name: str, bm: Benchmark, res: dict, meta: dict, vectors=None,
     rec = {"name": name, "benchmark_id": bm.spec["benchmark_id"], "summary": res["summary"],
            "cohorts": cohort_summary(bm, res["per_anchor"], bm.cohorts(truncated)),
            "meta": meta, "files": files, "code": git_identity(), "created_utc": utcnow(),
-           "claim_scope": "tag-proxy relevance on selection-exposed development anchors"}
+           "claim_scope": CLAIM_SCOPE[bm.held]}
     atomic_write_json(out / "summary.json", rec)
     log_event("eval", "COMPLETED", name=name, full=res["summary"]["full"]["ndcg@10"],
               hard_lexical=res["summary"]["hard_lexical"]["ndcg@10"])
@@ -56,16 +60,37 @@ def _lexical_vectors(bm: Benchmark, ds: dict):
     return fit_vectorizer(fit["text"].tolist()).transform(bm.texts)
 
 
-def eval_lexical(ds_dir, name="lexical-char35-tfidf") -> dict:
-    bm, ds = load_benchmark(ds_dir)
+def eval_lexical(ds_dir, name="lexical-char35-tfidf", held: str = "dev") -> dict:
+    bm, ds = load_benchmark(ds_dir, held)
     res = evaluate(bm, _lexical_vectors(bm, ds))
     return save_eval(name, bm, res, {"system": "lexical", "recipe": LEXICAL_RECIPE,
                                      "fitted_on": "fit text only"})
 
 
+def same_weights(v: np.ndarray, ids: list[str], ds_dir, name: str) -> float:
+    """Min row cosine between v and the saved dev-eval vectors of `name` on the dev universe.
+
+    Raises below COS_MIN: a sealed score must come from exactly the frozen weights.
+    """
+    dev = read_json(bench_path(ds_dir))
+    ref_dir = RUNS / "eval" / dev["benchmark_id"] / name
+    rec = read_json(ref_dir / "summary.json")
+    if sha256_file(ref_dir / "vectors.npy") != rec["files"]["vectors.npy"]:
+        raise ValueError(f"{name}: saved dev vectors changed")
+    ref = np.load(ref_dir / "vectors.npy", allow_pickle=False)
+    pos = {o: i for i, o in enumerate(ids)}
+    x = v[[pos[o] for o in dev["universe"]]]
+    cos = (x * ref).sum(1) / (np.linalg.norm(x, axis=1) * np.linalg.norm(ref, axis=1))
+    lo = float(cos.min())
+    if not lo >= COS_MIN:
+        raise ValueError(f"{name}: re-encoded dev vectors differ (min cosine {lo:.6f})")
+    return lo
+
+
 def eval_encoder(ds_dir, name: str, backbone: str, max_length: int,
-                 model_path: str | None = None, batch_size: int = 128) -> dict:
-    bm, _ = load_benchmark(ds_dir)
+                 model_path: str | None = None, batch_size: int = 128,
+                 held: str = "dev") -> dict:
+    bm, _ = load_benchmark(ds_dir, held)
     recipe = enc.RECIPES[backbone]
     tok, model = enc.load(recipe, model_path)
     dev = enc.device()
@@ -76,12 +101,17 @@ def eval_encoder(ds_dir, name: str, backbone: str, max_length: int,
         t0 = time.time()
         v = enc.encode(model, tok, bm.texts, recipe, max_length, batch_size=batch_size, dev=dev)
         secs = time.time() - t0
+    # sealed: prove the weights are the frozen ones before any sealed anchor is scored
+    min_cos = same_weights(v, bm.ids, ds_dir, name) if held != "dev" else None
     res = evaluate(bm, v)
     meta = {"system": "encoder", "backbone": backbone, "recipe": recipe,
             "max_length": max_length, "model_path": model_path, "device": str(dev),
             "torch": torch.__version__, "encode_seconds": round(secs, 1),
             "truncated_universe": len(truncated),
-            "truncated_dev_anchors": int(sum(bm.ids[i] in truncated for i in bm.anchor_idx))}
+            f"truncated_{held}_anchors": int(sum(bm.ids[i] in truncated
+                                                 for i in bm.anchor_idx))}
+    if min_cos is not None:
+        meta["dev_vectors_min_cosine"] = min_cos
     return save_eval(name, bm, res, meta, vectors=v, truncated=truncated)
 
 

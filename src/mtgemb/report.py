@@ -28,6 +28,9 @@ CONFIRM_FREE = {"run_id", "slot", "hypothesis", "comparator", "seed", "data_seed
 MIN_CLUSTERS = 100  # fewer eligible families than this makes a contrast inconclusive
 VIEWS = ("full", "hard_lexical")
 QUALIFIER = "provisional tag-proxy promotion on selection-exposed development"
+SEALED_QUALIFIER = ("registered gate re-tested once on sealed anchors (tag proxy); "
+                    "does not change the P7 decision")
+SEALED_GATE = {"promote": "cleared", "reject": "not_cleared", "inconclusive": "inconclusive"}
 
 
 def run_row(run_id: str) -> dict:
@@ -136,7 +139,8 @@ def _check_eval(bench_id: str, name: str, backbone: str, max_length: int,
                          f"with {backbone} {recipe} at max_length {max_length} on {bench_id}")
 
 
-def _check_confirm_run(bench_id: str, name: str, seed: int, recipe_run: str) -> None:
+def _check_confirm_run(bench_id: str, name: str, seed: int, recipe_run: str,
+                       eval_bench: str | None = None) -> None:
     res = read_json(RUNS / name / "result.json")
     man, ref = read_json(RUNS / name / "manifest.json"), read_json(RUNS / recipe_run /
                                                                    "manifest.json")
@@ -155,27 +159,34 @@ def _check_confirm_run(bench_id: str, name: str, seed: int, recipe_run: str) -> 
         diff.append("identity.benchmark_id != report benchmark")
     if diff:
         raise ValueError(f"{name}: differs from frozen recipe {recipe_run} in {diff}")
-    _check_eval(bench_id, name, cfg["backbone"], cfg["max_length"], RUNS / name / "final",
-                man["identity"]["recipe"])
+    _check_eval(eval_bench or bench_id, name, cfg["backbone"], cfg["max_length"],
+                RUNS / name / "final", man["identity"]["recipe"])
 
 
-def confirmation_report(bench_id: str) -> dict:
+def confirmation_report(bench_id: str, train_bench: str | None = None) -> dict:
     """Registered P7 contrasts and the promotion decision (MASTER_PLAN §5).
 
     Every confirmation run must be the frozen recipe at its registered seed, and every eval
     must come from that run's final weights (pretrained: the pinned backbone). Decision:
     inconclusive if any contrast has < MIN_CLUSTERS families; else promote only if both
     comparators pass; else reject. Written once to runs/confirmation/<bench_id>/report.json.
+
+    train_bench: the runs were trained and selected on that benchmark and bench_id is
+    the sealed one. The same contrasts are then re-tested and reported as a sealed gate
+    (cleared / not_cleared / inconclusive), written once to runs/sealed/<bench_id>/.
     """
-    out = RUNS / "confirmation" / bench_id / "report.json"
+    sealed = train_bench is not None
+    train_bench = train_bench or bench_id
+    out = RUNS / ("sealed" if sealed else "confirmation") / bench_id / "report.json"
     if out.exists():
         raise FileExistsError(out)
     seeds = CONFIRM["seeds"]
     cand = {s: CONFIRM["candidate"].format(s) for s in seeds}
     bge = {s: CONFIRM["bge"].format(s) for s in seeds}
     for s in seeds:
-        _check_confirm_run(bench_id, cand[s], s, CONFIRM["recipe_from"]["candidate"])
-        _check_confirm_run(bench_id, bge[s], s, CONFIRM["recipe_from"]["bge"])
+        _check_confirm_run(train_bench, cand[s], s, CONFIRM["recipe_from"]["candidate"],
+                           bench_id)
+        _check_confirm_run(train_bench, bge[s], s, CONFIRM["recipe_from"]["bge"], bench_id)
     e5_recipe = read_json(RUNS / CONFIRM["recipe_from"]["candidate"] /
                           "manifest.json")["identity"]["recipe"]
     _check_eval(bench_id, CONFIRM["pretrained"], CONFIRM["pretrained_backbone"],
@@ -212,6 +223,10 @@ def confirmation_report(bench_id: str) -> dict:
                           **{v: float(_ndcg(bench_id, dep, v).mean()) for v in VIEWS}},
            "design": {**CONFIRM, "decisions": ["", "", ""]},
            "created_utc": utcnow()}
+    if sealed:
+        rep["sealed_gate"] = SEALED_GATE[rep.pop("decision")]
+        rep.update(qualifier=SEALED_QUALIFIER, train_benchmark_id=train_bench)
+        rep["design"]["decisions"].append("")
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(f"report.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(rep, indent=2), "utf-8")

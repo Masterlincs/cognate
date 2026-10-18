@@ -41,6 +41,8 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("confirm-report", help="registered P7 contrasts and promotion decision")
     q.add_argument("--ds", default=DEFAULT_DS)
+    q = sub.add_parser("sealed-eval", help="authorised one-shot sealed evaluation")
+    q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("train", help="train or resume a run from a JSON config")
     q.add_argument("config")
     a = ap.parse_args(argv)
@@ -92,6 +94,10 @@ def main(argv: list[str] | None = None) -> None:
         from .report import confirmation_report
 
         out = confirmation_report(read_json(bench_path(a.ds))["benchmark_id"])
+    elif a.cmd == "sealed-eval":
+        from .sealed import sealed_eval
+
+        out = sealed_eval(a.ds)
     elif a.cmd == "train":
         from .evaluate import bench_path
         from .train import TrainConfig, train

@@ -23,6 +23,8 @@ BENCHMARK_VERSION = "benchmark_v3"  # v2 + dataset identity bound into the id
 K = 10
 VIEWS = ("full", "hard", "hard_lexical", "cross_colour", "cross_cost", "cross_body", "strict",
          "dev_candidates")
+SEALED_VIEWS = VIEWS[:-1] + ("sealed_candidates",)  # same views, sealed diagnostic
+HELD = ("dev", "sealed")
 HARD_LEXICAL_JACCARD = 0.8
 CROSS_COST_MIN = 2.0
 PILOT_THRESHOLDS = {"full_ndcg_gain": 0.005, "hard_lexical_min_change": -0.005,
@@ -36,16 +38,24 @@ RARE_DF = 10
 # ---------------------------------------------------------------- benchmark
 
 def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame,
-                    dataset_id: str) -> dict:
+                    dataset_id: str, held: str = "dev") -> dict:
     """Freeze universe, anchors and rules, bound to the dataset that supplies relevance
-    inputs (tags, weights, text, metadata): the id changes if any of them change."""
+    inputs (tags, weights, text, metadata): the id changes if any of them change.
+
+    held="sealed" (, authorised final evaluation only): sealed cards join the universe
+    and are the anchors; weights, taxonomy and view rules stay the fit-derived ones. The
+    held="dev" spec is unchanged by this option.
+    """
+    if held not in HELD:
+        raise ValueError(f"held must be one of {HELD}")
     fit_tags = set(tags.loc[tags["df_fit"] > 0, "tag_id"])
     tagged = set(mem["oracle_id"])
-    u = cards[cards["split"].isin(["fit", "dev"]) & (cards["text_status"] == "ok")
+    splits = ["fit", "dev"] + (["sealed"] if held == "sealed" else [])
+    u = cards[cards["split"].isin(splits) & (cards["text_status"] == "ok")
               ].sort_values("oracle_id")
     fit_tagged = set(mem.loc[mem["tag_id"].isin(fit_tags), "oracle_id"])
-    anchors = u[(u["split"] == "dev") & u["oracle_id"].isin(fit_tagged)]["oracle_id"].tolist()
-    dev_all = cards[(cards["split"] == "dev") & (cards["text_status"] == "ok")]
+    anchors = u[(u["split"] == held) & u["oracle_id"].isin(fit_tagged)]["oracle_id"].tolist()
+    dev_all = cards[(cards["split"] == held) & (cards["text_status"] == "ok")]
     dev_mem = mem[mem["oracle_id"].isin(set(dev_all["oracle_id"]))]
     bench = {
         "dataset_id": dataset_id,
@@ -66,15 +76,20 @@ def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame,
         "counts": {
             "universe": len(u), "universe_untagged": int((~u["oracle_id"].isin(tagged)).sum()),
             "anchors": len(anchors),
-            "dev_ok_cards": len(dev_all),
-            "dev_untagged": int((~dev_all["oracle_id"].isin(tagged)).sum()),
-            "dev_tags_unseen_in_fit": int(dev_mem.loc[~dev_mem["tag_id"].isin(fit_tags),
-                                                      "tag_id"].nunique()),
-            "dev_memberships_unseen_tag_frac": float(
+            f"{held}_ok_cards": len(dev_all),
+            f"{held}_untagged": int((~dev_all["oracle_id"].isin(tagged)).sum()),
+            f"{held}_tags_unseen_in_fit": int(dev_mem.loc[~dev_mem["tag_id"].isin(fit_tags),
+                                                          "tag_id"].nunique()),
+            f"{held}_memberships_unseen_tag_frac": float(
                 (~dev_mem["tag_id"].isin(fit_tags)).mean()) if len(dev_mem) else 0.0,
         },
         "created_utc": utcnow(),
     }
+    if held == "sealed":
+        bench["rules"].update(
+            universe="split in {fit, dev, sealed}, text_status ok; untagged cards have zero gain",
+            anchors="sealed cards in universe with >=1 tag represented in fit",
+            views=SEALED_VIEWS, held_split="sealed")
     bench["benchmark_id"] = _bench_id(bench)
     return bench
 
@@ -84,14 +99,19 @@ def _bench_id(bench: dict) -> str:
                         bench["rules"]])[:16]
 
 
-def load_benchmark(ds_dir) -> tuple[Benchmark, dict]:
-    """Frozen benchmark plus its dataset; refuses a spec edited or built on other inputs."""
+def load_benchmark(ds_dir, held: str = "dev") -> tuple[Benchmark, dict]:
+    """Frozen benchmark plus its dataset; refuses a spec edited or built on other inputs.
+
+    Only held="sealed" (the authorised final evaluation) parses sealed rows.
+    """
     from .data import load_dataset
 
-    ds = load_dataset(ds_dir)
-    spec = read_json(bench_path(ds_dir))
+    if held not in HELD:
+        raise ValueError(f"held must be one of {HELD}")
+    ds = load_dataset(ds_dir, include_sealed=held == "sealed")
+    spec = read_json(bench_path(ds_dir, held))
     if spec.get("dataset_id") != ds["ident"]["dataset_id"] or _bench_id(spec) != spec[
-            "benchmark_id"]:
+            "benchmark_id"] or spec["rules"].get("held_split", "dev") != held:
         raise ValueError("benchmark does not match its dataset or has been edited")
     return Benchmark(spec, ds["cards"], ds["memberships"], ds["tags"]), ds
 
@@ -101,6 +121,8 @@ class Benchmark:
 
     def __init__(self, bench: dict, cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame):
         self.spec = bench
+        self.held = bench["rules"].get("held_split", "dev")
+        self.views = tuple(bench["rules"]["views"])
         self.ids = bench["universe"]
         pos = {o: i for i, o in enumerate(self.ids)}
         self.anchor_idx = np.array([pos[a] for a in bench["anchors"]], dtype=np.int64)
@@ -153,7 +175,7 @@ class Benchmark:
                                   >= CROSS_COST_MIN),
             "cross_body": base & ~same_body,
             "strict": base & same_col & same_body & (self.mv[a][:, None] == self.mv[None, :]),
-            "dev_candidates": base & (self.split == "dev")[None, :],
+            f"{self.held}_candidates": base & (self.split == self.held)[None, :],
         }
 
     def cohorts(self, truncated: set[str] | None = None) -> dict[str, np.ndarray]:
@@ -247,7 +269,7 @@ def evaluate(bm: Benchmark, vectors, block: int = 256, top_n: int = 0) -> dict:
             if top_n:
                 o = order[masks["full"][j][order]][:top_n]
                 tops[bm.ids[ai]] = [bm.ids[k] for k in o]
-            for v in VIEWS:
+            for v in bm.views:
                 m = masks[v][j]
                 ranked = g[order[m[order]][:K]]
                 gm = g[m]
@@ -339,8 +361,9 @@ def n_boot_for(m_contrasts: int, alpha: float = 0.05, tail: int = 100) -> int:
     return int(math.ceil(tail * m_contrasts / alpha))
 
 
-def bench_path(ds_dir) -> Path:
-    return Path(ds_dir) / f"{BENCHMARK_VERSION}.json"
+def bench_path(ds_dir, held: str = "dev") -> Path:
+    return Path(ds_dir) / (f"{BENCHMARK_VERSION}.json" if held == "dev"
+                           else f"{BENCHMARK_VERSION}_{held}.json")
 
 
 def save_benchmark(bench: dict, path: Path) -> None:

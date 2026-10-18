@@ -443,3 +443,32 @@ Served `web/dist`, built with `current.json` → `2026-10-16-e5-base-v2-d4c393ee
      - No publication.
 
      The last two are gates that need the user's explicit approval.
+
+## Sealed held-out evaluation (gate 1, 2026-10-18)
+
+The user authorised gate 1 ("do 1"): one evaluation of the frozen artifacts on the sealed split. Publication (gate 2) is still not authorised.
+
+1. **Protocol first.** Before any sealed row was parsed, decision was recorded in the decision log:
+   - **Systems:** the 9 frozen, dev-evaluated systems, unchanged.
+   - **Benchmark:** universe = all fit+dev+sealed cards with usable text; anchors = sealed cards with at least one fit-represented tag. Weights and views are the fit-derived ones, with `sealed_candidates` in place of `dev_candidates`.
+   - **Weight identity:** each encoder's re-encoded vectors must reproduce its saved dev vectors.
+   - **Statistics:** the same 4 registered contrasts.
+   - **Use:** one run, no tuning, no per-card inspection. The P7 decision and the release stay as they are.
+2. **Code** (commit `bbbdd8a`, not yet run):
+   - `evaluate.py`:
+     - `build_benchmark(..., held="sealed")` and `load_benchmark(ds, held)`. Only `held="sealed"` parses sealed rows.
+     - The sealed spec lives in its own file, `benchmark_v3_sealed.json`.
+     - Views now come from the spec.
+   - `baselines.py`:
+     - `same_weights` checks each encoder: row cosine ≥ 0.9999 against its saved dev vectors on the dev universe, checked before any sealed anchor is scored.
+     - The claim scope now follows the benchmark (dev or sealed).
+   - `report.confirmation_report(bench, train_bench=...)` re-tests the contrasts on sealed evals. It still checks provenance against the training runs and writes `runs/sealed/<id>/report.json` once, with `sealed_gate` cleared / not_cleared / inconclusive instead of a promotion decision.
+   - `sealed.py` and the CLI command `mtgemb sealed-eval` drive the run.
+   - Tests:
+     - A pinned fixture dev id, taken from the pre-code.
+     - The sealed universe and anchors.
+     - `same_weights` refusing changed or edited vectors.
+     - The sealed report: cleared, not_cleared, stale benchmark id, and writes once.
+   - Verification: 112 tests pass.
+3. **Dev unchanged.** The real dev benchmark rebuilt with the new code keeps id `8bf2f48c0bba3b2c`. `replay-eval` on clean `bbbdd8a` passed: 9 evals and 3 releases, tolerance 1e-9 (`runs/replay-eval-bbbdd8a.out`).
+4. **Pre-run review.** Sent to Sol (`p10-sealed-review-r1`) for a code-only review. Sol is barred from touching sealed data.

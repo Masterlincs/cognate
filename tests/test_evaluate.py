@@ -214,3 +214,22 @@ def test_benchmark_id_binds_dataset_identity():
     a = build_benchmark(cards, mem, tags, "ds")
     b = build_benchmark(cards, mem, tags, "ds-other")
     assert a["universe"] == b["universe"] and a["benchmark_id"] != b["benchmark_id"]
+
+
+def test_sealed_benchmark_d27_leaves_dev_spec_unchanged():
+    cards, mem, tags = _fixture()
+    dev = build_benchmark(cards, mem, tags, "ds")
+    assert dev["benchmark_id"] == "5fcd2a938726ca96"  # = id from the pre-code
+    assert "held_split" not in dev["rules"] and dev["rules"]["views"][-1] == "dev_candidates"
+    s = build_benchmark(cards, mem, tags, "ds", held="sealed")
+    assert s["universe"] == ["a1", "c1", "c2", "c3", "c4", "d2", "s1"]
+    assert s["anchors"] == ["s1"] and s["rules"]["held_split"] == "sealed"
+    assert s["benchmark_id"] != dev["benchmark_id"] and s["counts"]["sealed_ok_cards"] == 1
+    bm = Benchmark(s, cards, mem, tags)
+    v = np.eye(7)[:, :6] + 0.1  # any rows; only counts are checked
+    per = evaluate(bm, v)["per_anchor"].set_index("view")
+    assert list(per.index) == list(bm.views) and bm.views[-1] == "sealed_candidates"
+    assert per.loc["full", "n_rel"] == 3  # a1, c1, c2 share fit tag t1
+    assert per.loc["sealed_candidates", "n_candidates"] == 0  # no other sealed card
+    with pytest.raises(ValueError):
+        build_benchmark(cards, mem, tags, "ds", held="fit")

@@ -318,3 +318,24 @@ def test_replay_with_no_evaluations_does_not_pass(tmp_path, monkeypatch):
         f.unlink()
     d.rmdir()
     assert not baselines.replay_evals("ds")["passed"]
+
+
+def test_same_weights_refuses_a_changed_encoder(tmp_path, monkeypatch):
+    ds = tmp_path / "ds"
+    ds.mkdir()
+    (ds / "benchmark_v3.json").write_text(json.dumps({"benchmark_id": "B",
+                                                      "universe": ["b", "c"]}), "utf-8")
+    monkeypatch.setattr(baselines, "RUNS", tmp_path / "runs")
+    d = tmp_path / "runs" / "eval" / "B" / "enc"
+    d.mkdir(parents=True)
+    np.save(d / "vectors.npy", np.array([[1.0, 0.0], [0.6, 0.8]], dtype=np.float32))
+    (d / "summary.json").write_text(json.dumps(
+        {"files": {"vectors.npy": sha256_file(d / "vectors.npy")}}), "utf-8")
+    v = np.array([[0.0, 1.0], [2.0, 0.0], [0.6, 0.8]])  # sealed universe a, b, c; scale-free
+    assert baselines.same_weights(v, ["a", "b", "c"], ds, "enc") == pytest.approx(1.0)
+    v[2] = [0.8, 0.6]
+    with pytest.raises(ValueError, match="differ"):
+        baselines.same_weights(v, ["a", "b", "c"], ds, "enc")
+    np.save(d / "vectors.npy", np.zeros((2, 2), dtype=np.float32))
+    with pytest.raises(ValueError, match="changed"):
+        baselines.same_weights(v, ["a", "b", "c"], ds, "enc")

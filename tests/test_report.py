@@ -193,3 +193,39 @@ def test_confirmation_report_refuses_wrong_provenance(tmp_path, monkeypatch):
             edit(root / rel, **kw)
         with pytest.raises(ValueError):
             rp.confirmation_report("B")
+
+
+def test_sealed_report_retests_registered_contrasts_once(tmp_path, monkeypatch):
+    import json
+    import shutil
+
+    import pytest
+
+    import mtgemb.report as rp
+
+    def sealed_copy(root, bid="S"):
+        shutil.copytree(root / "eval" / "B", root / "eval" / "S")
+        for p in (root / "eval" / "S").glob("*/summary.json"):
+            d = json.loads(p.read_text("utf-8"))
+            d["benchmark_id"] = bid
+            p.write_text(json.dumps(d), "utf-8")
+
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "ok")
+    _confirm_fixture(tmp_path / "ok", 0.01)
+    sealed_copy(tmp_path / "ok")
+    rep = rp.confirmation_report("S", train_bench="B")
+    assert rep["sealed_gate"] == "cleared" and "decision" not in rep
+    assert rep["train_benchmark_id"] == "B" and rep["design"]["decisions"][-1] == ""
+    assert (tmp_path / "ok" / "sealed" / "S" / "report.json").exists()
+    assert not (tmp_path / "ok" / "confirmation").exists()
+    with pytest.raises(FileExistsError):
+        rp.confirmation_report("S", train_bench="B")
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "rej")
+    _confirm_fixture(tmp_path / "rej", -0.001)
+    sealed_copy(tmp_path / "rej")
+    assert rp.confirmation_report("S", train_bench="B")["sealed_gate"] == "not_cleared"
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "stale")
+    _confirm_fixture(tmp_path / "stale", 0.01)
+    sealed_copy(tmp_path / "stale", bid="B")  # records still claim the dev benchmark
+    with pytest.raises(ValueError):
+        rp.confirmation_report("S", train_bench="B")
