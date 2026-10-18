@@ -2,7 +2,7 @@
  "phase": "P12",
  "status": "IN_PROGRESS",
  "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
- "next_action": "Wait for ext-1; score its exam, exam-guard vs initial-1, apply the rule. Integrate v4 release after reviews pass. Sealed evaluation must not be repeated.",
+ "next_action": "Overnight queue: ext-2, ext-3, x-1. Score each on the exam and apply its registered rule. No publication; sealed split untouched.",
  "benchmark_id": "8bf2f48c0bba3b2c",
  "dataset_id": "cbd5c12011c94e68",
  "pairs_id": "795ebb1ae7ce8251",
@@ -182,9 +182,14 @@
    "decision": "",
    "config": "configs/ext-1-e5-linetag.json",
    "comparator_exam": "initial-1 49/51 (fails T001, T021)",
-   "status": "RUNNING"
+   "status": "DONE: did not clear",
+   "result": {
+    "full": 0.7117,
+    "hard_lexical": 0.6958,
+    "exam": "49/51"
+   }
   },
-  "blocked_on": "ext-1 training run in progress; v4 release/app reviews running",
+  "blocked_on": "overnight queue running",
   "line_scoring": {
    "decision": "",
    "adopted": false,
@@ -211,6 +216,11 @@
    "twin_accuracy": 0.944,
    "chance": 0.449,
    "n": 12919
-  }
+  },
+  "queue": [
+   "ext-2-e5-synth",
+   "ext-3-e5-selfname",
+   "x-1-e5-4000"
+  ]
  }
 }

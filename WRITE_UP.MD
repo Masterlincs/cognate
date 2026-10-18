@@ -664,3 +664,9 @@ The ideas, as Delvefall describes them:
     - Luna r1 raised one P2: v2 capitalises a sentence-start "this" even on a card without its own name. The lead checked real data: 1 of 3,267 changed cards (Necratog, "…: this creature gets" → "…: This creature gets"), and Oracle capitalises the effect after a colon anyway. Declined.
     - Luna could not run the tests because the CPU was busy. The lead ran the worktree's full suite: 261 passed.
     - Both are merged into master only between runs, during the queue HOLD after ext-1.
+22. **ext-1 result: did not clear.**
+    - The run crashed on the XPU at update 1981. The queue resumed it exactly from the 1750 checkpoint, and it completed at 23:13 UTC.
+    - Dev full 0.7117 (initial-1 0.7102); hard-lexical 0.6958 (0.6945).
+    - Exam 49/51 with the same two failures. T001 got closer (−0.564 → −0.420) but still fails; T021 got worse. No item regressed or was fixed. The rider-section mean margin fell (0.258 → 0.231).
+    - The rule needed exam ≥ 50/51, so ext-1 did not clear. The line-to-tag stream did not fix rider matching.
+23. **Merged the synth stream and the self-name text option into master** (`6a2ddf8`) during the queue hold. Configs validate, ruff passes, and the full suite passes (261). Pushed. Queue now: ext-2 (synth), ext-3 (self-name text), x-1 (4000 updates).
