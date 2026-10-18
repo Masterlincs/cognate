@@ -23,6 +23,7 @@ import torch
 from pydantic import BaseModel, ConfigDict, model_validator
 
 from . import encoder as enc
+from . import exam, linetag
 from .data import load_dataset
 from .evaluate import Benchmark, evaluate, load_benchmark
 from .util import (
@@ -62,6 +63,10 @@ class TrainConfig(BaseModel):
     objective: Literal["masked_infonce", "multi_positive"] = "masked_infonce"
     pair_weighting: Literal["none", "specificity"] = "none"
     batch_mode: Literal["random", "tag_grouped"] = "random"
+    # ideas 1-2 (Delvefall): a line<->tag stream beside the unchanged card schedule
+    aux: Literal["none", "line_tag"] = "none"
+    aux_weight: float = 1.0
+    aux_batch: int = 32
     precision: Literal["fp32", "bf16"] = "fp32"
     grad_checkpointing: bool = False
     max_skip_rate: float = 0.01
@@ -122,6 +127,11 @@ class TrainData:
         self.neg_rank = {int(ai[s]): rk[s:e] for s, e in zip(starts, ends, strict=True)}
         self.identity = {"dataset_id": ds["ident"]["dataset_id"],
                          "pairs_id": self.pairs_rec["pairs_id"]}
+        self._ds, self._elig = ds, set(elig)
+
+    def line_tag_rows(self) -> dict:
+        """aux rows; every trap-exam card's family is kept out (exam.exam_cards)."""
+        return linetag.build(self._ds, self._elig, exam.exam_cards())
 
     def known_pos(self, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
         """Shares at least one pair-eligible tag."""
@@ -452,7 +462,7 @@ def finalise_selection(evals: list[dict], cfg: TrainConfig, tol: float = 0.005):
     return select_checkpoint(evals, cfg.guardrail_hard_lexical, tol)
 
 
-_CODE_FILES = ("train.py", "encoder.py", "evaluate.py", "text.py")
+_CODE_FILES = ("train.py", "encoder.py", "evaluate.py", "text.py", "linetag.py")
 
 
 def code_identity() -> str:
@@ -477,8 +487,11 @@ def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | No
         raise ValueError("guarded_best selection needs guardrail_hard_lexical "
                          "(the backbone's pretrained hard-lexical nDCG)")
     cfg_hash = sha256_json(cfg.model_dump(mode="json", exclude={"stop_after"}))
+    aux = data.line_tag_rows() if cfg.aux == "line_tag" else None
     identity = {"config": cfg_hash, **data.identity, "recipe": recipe, "code": code_identity(),
                 "benchmark_id": bench["benchmark_id"] if bench else None}
+    if aux is not None:
+        identity["aux_rows"] = aux["hash"]
     manifest_path = out / "manifest.json"
     if manifest_path.exists():
         man = read_json(manifest_path)
@@ -493,12 +506,41 @@ def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | No
         atomic_write_json(manifest_path, man)
 
     batches = build_schedule(cfg, data)
-    sched_hash = schedule_hash(batches)
+    card_hash = sched_hash = schedule_hash(batches)
+    if aux is not None:  # the card schedule is untouched; its hash is logged separately
+        aux_sched = linetag.schedule(aux, cfg.aux_batch, cfg.total_updates, cfg.data_seed)
+        for b, rows in zip(batches, aux_sched, strict=True):
+            b["aux"] = rows
+        sched_hash = sha256_json([card_hash, [r.tolist() for r in aux_sched]])
     with DeviceLock():
-        return _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_hash)
+        return _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_hash,
+                             aux, card_hash)
 
 
-def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_hash):
+def aux_loss(model, tok, recipe, max_length, aux: dict, rows: np.ndarray, scale: float,
+             dev, autocast) -> tuple[torch.Tensor, dict]:
+    """Symmetric masked InfoNCE between one-line texts and their tag texts (#1-2).
+
+    Row i pairs line i with tag i; another in-batch tag the line also carries is masked,
+    never a negative. Lines and tags are unique within a batch, so nothing else is excluded.
+    """
+    texts = [aux["lines"][i] for i in aux["row_line"][rows]]
+    texts += [aux["tag_texts"][j] for j in aux["row_tag"][rows]]
+    tb = {k: v.to(dev) for k, v in enc.tokenize(tok, texts, recipe, max_length).items()}
+    with autocast:
+        v = enc.embed(model, tb, recipe).float()
+    n = len(rows)
+    lines, tags = v[:n], v[n:]
+    known = torch.from_numpy(linetag.masks(aux, rows)).to(dev)
+    none = torch.zeros_like(known)
+    a1, s1 = contrastive_loss(lines, tags, known, none, scale, "masked_infonce")
+    a2, s2 = contrastive_loss(tags, lines, known.T.contiguous(), none, scale, "masked_infonce")
+    return 0.5 * (a1 + a2), {"skipped": s1["skipped"] + s2["skipped"],
+                             "masked_frac": s1["masked_frac"]}
+
+
+def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_hash,
+                  aux=None, card_hash=None):
     torch.manual_seed(cfg.seed)
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -525,7 +567,8 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
     else:
         _truncate_metrics(out / "metrics.jsonl", 0)  # restart before any checkpoint
         log_event("train", "STARTED", run_id=cfg.run_id, slot=cfg.slot,
-                  schedule_hash=sched_hash, config=cfg.model_dump(mode="json"))
+                  schedule_hash=sched_hash, card_schedule_hash=card_hash,
+                  aux_rows=aux["hash"] if aux else None, config=cfg.model_dump(mode="json"))
     bm = None
     if bench:
         bm = load_benchmark(cfg.dataset_dir)[0]
@@ -559,6 +602,10 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
             l2, s2 = contrastive_loss(c[: len(anc)], q, k2.to(dev), x2.to(dev), cfg.scale,
                                       cfg.objective, w)
             loss = 0.5 * (l1 + l2)
+            if aux is not None:
+                la, sa = aux_loss(model, tok, recipe, cfg.max_length, aux, b["aux"], cfg.scale,
+                                  dev, autocast)
+                loss = loss + cfg.aux_weight * la
             opt.zero_grad(set_to_none=True)
             loss.backward()
             gn = float(torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.grad_clip))
@@ -577,6 +624,8 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
                    "eff_neg_a2b": s1["eff_neg_mean"], "eff_neg_b2a": s2["eff_neg_mean"],
                    "masked_frac_a2b": s1["masked_frac"], "multi_pos_rows": s1["multi_pos_rows"],
                    "n_neg": int(len(neg)), "offdiag_cos": off_mean,
+                   **({"aux_loss": float(la.detach()), "aux_skipped": sa["skipped"],
+                       "aux_masked_frac": sa["masked_frac"]} if aux is not None else {}),
                    "sec": round(time.time() - t_last, 3),
                    "peak_mem_gb": round(torch.xpu.max_memory_allocated() / 1e9, 2)
                    if dev.type == "xpu" else None}
@@ -612,7 +661,8 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
     metrics_f.close()
     finished = (cfg.stop_after is None or cfg.stop_after >= cfg.total_updates)
     result = {"run_id": cfg.run_id, "updates_done": done,
-              "evals": evals, "schedule_hash": sched_hash, "finished": finished}
+              "evals": evals, "schedule_hash": sched_hash, "card_schedule_hash": card_hash,
+              "finished": finished}
     if finished and evals:
         sel, passed = finalise_selection(evals, cfg)
         _save_weights(model, tok, out / "final")

@@ -25,8 +25,9 @@ from pathlib import Path
 import numpy as np
 
 from .abilities import split_abilities
+from .util import ROOT
 
-EXAM = Path("exam/traps.md")
+EXAM = ROOT / "exam" / "traps.md"  # absolute: a wrong cwd must not empty the exclusions
 STATUSES = ("proposed", "accepted", "rejected")
 SECTIONS = ("user", "rider", "mechanism", "parameters")
 PER_SECTION = 20

@@ -297,3 +297,41 @@ def test_save_weights_recovers_interrupted_swaps(tmp_path):
     p.rename(tmp_path / "best.old")
     tr._save_weights(_Saver("m2"), _Saver("t2"), p)
     assert (p / "m2.txt").exists() and not (tmp_path / "best.old").exists()
+
+
+class AuxData(FakeData):
+    """FakeData plus line-tag rows built by linetag.build from a tiny ds."""
+
+    def line_tag_rows(self):
+        import pandas as pd
+
+        from mtgemb import linetag
+
+        n = 12
+        cards = pd.DataFrame({"oracle_id": [f"o{i:02d}" for i in range(n)], "split": "fit",
+                              "text_status": "ok", "family_id": [f"f{i}" for i in range(n)],
+                              "text": [f"word{i % 7} card" for i in range(n)]})
+        mem = pd.DataFrame({"oracle_id": [f"o{i:02d}" for i in range(n)],
+                            "tag_id": [f"t{i % 6}" for i in range(n)]})
+        tags = pd.DataFrame({"tag_id": [f"t{j}" for j in range(6)],
+                             "label": [f"word{j}" for j in range(6)], "description": None})
+        return linetag.build({"cards": cards, "memberships": mem, "tags": tags},
+                             {f"t{j}" for j in range(6)}, set())
+
+
+def test_aux_keeps_card_schedule_and_resumes_exactly(tiny):
+    data, cpu = AuxData(), torch.device("cpu")
+    base = tr.train(_cfg(run_id="plain"), None, dev=cpu, data=data)
+    full = tr.train(_cfg(run_id="aux", aux="line_tag", aux_batch=4), None, dev=cpu, data=data)
+    assert full["card_schedule_hash"] == base["schedule_hash"] != full["schedule_hash"]
+    tr.train(_cfg(run_id="aux2", aux="line_tag", aux_batch=4, stop_after=5), None, dev=cpu,
+             data=data)
+    tr.train(_cfg(run_id="aux2", aux="line_tag", aux_batch=4), None, dev=cpu, data=data)
+    wa, wb = _weights(tiny / "runs" / "aux" / "final"), _weights(tiny / "runs" / "aux2" / "final")
+    assert all(torch.equal(wa[k], wb[k]) for k in wa)
+    wp = _weights(tiny / "runs" / "plain" / "final")
+    assert any(not torch.equal(wa[k], wp[k]) for k in wa)  # the aux stream changed training
+    rec = tr.json.loads((tiny / "runs" / "aux" / "metrics.jsonl").read_text().splitlines()[0])
+    assert rec["aux_loss"] > 0 and rec["aux_skipped"] == 0
+    man = tr.read_json(tiny / "runs" / "aux" / "manifest.json")
+    assert man["identity"]["aux_rows"] == data.line_tag_rows()["hash"]
