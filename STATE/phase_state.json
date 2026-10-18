@@ -1,8 +1,8 @@
 {
-  "phase": "P7",
+  "phase": "P8",
   "status": "RUNNING",
-  "last_completed": "P6",
-  "next_action": "eval-encoder on the six confirm finals, then confirm-report, promotion decision.",
+  "last_completed": "P7 (promote, provisional tag-proxy)",
+  "next_action": "P8: export confirm-e5-s1/final as the promoted release (parity, vector and ranking checks), then P9 browser checks on the real release.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T06:38:00Z",
+  "updated_utc": "2026-10-18T06:55:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
@@ -45,5 +45,11 @@
     "deployment_seed": 1,
     "M": 4,
     "decision": ""
+  },
+  "promotion": {
+    "decision": "promote",
+    "qualifier": "provisional tag-proxy promotion on selection-exposed development",
+    "deployment_run": "confirm-e5-s1",
+    "report": "runs/confirmation/8bf2f48c0bba3b2c/report.json"
   }
 }

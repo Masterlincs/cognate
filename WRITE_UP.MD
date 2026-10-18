@@ -178,6 +178,30 @@ confirm-e5-s3 hit the native XPU abort at 04:23 UTC, about 12.5 min after its up
 confirm-e5-s3 finished at 05:54 UTC (in-training eval 0.7071 / 0.6919; schedule b5d67d44 as registered). confirm-bge-s3 started, the last confirmation run.
 confirm-bge-s3 hit the native XPU abort at 06:17 UTC, about 4 min after its update-1000 eval (mid-stretch); auto-resume 1/3 continued it from update 1000. Ten crashes in total so far, all recovered.
 confirm-bge-s3 finished at 06:36 UTC (in-training eval 0.6632 / 0.6458; schedule b5d67d44, matched with confirm-e5-s3). All six confirmation runs are complete (6 of the 9-run cap). Next: `mtgemb eval-encoder` on each `runs/confirm-*/final` (the registered eval records), then `mtgemb confirm-report`.
+
+### P7 result: provisional tag-proxy promotion (2026-10-18)
+
+Registered evals (`mtgemb eval-encoder` on each `runs/confirm-*/final`, 06:37-06:47 UTC). The confirm-e5-s2 eval hit the native XPU abort while loading (segfault, no output written); the retry succeeded. Every registered eval reproduced its run's in-training final eval exactly, a useful consistency check between the trainer's evaluator path and the standalone one.
+
+| Seed | E5 full | E5 hard-lex | BGE full | BGE hard-lex |
+|---|---|---|---|---|
+| 1 | 0.7055 | 0.6904 | 0.6643 | 0.6464 |
+| 2 | 0.7066 | 0.6904 | 0.6629 | 0.6451 |
+| 3 | 0.7071 | 0.6919 | 0.6632 | 0.6458 |
+| mean | 0.7064 | 0.6909 | 0.6635 | 0.6458 |
+
+Registered contrasts (`mtgemb confirm-report`; M = 4; one-sided adjusted lower bound at quantile 0.0125, 8000 family-cluster resamples with matched seeds; 3016 anchors in 2853 families; no zero-positive exclusions):
+
+| Candidate vs | View | Point | Adjusted lower | 95% interval | Per-seed differences |
+|---|---|---|---|---|---|
+| pretrained E5 | full | +0.1409 | +0.1320 | [0.1332, 0.1486] | 0.1400, 0.1411, 0.1416 |
+| pretrained E5 | hard-lexical | +0.1518 | +0.1425 | [0.1436, 0.1598] | 0.1512, 0.1513, 0.1527 |
+| trained BGE | full | +0.0429 | +0.0376 | [0.0383, 0.0474] | 0.0412, 0.0437, 0.0438 |
+| trained BGE | hard-lexical | +0.0451 | +0.0398 | [0.0404, 0.0497] | 0.0440, 0.0453, 0.0460 |
+
+Both comparisons pass every bound (full point ≥ 0.005 and lower > 0; hard-lexical point ≥ 0 and lower > -0.010). **Decision: promote, as a provisional tag-proxy promotion on selection-exposed development.** Deployment model: confirm-e5-s1 (seed 1, fixed before confirmation), full 0.7055, hard-lexical 0.6904. For context only (not a registered contrast): the lexical baseline scored 0.6042 / 0.5769.
+
+What this does and does not show: on this development benchmark's tag-overlap relevance, fine-tuned E5 retrieves effect-similar cards much better than pretrained E5 and better than BGE-small trained the same way, and the result is stable across three seeds. It is not a sealed-data result, development was used to choose the recipe, the tag proxy is not human judgement, and three seeds say little about the tails of training variability. The encoder, export and app correctness gates still have to pass (P8, P9).
 6. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)
