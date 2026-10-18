@@ -1,5 +1,5 @@
 <script>
-  import { filterNeighbours, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateAbilityShard, validateCommonShard, validateIds, withIds, validateRelease, validateReleasePointer } from './lib.js';
+  import { filterNeighbours, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateAbilityShard, validateCommonShard, validateIds, validateLineShard, validateTags, withIds, validateRelease, validateReleasePointer, validateShard } from './lib.js';
 
   let release;
   let names;
@@ -9,6 +9,9 @@
   let selectedCard;
   let wholeCardNeighbours = [];
   let abilityEntries = [];
+  let cardTags = [];
+  let tags;
+  let rank = 'whole';
   let activeAbility = null;
   let savedNeighbours = [];
   let visibleNeighbours = [];
@@ -28,6 +31,8 @@
   let filterToken = 0;
   const cache = new Map();
   const abilityCache = new Map();
+  const lineCache = new Map();
+  let tagsReady;
 
   const filters = () => ({ color, minMv: minMv === '' ? null : Number(minMv), maxMv: maxMv === '' ? null : Number(maxMv), creature, type });
   const base = import.meta.env.BASE_URL;
@@ -40,27 +45,37 @@
   const getShard = async (shard) => {
     if (!cache.has(shard)) cache.set(shard, Promise.all([
       fetchJson(`${base}data/${release.release_id}/cards/${String(shard).padStart(3, '0')}.json`),
-      fetchJson(`${base}data/${release.release_id}/neighbours/${String(shard).padStart(3, '0')}.json`)
-    ]).then(([cards, neighbours]) => {
-      validateCommonShard(cards, neighbours, release, shard, ids?.ids);
+      fetchJson(`${base}data/${release.release_id}/neighbours/${String(shard).padStart(3, '0')}.json`),
+      release.schema === 'mtgemb-release-v4' ? (tagsReady ??= fetchJson(`${base}data/${release.release_id}/tags.json`).then((loaded) => { validateTags(release, loaded); tags = loaded; return loaded; })) : Promise.resolve(null)
+    ]).then(([cards, neighbours, loadedTags]) => {
+      if (release.schema === 'mtgemb-release-v4') validateShard(cards, neighbours, release, shard, ids?.ids, undefined, undefined, loadedTags);
+      else validateCommonShard(cards, neighbours, release, shard, ids?.ids);
       return { cards, neighbours };
     }).catch((reason) => { cache.delete(shard); throw reason; }));
     return cache.get(shard);
   };
   const getAbilities = async (shard) => {
-    if (release.schema !== 'mtgemb-release-v3') return null;
+    if (release.schema !== 'mtgemb-release-v3' && release.schema !== 'mtgemb-release-v4') return null;
     if (!abilityCache.has(shard)) abilityCache.set(shard, Promise.all([
       getShard(shard),
-      fetchJson(`${base}data/${release.release_id}/abilities/${String(shard).padStart(3, '0')}.json`)
-    ]).then(([shardData, abilities]) => {
-      validateAbilityShard(shardData.cards, abilities, release, shard);
+      fetchJson(`${base}data/${release.release_id}/abilities/${String(shard).padStart(3, '0')}.json`),
+      release.schema === 'mtgemb-release-v4' ? (tagsReady ??= fetchJson(`${base}data/${release.release_id}/tags.json`).then((loaded) => { validateTags(release, loaded); tags = loaded; return loaded; })) : Promise.resolve(null)
+    ]).then(([shardData, abilities, loadedTags]) => {
+      validateAbilityShard(shardData.cards, abilities, release, shard, loadedTags);
       return abilities;
     }).catch((reason) => { abilityCache.delete(shard); throw reason; }));
     return abilityCache.get(shard);
   };
+  const getLines = async (shard) => {
+    if (!lineCache.has(shard)) lineCache.set(shard, Promise.all([getShard(shard), fetchJson(`${base}data/${release.release_id}/lines/${String(shard).padStart(3, '0')}.json`)]).then(([shardData, lines]) => {
+      validateLineShard(shardData.cards, lines, release, shard);
+      return lines;
+    }).catch((reason) => { lineCache.delete(shard); throw reason; }));
+    return lineCache.get(shard);
+  };
   const getCard = async (index) => (await getShard(shardFor(index))).cards[index % release.shard_size];
   const updateUrl = (push = true, card = selectedCard?.id ?? parseUrl(location.search).card) => {
-    const queryString = serializeUrl({ card, ability: activeAbility, ...filters() });
+    const queryString = serializeUrl({ card, ability: activeAbility, rank, ...filters() });
     const next = `${location.pathname}${queryString ? `?${queryString}` : ''}`;
     history[push ? 'pushState' : 'replaceState']({}, '', next);
   };
@@ -94,8 +109,13 @@
       selectedCard = card;
       wholeCardNeighbours = shardData.neighbours[index % release.shard_size];
       abilityEntries = abilities?.[index % release.shard_size] ?? [];
+      cardTags = release.schema === 'mtgemb-release-v4' ? card.tags.map((tag) => tags.labels[tag]) : [];
       activeAbility = resolveAbilityIndex(requestedAbility, abilityEntries);
-      savedNeighbours = activeAbility === null ? wholeCardNeighbours : abilityEntries[activeAbility].neighbours;
+      if (rank === 'line' && release.schema === 'mtgemb-release-v4') activeAbility = null;
+      if (rank === 'line' && release.schema === 'mtgemb-release-v4') {
+        const lineShard = await getLines(shard);
+        savedNeighbours = lineShard[index % release.shard_size];
+      } else savedNeighbours = activeAbility === null ? wholeCardNeighbours : abilityEntries[activeAbility].neighbours;
       visibleNeighbours = savedNeighbours;
       if (card.has_text) await refreshFilters('none', request);
       if (request !== token) return;
@@ -150,13 +170,31 @@
   };
   const onFilter = () => refreshFilters('push').catch((reason) => { error = reason.message; });
   const chooseAbility = (value) => {
+    rank = 'whole';
     activeAbility = value === '' ? null : Number(value);
     savedNeighbours = activeAbility === null ? wholeCardNeighbours : abilityEntries[activeAbility].neighbours;
     refreshFilters('push').catch((reason) => { error = reason.message; });
   };
+  const chooseRank = async (value) => {
+    rank = value;
+    activeAbility = null;
+    if (rank === 'line') {
+      try {
+        const request = token;
+        const shard = shardFor(selectedIndex);
+        const lineShard = await getLines(shard);
+        if (request !== token) return;
+        savedNeighbours = lineShard[selectedIndex % release.shard_size];
+        refreshFilters('push').catch((reason) => { error = reason.message; });
+      } catch (reason) { error = reason.message; }
+    } else {
+      savedNeighbours = wholeCardNeighbours;
+      refreshFilters('push').catch((reason) => { error = reason.message; });
+    }
+  };
   const onHistory = () => {
     const state = parseUrl(location.search);
-    color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type;
+    color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type; rank = state.rank;
     if (state.card) selectId(state.card, false, state.ability);
     else {
       token += 1;
@@ -199,7 +237,7 @@
       idsReady.catch((reason) => { error = reason.message; loading = false; });
       await namesReady;
       const state = parseUrl(location.search);
-      color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type;
+      color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type; rank = state.rank;
       const startupToken = token;
       await idsReady;
       if (state.card && startupToken === token) selectId(state.card, false, state.ability);
@@ -243,6 +281,7 @@
         <div class="card-content">
           {#each selectedCard.faces as face}<div class="face"><h2>{face.name}</h2><p class="mana">{face.mana_cost || '—'}</p><p class="type-line">{face.type_line}</p><p class="oracle">{face.oracle_text}</p></div>{/each}
           <div class="stats"><div><small>COLOUR IDENTITY</small><strong>{selectedCard.color_identity || 'Colourless'}</strong></div><div><small>MANA VALUE</small><strong>{selectedCard.mv.toFixed(1)}</strong></div></div>
+          {#if release.schema === 'mtgemb-release-v4' && cardTags.length}<div class="tag-chips" aria-label="Card tags">{#each cardTags as label}<span class="tag-chip">{label}</span>{/each}</div>{/if}
           <a class="scryfall" href={selectedCard.scryfall_uri} target="_blank" rel="noreferrer">Open card reference <span>↗</span></a>
         </div>
       </article>
@@ -251,6 +290,9 @@
         <div class="results-heading"><div><p class="eyebrow">RANKED BY EFFECT SIMILARITY</p><h2 id="neighbours-title">Nearby ideas <span>{savedNeighbours.length}</span></h2></div><div class="model-chip"><i></i>{release?.model?.status ?? 'unknown'}</div></div>
         {#if !selectedCard.has_text}<div class="notice empty"><strong>No neighbours for this card</strong><span>This card has no rules text, so no neighbours were computed.</span></div>
         {:else}
+          {#if release.schema === 'mtgemb-release-v4'}
+            <div class="similar-by"><label for="ranking">Rank by</label><select id="ranking" value={rank} onchange={(event) => chooseRank(event.currentTarget.value)}><option value="whole">Whole card</option><option value="line">Line match (exploratory)</option></select>{#if rank === 'line'}<span>{release.line_status}</span>{/if}</div>
+          {/if}
           {#if abilityEntries.length}
             <div class="similar-by">
               <label for="similar-by">Similar by</label>
@@ -260,6 +302,7 @@
               </select>
               <span>Ability matches are experimental (not evaluated).</span>
             </div>
+            {#if release.schema === 'mtgemb-release-v4' && activeAbility !== null && abilityEntries[activeAbility]?.tags?.length}<div class="tag-chips" aria-label="Ability tags">{#each abilityEntries[activeAbility].tags as tag}<span class="tag-chip">{tags.labels[tag]}</span>{/each}</div>{/if}
           {/if}
           <p class="filter-label">Filtering the {savedNeighbours.length} saved neighbours</p>
           <div class="filters">
@@ -284,6 +327,8 @@
 <footer><span>Card Atlas <i>·</i> {release?.model?.label ?? 'Release metadata unavailable'}</span><span>{release?.attribution}</span></footer>
 
 <style>
+  .tag-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 12px 0; }
+  .tag-chip { display: inline-flex; border: 1px solid #d9dfd4; border-radius: 999px; padding: 3px 8px; background: #eef2e9; color: #4c5d4e; font-size: 10px; line-height: 1.3; }
   .similar-by { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   .similar-by label { font-size: 11px; color: #5d6056; }
   .similar-by select { max-width: min(100%, 360px); height: 34px; border: 1px solid #dad8ce; border-radius: 4px; background: #fbfaf7; color: #3f4239; padding: 0 8px; font: 11px 'DM Sans', sans-serif; }

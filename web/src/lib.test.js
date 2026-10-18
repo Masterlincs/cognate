@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateIds, validateRelease, withIds, validateReleasePointer, validateShard } from './lib.js';
+import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateIds, validateRelease, validateTags, withIds, validateReleasePointer, validateShard } from './lib.js';
 
 const names = { names: ['Café Lantern', 'Blue Door', 'Green Thread // Thread Unbound'], aliases: [['Thread Unbound', 2]] };
 const ids = { ids: ['a', 'b', 'c'] };
@@ -30,7 +30,7 @@ describe('search and ranking helpers', () => {
 describe('URL state', () => {
   it('round trips card and filters', () => {
     const state = { card: 'oracle-123', color: 'G', minMv: 2, maxMv: null, creature: 'creature', type: 'human' };
-    expect(parseUrl(`?${serializeUrl(state)}`)).toEqual({ ...state, ability: null, maxMv: null });
+    expect(parseUrl(`?${serializeUrl(state)}`)).toEqual({ ...state, ability: null, rank: 'whole', maxMv: null });
   });
   it('round trips an ability index and falls back to Whole card for invalid indexes', () => {
     const state = { card: 'oracle-123', ability: 1, color: '', minMv: null, maxMv: null, creature: '', type: '' };
@@ -39,6 +39,11 @@ describe('URL state', () => {
     expect(parseUrl('?card=oracle-123&ability=-1').ability).toBeNull();
     expect(resolveAbilityIndex(1, ['one', 'two'])).toBe(1);
     expect(resolveAbilityIndex(2, ['one', 'two'])).toBeNull();
+  });
+  it('round trips exploratory line ranking', () => {
+    const state = { card: 'oracle-123', rank: 'line' };
+    expect(parseUrl(`?${serializeUrl(state)}`).rank).toBe('line');
+    expect(parseUrl('?card=oracle-123').rank).toBe('whole');
   });
 });
 
@@ -112,5 +117,34 @@ describe('bundle validation', () => {
     const reminder = [{ ...v3Cards[0], faces: [{ oracle_text: 'Flying (This creature can block.)\n(Reminder only.)\nDraw a card.' }] }, v3Cards[1]];
     const modelLines = [[{ text: 'Flying', neighbours: [[1, 0.9]] }, { text: 'Draw a card.', neighbours: [] }], []];
     expect(validateShard(reminder, v3Neighbours, v3, 0, ['a', 'b'], modelLines)).toBe(true);
+  });
+
+  it('validates v4 tags, ability tag subsets, and line neighbours while retaining v3', () => {
+    const files = ['names.json', 'ids.json', 'tags.json', 'cards/000.json', 'neighbours/000.json', 'abilities/000.json', 'lines/000.json'];
+    const v4 = {
+      schema: 'mtgemb-release-v4', n_cards: 2, shard_size: 2, k: 2, ability_k: 50,
+      abilities_status: 'exploratory', line_k: 50, line_status: 'exploratory line matches', tags_status: 'proxy tags',
+      files: Object.fromEntries(files.map((file) => [file, { sha256: 'a'.repeat(64), bytes: 1 }]))
+    };
+    const v4Names = { names: ['Multi', 'Blank'], aliases: [] };
+    const v4Tags = { labels: ['draw', 'life'] };
+    const v4Cards = [
+      { ...cards[0], faces: [{ oracle_text: 'Draw a card.\nGain 1 life.' }], tags: [0] },
+      { ...cards[1], has_text: false, tags: [] }
+    ];
+    const v4Neighbours = [[[1, 0.8]], []];
+    const v4Abilities = [[{ text: 'Draw a card.', neighbours: [[1, 0.9]], tags: [0] }, { text: 'Gain 1 life.', neighbours: [], tags: [0] }], []];
+    const v4Lines = [[[1, 0.7]], []];
+    expect(validateRelease(v4, v4Names)).toBe(true);
+    expect(validateTags(v4, v4Tags)).toBe(true);
+    expect(validateShard(v4Cards, v4Neighbours, v4, 0, ['a', 'b'], v4Abilities, v4Lines, v4Tags)).toBe(true);
+    for (const missing of ['tags.json', 'lines/000.json']) {
+      const manifest = { ...v4, files: { ...v4.files } };
+      delete manifest.files[missing];
+      expect(() => validateRelease(manifest, v4Names)).toThrow(new RegExp(missing.replace('.', '\\.')));
+    }
+    expect(() => validateShard([{ ...v4Cards[0], tags: [2] }, v4Cards[1]], v4Neighbours, v4, 0, ['a', 'b'], v4Abilities, v4Lines, v4Tags)).toThrow(/tag index/);
+    expect(() => validateShard(v4Cards, v4Neighbours, v4, 0, ['a', 'b'], [[{ ...v4Abilities[0][0], tags: [1] }, v4Abilities[0][1]], []], v4Lines, v4Tags)).toThrow(/subset/);
+    expect(() => validateShard(v4Cards, v4Neighbours, v4, 0, ['a', 'b'], v4Abilities, [[[0, 0.7]], []], v4Tags)).toThrow(/Line neighbour index or score/);
   });
 });
