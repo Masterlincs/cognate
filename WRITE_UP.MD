@@ -303,7 +303,7 @@ Served `web/dist`, built with `current.json` → `2026-10-16-e5-base-v2-d4c393ee
    - Crashes, each followed by RESUMED: initial-2, 3, 4, 6, 8; confirm-e5-s1, e5-s3, bge-s2, bge-s3.
    - initial-3 also has one PAUSED/RESUMED pair.
    - Run counts against the caps: initial 9/10, extension 0/3, confirmation 6/9.
-   - Export crashes (no partial output published): v2 attempt 1. The earlier `9a16efe0` is the P8 dry-run export of the pretrained model (`run_id` null); `9a16efe0.failed-1` is a failed attempt, kept and not deleted.
+   - Export crashes (no partial output published): v2 attempt 1. The earlier `9a16efe0` is the P8 dry-run export of the pretrained model (`run_id` null); `9a16efe0.failed-1` holds the empty partial directories from the first dry run, which crashed on an inverted index map (P8 step); kept, not deleted.
 3. **Clean environment.** Fresh `git clone` of origin at 7554041 into a temp dir:
    - `uv sync` 19 s, with a warm uv cache, so not a cold network install;
    - `ruff check` clean; `pytest -q` 73 passed, 4 real-model tests deselected; the tiny resume test `test_resume_matches_uninterrupted_and_rejects_corruption` passes;
