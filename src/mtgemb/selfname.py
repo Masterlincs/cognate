@@ -26,8 +26,10 @@ def v2_texts(cards: pd.DataFrame) -> pd.Series:
 
 
 def diagnose(ds_dir, name: str, backbone: str, max_length: int,
-             model_path: str | None = None) -> dict:
+             model_path: str | None = None, cpu: bool = False) -> dict:
     import time
+
+    import torch
 
     from . import encoder as enc
     from .evaluate import cohort_summary, evaluate, load_benchmark
@@ -40,7 +42,7 @@ def diagnose(ds_dir, name: str, backbone: str, max_length: int,
     recipe = enc.RECIPES[backbone]
     log_event("eval", "STARTED", task="selfname-diagnosis", name=name, model_path=model_path)
     tok, model = enc.load(recipe, model_path)
-    dev = enc.device()
+    dev = torch.device("cpu") if cpu else enc.device()  # XPU segfaults happen
     model.to(dev)
     res = {}
     for ver, texts in (("v1", bm.texts), ("v2", t2)):
@@ -51,7 +53,7 @@ def diagnose(ds_dir, name: str, backbone: str, max_length: int,
                         "anchor_text_changed": [changed[i] for i in bm.anchor_idx],
                         "anchor_text_same": [not changed[i] for i in bm.anchor_idx]})}
     out = {"name": name, "backbone": backbone, "model_path": model_path,
-           "max_length": max_length, "benchmark_id": bm.spec["benchmark_id"],
+           "max_length": max_length, "device": str(dev), "benchmark_id": bm.spec["benchmark_id"],
            "universe_texts_changed": int(sum(changed)), "universe": len(bm.ids),
            "results": res, "code": git_identity(), "created_utc": utcnow(),
            "note": "selection-exposed dev diagnosis; inference only; not a promotion test"}
