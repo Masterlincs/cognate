@@ -119,6 +119,62 @@ def test_replay_v3_verifies_ability_artifacts(tmp_path, monkeypatch, fault):
     assert f"{name} hash mismatch or missing" in result["releases"]["r1"]["problems"]
 
 
+@pytest.mark.parametrize("fault,problem", [
+    (None, None),
+    ("tag_range", "tag indices invalid or out of range"),
+    ("ability_subset", "ability tags are not a subset"),
+    ("line_self", "invalid line neighbour index"),
+    ("line_range", "invalid line neighbour index"),
+    ("line_order", "invalid line neighbour index"),
+    ("line_long", "invalid line neighbour list length"),
+    ("missing_line", "bundle manifest incomplete"),
+    ("tags_hash", "bundle file mismatch or missing: tags.json"),
+])
+def test_replay_v4_checks_tags_and_line_neighbours(tmp_path, monkeypatch, fault, problem):
+    v, _ = _setup(tmp_path, monkeypatch)
+    art = _v3_release(tmp_path, v)
+    bundle = tmp_path / "bundle-r1"
+    man = json.loads((bundle / "release.json").read_text("utf-8"))
+    man.update(schema="mtgemb-release-v4", line_k=2)
+    payloads = {"tags.json": {"labels": ["first", "second"]}}
+    n, ss = man["n_cards"], man["shard_size"]
+    for start in range(0, n, ss):
+        name = f"{start // ss:03d}.json"
+        size = min(ss, n - start)
+        payloads[f"cards/{name}"] = [{"tags": [0], "has_text": True} for _ in range(size)]
+        payloads[f"abilities/{name}"] = [[{"tags": [0]}] for _ in range(size)]
+        payloads[f"lines/{name}"] = [[] for _ in range(size)]
+    # Mutations are rehashed, so semantic checks must catch them.
+    if fault == "tag_range":
+        payloads["cards/000.json"][0]["tags"] = [2]
+    elif fault == "ability_subset":
+        payloads["abilities/000.json"][0][0]["tags"] = [1]
+    elif fault == "line_self":
+        payloads["lines/000.json"][0] = [[0, 0.5]]
+    elif fault == "line_range":
+        payloads["lines/000.json"][0] = [[n, 0.5]]
+    elif fault == "line_order":
+        payloads["lines/000.json"][0] = [[1, 0.2], [2, 0.8]]
+    elif fault == "line_long":
+        payloads["lines/000.json"][0] = [[1, 0.8], [2, 0.5], [3, 0.2]]
+    for name, value in payloads.items():
+        if fault == "missing_line" and name == "lines/001.json":
+            continue
+        path = bundle / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(value), "utf-8")
+        man["files"][name] = {"sha256": sha256_file(path), "bytes": path.stat().st_size}
+    if fault == "tags_hash":
+        (bundle / "tags.json").write_text('{"labels": ["changed"]}', "utf-8")
+    (bundle / "release.json").write_text(json.dumps(man), "utf-8")
+    _edit_json(art / "release_meta.json", lambda m: m.update(
+        release_json_sha256=sha256_file(bundle / "release.json")))
+    result = baselines.replay_evals("ds")
+    assert result["passed"] == (fault is None)
+    if fault is not None:
+        assert any(problem in p for p in result["releases"]["r1"]["problems"])
+
+
 def _tamper_vectors(tmp_path, v, d):
     np.save(d / "vectors.npy", v[::-1].copy())
 

@@ -74,6 +74,11 @@ def test_release_digest_binds_catalogue_and_encoder():
     # Omitting the optional ability hash preserves the original v2 digest formula.
     old = sha256_json(["mtgemb-release-v2", "ds", sha256_json(base[1]), *base[2:]])[:8]
     assert release_digest(*base, schema="mtgemb-release-v2") == old
+    old_v3 = sha256_json(["mtgemb-release-v3", "ds", sha256_json(base[1]), *base[2:], "av"])[:8]
+    assert release_digest(*base, schema="mtgemb-release-v3", ability_vec_hash="av") == old_v3
+    assert release_digest(*base, ability_vec_hash="av", line_hash="lh", tags_hash="th") != old_v3
+    assert release_digest(*base, line_hash="a") != release_digest(*base, line_hash="b")
+    assert release_digest(*base, tags_hash="a") != release_digest(*base, tags_hash="b")
     assert release_digest(*base, ability_vec_hash="a") != release_digest(
         *base, ability_vec_hash="b")
 
@@ -127,7 +132,7 @@ def test_ability_neighbours_rejects_incorrect_block_ranking(monkeypatch):
             [values[line] for line in lines], np.float32))
 
 
-def test_export_v3_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch):
+def test_export_v4_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch):
     from contextlib import nullcontext
 
     import pandas as pd
@@ -136,14 +141,19 @@ def test_export_v3_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
     import mtgemb.export as exporter
 
     # Textless cards before/between text rows expose accidental text-row bundle indices.
-    texts = ["", "A\n//\nB", "", "C", "D"]
+    texts = ["", "A\n//\nB", "", "C", "D", "E"]
     cards = pd.DataFrame([
-        {"oracle_id": str(i), "split": "fit", "text_status": "ok" if text else "empty",
+        {"oracle_id": str(i), "split": "dev" if i == 1 else "fit",
+         "text_status": "ok" if text else "empty",
          "text": text, "name": str(i), "faces": "[]", "layout": "normal",
          "color_identity": "", "mv": 0, "type_line": "", "is_creature": False,
          "image": "", "scryfall_uri": ""} for i, text in enumerate(texts)])
     monkeypatch.setattr(exporter, "load_dataset", lambda _: {
-        "cards": cards, "ident": {"dataset_id": "test", "snapshot": "test"}})
+        "cards": cards, "ident": {"dataset_id": "test", "snapshot": "test"},
+        "memberships": pd.DataFrame({"oracle_id": ["1", "3", "4", "5", "4"],
+                                     "tag_id": ["t", "t", "t", "t", "a"]}),
+        "tags": pd.DataFrame({"tag_id": ["t", "a"], "label": ["test tag", "other"],
+                              "functional": [True, True]})})
     monkeypatch.setattr(exporter, "DeviceLock", nullcontext)
     monkeypatch.setattr(exporter, "ARTIFACTS", tmp_path / "art")
     monkeypatch.setattr(exporter, "SHARD", 2)
@@ -152,7 +162,7 @@ def test_export_v3_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
     monkeypatch.setattr(exporter.enc, "load", lambda *a: (None, torch.nn.Identity()))
     monkeypatch.setattr(exporter.enc, "device", lambda: torch.device("cpu"))
     vectors = {"A": [1, 0], "B": [0, 1], "A\n//\nB": [1, 0],
-               "C": [0.6, 0.8], "D": [1, 0]}
+               "C": [0.6, 0.8], "D": [1, 0], "E": [1, 0]}
     monkeypatch.setattr(exporter.enc, "encode", lambda model, tok, lines, *a, **kw: np.array(
         [vectors[line] for line in lines], np.float32))
     result = exporter.export("unused", "e5-base-v2", 94, "fake", "experimental",
@@ -161,12 +171,13 @@ def test_export_v3_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
 
     bundle, art = Path(result["bundle"]), Path(result["artifacts"])
     release = json.loads((bundle / "release.json").read_text("utf-8"))
-    assert release["schema"] == "mtgemb-release-v3" and release["ability_k"] == 50
+    assert release["schema"] == "mtgemb-release-v4" and release["ability_k"] == 50
     assert release["abilities_status"] == "exploratory: not evaluated on the tag proxy"
-    expected = [[], [{"text": "A", "neighbours": [[4, 1.0], [3, 0.6]]},
-                     {"text": "B", "neighbours": [[3, 0.8], [4, 0.0]]}], [], [], []]
+    expected = [[], [{"text": "A", "tags": [1], "neighbours": [[4, 1.0], [5, 1.0], [3, 0.6]]},
+                     {"text": "B", "tags": [], "neighbours": [[3, 0.8], [4, 0.0], [5, 0.0]]}],
+                [], [], [], []]
     rows = []
-    for i, length in enumerate([2, 2, 1]):
+    for i, length in enumerate([2, 2, 2]):
         name = f"abilities/{i:03d}.json"
         path = bundle / name
         shard = json.loads(path.read_text("utf-8"))
@@ -178,15 +189,120 @@ def test_export_v3_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
     assert not (tmp_path / "bundle" / "data" / "current.json").exists()
     lines = json.loads((art / "ability_lines.json").read_text("utf-8"))
     assert lines == [{"text": "A", "oracle_id": "1"}, {"text": "B", "oracle_id": "1"},
-                     {"text": "C", "oracle_id": "3"}, {"text": "D", "oracle_id": "4"}]
+                     {"text": "C", "oracle_id": "3"}, {"text": "D", "oracle_id": "4"},
+                     {"text": "E", "oracle_id": "5"}]
     assert np.array_equal(np.load(art / "ability_vectors.npy"),
-                          np.array([[1, 0], [0, 1], [0.6, 0.8], [1, 0]], np.float32))
+                          np.array([[1, 0], [0, 1], [0.6, 0.8], [1, 0], [1, 0]], np.float32))
     meta = json.loads((art / "release_meta.json").read_text("utf-8"))
-    assert meta["n_ability_lines"] == 4 and meta["n_ability_queries"] == 2
+    assert meta["n_ability_lines"] == 5 and meta["n_ability_queries"] == 2
     for name in ("ability_vectors", "ability_lines"):
         suffix = ".npy" if name == "ability_vectors" else ".json"
         assert meta[name + "_sha256"] == sha256_file(art / (name + suffix))
     assert meta["ability_parity"]["topk_reference_failures"] == 0
+
+    assert release["line_k"] == 50
+    assert release["line_status"].endswith("dev tag proxy")
+    assert release["tags_status"].endswith("")
+    assert json.loads((bundle / "tags.json").read_text("utf-8")) == {
+        "labels": ["other", "test tag"]}
+    records, line_rows = [], []
+    for i in range(3):
+        records += json.loads((bundle / f"cards/{i:03d}.json").read_text("utf-8"))
+        name = f"lines/{i:03d}.json"
+        path = bundle / name
+        line_rows += json.loads(path.read_text("utf-8"))
+        assert release["files"][name] == {"sha256": sha256_file(path),
+                                          "bytes": path.stat().st_size}
+    assert [c["tags"] for c in records] == [[], [1], [], [1], [0, 1], [1]]
+    assert line_rows[0] == line_rows[2] == []
+    assert line_rows[1] == [[3, 0.7], [4, 0.5], [5, 0.5]]
+    assert all(i != j for i, row in enumerate(line_rows) for j, _ in row)
+    assert all(row == sorted(row, key=lambda x: -x[1]) for row in line_rows)
+    assert release["files"]["tags.json"]["sha256"] == sha256_file(bundle / "tags.json")
+
+    # Reuse a v3-shaped source with the exact pinned vectors; encoding must never run.
+    import shutil
+    reuse_root = tmp_path / "reuse-art"
+    source = reuse_root / "releases" / "source-v3"
+    shutil.copytree(art, source)
+    monkeypatch.setattr(exporter.enc, "load", lambda *a: pytest.fail("reuse loaded a model"))
+    monkeypatch.setattr(exporter.enc, "encode", lambda *a, **kw: pytest.fail("reuse encoded"))
+    monkeypatch.setattr(exporter, "ARTIFACTS", reuse_root)
+    reused = exporter.export("unused", "e5-base-v2", 94, "fake", "experimental",
+                             web_dir=tmp_path / "reuse", from_release="source-v3")
+    reused_art = Path(reused["artifacts"])
+    reused_meta = json.loads((reused_art / "release_meta.json").read_text("utf-8"))
+    assert reused_meta["vectors_from"] == "source-v3"
+    for key in ("parity", "ability_parity"):
+        assert reused_meta[key] == meta[key]
+    for filename in ("vectors.npy", "ability_vectors.npy", "ability_lines.json"):
+        assert (reused_art / filename).read_bytes() == (source / filename).read_bytes()
+    source_meta = json.loads((source / "release_meta.json").read_text("utf-8"))
+    source_meta["model_hash"] = "wrong"
+    (source / "release_meta.json").write_text(json.dumps(source_meta), "utf-8")
+    with pytest.raises(ValueError, match="model_hash mismatch"):
+        exporter.export("unused", "e5-base-v2", 94, "fake", "experimental",
+                        from_release="source-v3")
+    source_meta["model_hash"] = meta["model_hash"]
+    (source / "release_meta.json").write_text(json.dumps(source_meta), "utf-8")
+    (source / "vectors.npy").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="vectors.npy hash mismatch"):
+        exporter.export("unused", "e5-base-v2", 94, "fake", "experimental",
+                        from_release="source-v3")
+
+
+@pytest.mark.parametrize("fault", ["dataset_id", "model_hash", "recipe", "max_length",
+                                   "oracle_id", "line_text", "line_hash", "line_vectors_hash"])
+def test_reuse_rejects_incompatible_source(tmp_path, monkeypatch, fault):
+    import mtgemb.export as exporter
+
+    monkeypatch.setattr(exporter, "ARTIFACTS", tmp_path)
+    root = tmp_path / "releases" / "source"
+    root.mkdir(parents=True)
+    np.save(root / "vectors.npy", np.array([[1.0, 0.0]], np.float32))
+    np.save(root / "ability_vectors.npy", np.array([[1.0, 0.0]], np.float32))
+    lines = [{"text": "A", "oracle_id": "a"}]
+    if fault == "oracle_id":
+        lines[0]["oracle_id"] = "other"
+    elif fault == "line_text":
+        lines[0]["text"] = "B"
+    (root / "ability_lines.json").write_text(json.dumps(lines), "utf-8")
+    meta = {"dataset_id": "ds", "model_hash": "model",
+            "encoder": {"model_id": "m", "max_length": 94},
+            "vectors_sha256": sha256_file(root / "vectors.npy"),
+            "ability_vectors_sha256": sha256_file(root / "ability_vectors.npy"),
+            "ability_lines_sha256": sha256_file(root / "ability_lines.json")}
+    if fault in ("dataset_id", "model_hash"):
+        meta[fault] = "other"
+    elif fault == "recipe":
+        meta["encoder"]["model_id"] = "other"
+    elif fault == "max_length":
+        meta["encoder"]["max_length"] = 95
+    elif fault == "line_hash":
+        meta["ability_lines_sha256"] = "other"
+    elif fault == "line_vectors_hash":
+        meta["ability_vectors_sha256"] = "other"
+    (root / "release_meta.json").write_text(json.dumps(meta), "utf-8")
+    with pytest.raises(ValueError, match="mismatch"):
+        exporter._reuse_vectors("source", "ds", "model", {"model_id": "m", "max_length": 94},
+                                ["A"], ["a"])
+
+
+def test_export_cli_forwards_from_release(monkeypatch, capsys):
+    import mtgemb.cli as cli
+    import mtgemb.export as exporter
+
+    received = {}
+
+    def fake_export(*args, **kwargs):
+        received.update(kwargs)
+        return {}
+
+    monkeypatch.setattr(exporter, "export", fake_export)
+    cli.main(["export", "e5-base-v2", "--max-length", "94", "--label", "fake",
+              "--status", "experimental", "--from-release", "source-v3"])
+    assert received == {"from_release": "source-v3"}
+    assert capsys.readouterr().out.strip() == "{}"
 
 
 def test_finish_interrupted_adopts_only_matching_artifacts(tmp_path):

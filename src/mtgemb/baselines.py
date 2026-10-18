@@ -254,6 +254,59 @@ def _replay_one(d: Path, bm: Benchmark, ds: dict, bid: str, tol: float) -> tuple
     return {"ok": not probs, "problems": probs, **out}, v
 
 
+def _check_v4_shards(bundle: Path, man: dict, n: int) -> list[str]:
+    """Validate tag attribution and optional line rankings, beyond file integrity."""
+    try:
+        labels = read_json(bundle / "tags.json")["labels"]
+        if not isinstance(labels, list) or not all(isinstance(t, str) for t in labels):
+            raise ValueError("invalid tag labels")
+        ss, k = man["shard_size"], man["line_k"]
+        if type(ss) is not int or ss <= 0 or type(k) is not int or k < 0:
+            raise ValueError("invalid line_k or shard_size")
+
+        def tags(value):
+            if (not isinstance(value, list) or
+                    any(type(t) is not int or not 0 <= t < len(labels) for t in value) or
+                    value != sorted(set(value))):
+                raise ValueError("tag indices invalid or out of range")
+            return set(value)
+
+        for start in range(0, n, ss):
+            name = f"{start // ss:03d}.json"
+            cards = read_json(bundle / "cards" / name)
+            abilities = read_json(bundle / "abilities" / name)
+            lines = read_json(bundle / "lines" / name)
+            size = min(ss, n - start)
+            if any(not isinstance(x, list) or len(x) != size for x in (cards, abilities, lines)):
+                raise ValueError("v4 shard length mismatch")
+            triples = zip(cards, abilities, lines, strict=True)
+            for offset, (card, ability, line) in enumerate(triples):
+                ct = tags(card["tags"])
+                if not isinstance(ability, list):
+                    raise ValueError("invalid ability list")
+                for a in ability:
+                    if not tags(a["tags"]).issubset(ct):
+                        raise ValueError("ability tags are not a subset of card tags")
+                if not isinstance(line, list) or len(line) > k:
+                    raise ValueError("invalid line neighbour list length")
+                seen, previous = set(), float("inf")
+                for pair in line:
+                    if not isinstance(pair, list) or len(pair) != 2:
+                        raise ValueError("invalid line neighbour pair")
+                    j, score = pair
+                    if (type(j) is not int or not 0 <= j < n or j == start + offset or j in seen or
+                            type(score) not in (int, float) or not np.isfinite(score) or
+                            score > previous):
+                        raise ValueError("invalid line neighbour index, self, duplicate or order")
+                    seen.add(j)
+                    previous = score
+                if not card["has_text"] and (ct or ability or line):
+                    raise ValueError("textless card has tags or line neighbours")
+        return []
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return [f"invalid v4 bundle: {e}"]
+
+
 def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dict,
                    tol: float) -> dict:
     """Release integrity, and identity with the evaluated encoder it was exported from."""
@@ -287,25 +340,30 @@ def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dic
         if man.get("n_cards") != n_cat:
             probs.append(f"bundle n_cards {man.get('n_cards')} != {n_cat}")
         ss = man.get("shard_size")
-        if man.get("schema") not in BUNDLE_FILES:
+        schemas = {**BUNDLE_FILES, "mtgemb-release-v4": ["names.json", "ids.json", "tags.json"]}
+        if man.get("schema") not in schemas:
             probs.append(f"unknown bundle schema {man.get('schema')}")
         elif type(ss) is not int or ss <= 0:
             probs.append(f"bundle shard_size {ss!r} is not a positive integer")
         else:
             shards = -(-n_cat // ss)
             dirs = ("cards", "neighbours")
-            if man["schema"] == "mtgemb-release-v3":
+            if man["schema"] in ("mtgemb-release-v3", "mtgemb-release-v4"):
                 dirs += ("abilities",)
-            need = BUNDLE_FILES[man["schema"]] + [f"{d}/{i:03d}.json" for d in
+            if man["schema"] == "mtgemb-release-v4":
+                dirs += ("lines",)
+            need = schemas[man["schema"]] + [f"{d}/{i:03d}.json" for d in
                                                   dirs for i in range(shards)]
             if absent := sorted(set(need) - set(man["files"])):
                 probs.append(f"bundle manifest incomplete: {absent[:5]}")
-        if man.get("schema") == "mtgemb-release-v3":  # the ability artifacts behind the shards
+        if man.get("schema") in ("mtgemb-release-v3", "mtgemb-release-v4"):
             for f, k in (("ability_vectors.npy", "ability_vectors_sha256"),
                          ("ability_lines.json", "ability_lines_sha256")):
                 p = meta_p.parent / f
                 if not meta.get(k) or not p.exists() or sha256_file(p) != meta[k]:
                     probs.append(f"{f} hash mismatch or missing")
+        if man.get("schema") == "mtgemb-release-v4":
+            probs.extend(_check_v4_shards(bundle, man, n_cat))
     enc_meta = meta["encoder"]
     enc_meta = dict(enc_meta) if isinstance(enc_meta, dict) else None  # never coerce a list
     ml = enc_meta.pop("max_length", None) if enc_meta is not None else None

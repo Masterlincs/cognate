@@ -38,6 +38,7 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--model-path")
     q.add_argument("--run-id")
     q.add_argument("--web-dir")
+    q.add_argument("--from-release", metavar="ID")
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("confirm-report", help="registered P7 contrasts and promotion decision")
     q.add_argument("--ds", default=DEFAULT_DS)
@@ -114,7 +115,7 @@ def main(argv: list[str] | None = None) -> None:
         from .export import export
 
         out = export(a.ds, a.backbone, a.max_length, a.label, a.status, a.model_path,
-                     a.run_id, a.web_dir)
+                     a.run_id, a.web_dir, from_release=a.from_release)
     elif a.cmd == "confirm-report":
         from .evaluate import bench_path
         from .report import confirmation_report
