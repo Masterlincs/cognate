@@ -1,0 +1,32 @@
+{
+ "run_id": "ext-3-e5-selfname",
+ "slot": "ext-3",
+ "hypothesis": "training and evaluating on no_reminder_v2 texts (own names -> \"this creature\" etc.) closes the 0.054 gap for name-bearing anchors",
+ "comparator": "initial-1-e5-lr3e-05-s20 (same config on no_reminder_v1 texts)",
+ "backbone": "e5-base-v2",
+ "max_length": 94,
+ "lr": 3e-05,
+ "scale": 20.0,
+ "batch_pairs": 32,
+ "hard_negatives": 1,
+ "neg_band": [
+  1,
+  30
+ ],
+ "weight_decay": 0.01,
+ "total_updates": 2000,
+ "warmup_frac": 0.1,
+ "grad_clip": 1.0,
+ "eval_every": 250,
+ "seed": 0,
+ "data_seed": 0,
+ "objective": "masked_infonce",
+ "pair_weighting": "none",
+ "batch_mode": "random",
+ "precision": "fp32",
+ "max_skip_rate": 0.01,
+ "guardrail_hard_lexical": 0.5391280239807161,
+ "selection": "guarded_best",
+ "dataset_dir": "data/processed/2026-10-16_no_reminder_v1",
+ "text_version": "no_reminder_v2"
+}
