@@ -167,3 +167,120 @@ def build_pool(ds_dir, release_dir) -> dict:
     counts = {ph: sum(it["phase"] == ph for it in items)
               for ph in ("calibration", "scored", "repeat")}
     return {"pool_id": pool_id, "dir": str(out), "items": counts}
+
+
+# ---------------------------------------------------------------- analysis
+# labels.jsonl lines: {"item_id", "grade": 0|1|2|3|"unknown", "ability": int|"whole"|null,
+#                      "reason": str, "ts", "session"}; the last line per item_id wins.
+
+def last_labels(lines: list[dict]) -> dict[str, dict]:
+    out = {}
+    for x in lines:
+        if x.get("grade") not in (0, 1, 2, 3, "unknown"):
+            raise ValueError(f"bad grade in label {x}")
+        out[x["item_id"]] = x
+    return out
+
+
+def _ndcg(gains: list[float], ideal: list[float]) -> float:
+    disc = 1.0 / np.log2(np.arange(2, len(ideal) + 2))
+    idcg = float((np.array(ideal) * disc[:len(ideal)]).sum())
+    dcg = float((np.array(gains) * disc[:len(gains)]).sum())
+    return dcg / idcg if idcg > 0 else float("nan")
+
+
+def anchor_scores(items: list[dict], key: dict, labels: dict, depth: int = DEPTH) -> dict:
+    """Per system for one anchor's non-repeat items (all judged): mean grade and precision
+    at grade >= 2 over judged (non-unknown) picks, nDCG@depth with unknown as gain 0 and the
+    ideal taken from all judged candidates of the anchor."""
+    ranked: dict[str, list] = {}
+    graded = []
+    for it in items:
+        g = labels[it["item_id"]]["grade"]
+        gain = 0.0 if g == "unknown" else float(g)
+        graded.append(gain)
+        for s, r in key[it["item_id"]]["sources"]:
+            if r is not None:
+                ranked.setdefault(s, []).append((r, g, gain))
+    ideal = sorted(graded, reverse=True)[:depth]
+    out = {}
+    for s, xs in ranked.items():
+        xs.sort()
+        known = [g for _, g, _ in xs if g != "unknown"]
+        out[s] = {"mean_grade": float(np.mean(known)) if known else float("nan"),
+                  "p_at_2": float(np.mean([g >= 2 for g in known])) if known else float("nan"),
+                  "ndcg": _ndcg([gain for _, _, gain in xs], ideal),
+                  "n_unknown": len(xs) - len(known)}
+    return out
+
+
+def repeat_agreement(items: list[dict], key: dict, labels: dict) -> dict:
+    pairs = [(labels[key[it["item_id"]]["repeat_of"]]["grade"], labels[it["item_id"]]["grade"])
+             for it in items if it["phase"] == "repeat" and it["item_id"] in labels
+             and key[it["item_id"]]["repeat_of"] in labels]
+    num = [(a, b) for a, b in pairs if "unknown" not in (a, b)]
+    return {"n": len(pairs), "n_numeric": len(num),
+            "exact": float(np.mean([a == b for a, b in pairs])) if pairs else float("nan"),
+            "within_1": float(np.mean([abs(a - b) <= 1 for a, b in num])) if num
+            else float("nan")}
+
+
+def analyse(pool_dir, n_boot: int = 10000) -> dict:
+    pool_dir = Path(pool_dir)
+    pool, key = read_json(pool_dir / "pool.json"), read_json(pool_dir / "key.json")
+    lines = [json.loads(x) for x in (pool_dir / "labels.jsonl").read_text("utf-8").splitlines()
+             if x.strip()]
+    labels = last_labels(lines)
+    items = pool["items"]
+    by_anchor: dict[str, list] = {}
+    for it in items:
+        if it["phase"] == "scored":
+            by_anchor.setdefault(it["anchor"], []).append(it)
+    complete = {a: xs for a, xs in by_anchor.items()
+                if all(it["item_id"] in labels for it in xs)}
+    per = {a: anchor_scores(xs, key["items"], labels) for a, xs in complete.items()}
+    rows = []
+    for a, d in per.items():
+        abil = [v for s, v in d.items() if s.startswith("ability-")]
+        if abil:
+            d["ability-lists"] = {m: float(np.nanmean([v[m] for v in abil]))
+                                  for m in ("mean_grade", "p_at_2", "ndcg")}
+        for s, v in d.items():
+            if not s.startswith("ability-") or s == "ability-lists":
+                rows.append({"anchor": a, "stratum": key["strata"][a], "system": s, **v})
+    import pandas as pd
+
+    df = pd.DataFrame(rows)
+    summary = {}
+    for stratum in ("all", "single", "multi"):
+        sub = df if stratum == "all" else df[df["stratum"] == stratum]
+        summary[stratum] = {s: {m: float(g[m].mean()) for m in ("mean_grade", "p_at_2", "ndcg")}
+                            | {"n_anchors": int(g["anchor"].nunique())}
+                            for s, g in sub.groupby("system")}
+    rng = np.random.default_rng(SEED)
+    wide = df.pivot(index="anchor", columns="system", values="ndcg")
+    contrasts = {}
+    for comp in ("lexical", "pretrained-e5", "trained-bge-s1", "ability-lists"):
+        if comp not in wide or "finetuned-e5-s1" not in wide:
+            continue
+        d = (wide["finetuned-e5-s1"] - wide[comp]).dropna().to_numpy()
+        if len(d) == 0:
+            continue
+        boot = d[rng.integers(0, len(d), (n_boot, len(d)))].mean(1)
+        contrasts[f"finetuned-e5-s1 - {comp}"] = {
+            "ndcg_diff": float(d.mean()), "ci95": [float(np.quantile(boot, 0.025)),
+                                                   float(np.quantile(boot, 0.975))],
+            "n_anchors": int(len(d))}
+    rand = [labels[it["item_id"]]["grade"] for xs in complete.values() for it in xs
+            if key["items"][it["item_id"]]["sources"] == [["random", None]]]
+    return {"pool_id": pool["pool_id"], "complete_anchors": len(complete),
+            "incomplete_anchors": len(by_anchor) - len(complete),
+            "n_labels": len(labels), "unknown_labels": sum(x["grade"] == "unknown"
+                                                           for x in labels.values()),
+            "summary": summary, "contrasts_ndcg": contrasts,
+            "random_candidate_mean_grade": float(np.mean([g for g in rand if g != "unknown"]))
+            if rand else float("nan"),
+            "repeats": repeat_agreement(items, key["items"], labels),
+            "scope": "exploratory single-rater judged-pool metrics on development anchors "
+                     "; not a tag-proxy result and not inter-annotator agreement",
+            "created_utc": utcnow()}

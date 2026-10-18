@@ -53,3 +53,36 @@ def test_assemble_blinds_dedupes_and_repeats():
     orig = next(it for it in items if it["item_id"] == key[first["item_id"]]["repeat_of"])
     assert orig["anchor"] in ("a0", "a1") and ids.index(orig["item_id"]) < ids.index(
         first["item_id"])
+
+
+def test_anchor_scores_hand_example():
+    import math
+
+    items = [{"item_id": i} for i in ("x", "y", "z", "w")]
+    key = {"x": {"sources": [["lexical", 1], ["finetuned-e5-s1", 2]]},
+           "y": {"sources": [["lexical", 2]]},
+           "z": {"sources": [["finetuned-e5-s1", 1]]},
+           "w": {"sources": [["random", None]]}}
+    labels = {"x": {"grade": 2}, "y": {"grade": "unknown"}, "z": {"grade": 3},
+              "w": {"grade": 0}}
+    s = human.anchor_scores(items, key, labels, depth=2)
+    # ideal over all judged candidates: 3, 2
+    idcg = 3 + 2 / math.log2(3)
+    assert s["finetuned-e5-s1"]["ndcg"] == 1.0  # z(3) then x(2)
+    assert s["lexical"]["ndcg"] == (2 + 0) / idcg  # x(2) then y(unknown -> 0)
+    assert s["lexical"]["mean_grade"] == 2.0 and s["lexical"]["n_unknown"] == 1
+    assert s["lexical"]["p_at_2"] == 1.0 and "random" not in s
+
+
+def test_last_label_wins_and_repeats_agree():
+    lab = human.last_labels([{"item_id": "s1", "grade": 1}, {"item_id": "s1", "grade": 2},
+                             {"item_id": "r1", "grade": 3}])
+    assert lab["s1"]["grade"] == 2
+    items = [{"item_id": "r1", "phase": "repeat"}]
+    key = {"r1": {"repeat_of": "s1"}}
+    assert human.repeat_agreement(items, key, lab) == {"n": 1, "n_numeric": 1, "exact": 0.0,
+                                                       "within_1": 1.0}
+    import pytest
+
+    with pytest.raises(ValueError):
+        human.last_labels([{"item_id": "a", "grade": 4}])

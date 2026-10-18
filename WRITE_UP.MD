@@ -530,3 +530,16 @@ The user looked at the running app (release `fc4d438d`) and reported two bad nei
    - **Fine-tuned neighbours:** mostly equipment-count cards, five of which share no tag at all. Only one (Strong Back) shares the equip-cost tag.
    - **Lexical:** finds the free-equip cards, Forge Anew and Kili.
 3. **Interpretation.** This is not overtraining in the usual sense; the development proxy was still rising at 2000 updates. Training pairs and the metric both treat every shared functional tag as equal, and summed. So on multi-ability cards a rider clause with several co-occurring tags can outrank the main effect, and fine-tuning learns exactly that. The proxy gains in the README are real gains *on the proxy*, but the proxy rewards this failure. This is a construct-validity limit, added to the README limitations. No claim, decision or artifact was changed.
+
+## Per-ability neighbours and the human pilot (user request "do 1 and 2", 2026-10-18)
+
+1. **Per-ability neighbours.**
+   - **Contract (lead):** `src/mtgemb/abilities.py` defines an ability as a non-empty line of the model text, with the face boundary "//" excluded. Each ability is encoded alone. Candidate cards are scored by their best-matching line. The query's own card is excluded; ties break by Oracle ID. There is a float64 reference and hand-worked tests (`5458f43`).
+   - **Probe with the released model:** Deflecting Swat's redirect line returns redirect cards (Redirect, Insidious Will, Bolt Bend, Redirect Lightning, Mizzium Meddler, Boltbender). Bruenor's free-equip line returns Forge Anew first, then generic "rather than pay" cost cards, so the fix is partial there.
+   - **Size:** 52,699 ability lines; 17,209 cards have ≥2 abilities, giving 42,335 query lines.
+   - **Delegated:** Sol (`p12-export-v3-impl-r1`) has the exporter, bundle schema v3 and replay checks. Luna (`p12-web-v3-impl-r1`) has the web UI ("Similar by" control), validation and fixtures.
+2. **Human pilot, design and code by the lead.**
+   - `src/mtgemb/human.py`, `146ab6b`, `4de313e`: the seeded, stratified, blinded pool builder (`pool.json` plus `key.json`) and the judged-pool analysis. The analysis reports mean grade, precision at grade ≥2 and nDCG@3 per system and stratum, a fine-tuned-minus-comparator nDCG bootstrap over anchors, repeat agreement and the random-candidate base rate.
+   - Hand-worked tests pass.
+   - The pool is built after the v3 export, because ability lists come from the release itself.
+   - The annotation tool is delegated next.
