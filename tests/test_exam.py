@@ -64,6 +64,7 @@ def test_score_whole_card_and_line_anchor():
     r = exam.score([{**base, "id": "T001", "line": None},
                     {**base, "id": "T002", "line": None, "status": "proposed"}], whole, encode)
     assert r["n"] == 1 and r["passed"] == 1  # proposed items are not scored
+    assert r["dev_only"] == {"n": 0, "passed": 0}  # match and trap are fit cards
     assert np.isclose(r["items"][0]["margin"], np.cos(np.deg2rad(10)) - np.cos(np.deg2rad(40)))
     # line anchor "y" (0 deg): match's best line m2 (5 deg) beats trap's t1 (30 deg),
     # although the match's other line m1 is far away

@@ -68,7 +68,7 @@ def main(argv: list[str] | None = None) -> None:
         from .exam import exam_score
 
         out = exam_score(a.ds, a.name, a.backbone, a.max_length, a.model_path)
-        out = {k: out[k] for k in ("name", "n", "passed", "sections", "n_proposed")}
+        out = {k: out[k] for k in ("name", "n", "passed", "sections", "dev_only", "n_proposed")}
     elif a.cmd == "exam-guard":
         from .exam import guard
 

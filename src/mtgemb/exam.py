@@ -264,14 +264,18 @@ def score(items: list[dict], cards, encode) -> dict:
             s = [float(v[1] @ v[0]), float(v[2] @ v[0])]
         rows.append({"id": it["id"], "section": it["section"],
                      "item": [it["anchor"], it.get("line"), it["match"], it["trap"]],
-                     "match": s[0], "trap": s[1], "margin": s[0] - s[1], "passed": s[0] > s[1]})
+                     "match": s[0], "trap": s[1], "margin": s[0] - s[1], "passed": s[0] > s[1],
+                     "dev_only": all(cards.loc[it[r], "split"] == "dev"
+                                     for r in ("anchor", "match", "trap"))})
     by = {}
     for sec in SECTIONS:
         r = [x for x in rows if x["section"] == sec]
         if r:
             by[sec] = {"n": len(r), "passed": sum(x["passed"] for x in r),
                        "mean_margin": float(np.mean([x["margin"] for x in r]))}
+    dev = [x for x in rows if x["dev_only"]]  # never trained on by any run
     return {"n": len(rows), "passed": sum(x["passed"] for x in rows), "sections": by,
+            "dev_only": {"n": len(dev), "passed": sum(x["passed"] for x in dev)},
             "items": rows}
 
 
