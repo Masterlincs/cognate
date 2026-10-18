@@ -45,6 +45,12 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("train", help="train or resume a run from a JSON config")
     q.add_argument("config")
+    q = sub.add_parser("exam-score", help="score an encoder on the accepted trap-exam items")
+    q.add_argument("name")
+    q.add_argument("backbone")
+    q.add_argument("--max-length", type=int, required=True)
+    q.add_argument("--model-path")
+    q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("annotate", help="label an existing blinded human pilot pool locally")
     q.add_argument("pool_dir")
     q.add_argument("--port", type=int, default=8765)
@@ -55,6 +61,11 @@ def main(argv: list[str] | None = None) -> None:
 
         serve(a.pool_dir, a.port)
         return
+    elif a.cmd == "exam-score":
+        from .exam import exam_score
+
+        out = exam_score(a.ds, a.name, a.backbone, a.max_length, a.model_path)
+        out = {k: out[k] for k in ("name", "n", "passed", "sections", "n_proposed")}
     elif a.cmd == "acquire":
         from .acquire import acquire
 
