@@ -288,6 +288,7 @@ Served `web/dist`, built with `current.json` → `2026-10-16-e5-base-v2-d4c393ee
     - P3: SCHEMA.md and the wording still said the fetch was parallel. is amended with a dated note.
 
     9 vitest tests pass, the build passes, and both the fixture and the real v2 bundle validate. Round 2 has been sent to Sol.
+13. **Sol review of schema v2, round 2:** no P1/P2/P3 findings. Sol verified all three round-1 fixes against f722310: 9 web tests, the delayed-ID checks, release-only validation, and SCHEMA.md/matching the sequential fetch order. Accepted. (This step was missing from the log; added 2026-10-18 from the review record.)
 
 ## P10: reproduction and handoff (2026-10-18)
 
@@ -514,3 +515,4 @@ The user authorised gate 1 ("do 1"): one evaluation of the frozen artifacts on t
     - No tuning or per-card inspection followed.
 13. **Recorded:** the README sealed section, STATE `sealed` block, the IMPLEMENTATION_PLAN entry, and . Publication (gate 2) remains unapproved.
 14. **Sol claims check** (`p10-sealed-claims-r1`): all numbers, seed means and "cleared" match the aggregates, and export is fit+dev only. One P2 overclaim was fixed (step 12 and the README wording). Sol did not verify the per-card equality of the archived attempt under its access restrictions; the lead checked it (step 10).
+15. **Deferred:** the user saved longer E5 training for later (2026-10-18). Recorded in STATE `deferred` with its caveats. Not started.

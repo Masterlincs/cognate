@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T14:50:00Z",
+  "updated_utc": "2026-10-18T15:05:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
@@ -83,7 +83,7 @@
       ]
     },
     "warm_selection_ms": "25-33 cached, 137-174 with shard fetch",
-    "review": "Sol r1 pending"
+    "review": "Sol r1 3 findings fixed (f722310); r2 no findings (accepted)"
   },
   "replay": {
     "command": "mtgemb replay-eval --ds data/processed/2026-10-16_no_reminder_v1",
@@ -124,5 +124,13 @@
     ],
     "code_review": "Sol r1 2xP2 fixed (14af854), Sol r2 pass",
     "qualifier": "registered gate re-tested once on sealed anchors (tag proxy); does not change the P7 decision"
-  }
+  },
+  "deferred": [
+    {
+      "item": "longer E5 training (initial-1 recipe, e.g. 6000 updates) as extension slot 1 of 3",
+      "why": "all curves still rising at 2000 updates",
+      "caveats": "sealed split already used, so any longer model has selection-exposed dev evidence only; new recipe/version; confirmation would use the last 3 slots; ~15-20 h",
+      "status": "saved for later by the user, 2026-10-18; not started"
+    }
+  ]
 }
