@@ -65,34 +65,47 @@ def test_best_recipe_prefers_lower_lr_scale_unless_advanced():
     assert best_recipe([row(1e-5, 20, 0.7, 0.7, ok=False)]) is None
 
 
-def _confirm_fixture(root, cand_hl_shift):
+def _confirm_fixture(root, cand_hl_shift, fam_size=2, n=240):
+    """Fake confirmation runs, frozen recipe runs and evals under root (= report.RUNS)."""
     import json
 
     import numpy as np
     import pandas as pd
 
-    anchors = [f"a{i}" for i in range(40)]
+    anchors = [f"a{i}" for i in range(n)]
     rng = np.random.default_rng(1)
+    recipe = {"e5": {"backbone": "e5-base-v2", "max_length": 94, "lr": 3e-5},
+              "bge": {"backbone": "bge-small-en-v1.5", "max_length": 92, "lr": 3e-5}}
 
-    def put(name, full, hl, run=True):
+    def jw(path, obj):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(obj), "utf-8")
+
+    def put(name, full, hl, cfg=None):
         d = root / "eval" / "B" / name
         d.mkdir(parents=True)
         rows = [pd.DataFrame({"anchor": anchors, "view": v, "n_rel": 1, "ndcg": x,
-                              "family": [f"f{i // 2}" for i in range(40)]})
+                              "family": [f"f{i // fam_size}" for i in range(n)]})
                 for v, x in (("full", full), ("hard_lexical", hl))]
         pd.concat(rows).to_parquet(d / "per_anchor.parquet")
-        mp = str(root / name / "final") if run else None
-        (d / "summary.json").write_text(json.dumps({"meta": {"model_path": mp}}), "utf-8")
-        if run:
-            (root / name).mkdir()
-            (root / name / "result.json").write_text(
-                json.dumps({"finished": True, "selection": "final"}), "utf-8")
+        c = cfg or recipe["e5"]
+        mp = str(root / name / "final") if cfg else None
+        jw(d / "summary.json", {"meta": {"model_path": mp, "backbone": c["backbone"],
+                                         "max_length": c["max_length"]}})
+        if cfg:
+            jw(root / name / "result.json", {"finished": True, "selection": "final"})
+            jw(root / name / "manifest.json", {"config": cfg})
 
-    put("pretrained-e5-base-v2", np.full(40, 0.4), np.full(40, 0.4), run=False)
+    jw(root / "initial-1-e5-lr3e-05-s20" / "manifest.json",
+       {"config": {**recipe["e5"], "seed": 0, "data_seed": 0, "selection": "guarded_best"}})
+    jw(root / "initial-4-bge-lr3e-05-s20" / "manifest.json",
+       {"config": {**recipe["bge"], "seed": 0, "data_seed": 0, "selection": "guarded_best"}})
+    put("pretrained-e5-base-v2", np.full(n, 0.4), np.full(n, 0.4))
     for s in (1, 2, 3):
-        b = rng.uniform(0.4, 0.6, 40)
-        put(f"confirm-bge-s{s}", b, b)
-        put(f"confirm-e5-s{s}", b + 0.03, b + cand_hl_shift)
+        b = rng.uniform(0.4, 0.6, n)
+        run = {"seed": s, "data_seed": s, "selection": "final"}
+        put(f"confirm-bge-s{s}", b, b, {**recipe["bge"], **run})
+        put(f"confirm-e5-s{s}", b + 0.03, b + cand_hl_shift, {**recipe["e5"], **run})
 
 
 def test_confirmation_report_decides_and_writes_once(tmp_path, monkeypatch):
@@ -104,29 +117,58 @@ def test_confirmation_report_decides_and_writes_once(tmp_path, monkeypatch):
     _confirm_fixture(tmp_path, 0.01)
     rep = rp.confirmation_report("B")
     assert rep["decision"] == "promote" and rep["m_contrasts"] == 4
-    assert rep["contrasts"]["trained_bge"]["full"]["point"] == pytest.approx(0.03)
-    assert rep["contrasts"]["trained_bge"]["full"]["lower_q"] == pytest.approx(0.0125)
+    full = rep["contrasts"]["trained_bge"]["full"]
+    assert full["point"] == pytest.approx(0.03) and full["lower_q"] == pytest.approx(0.0125)
+    assert full["n_clusters"] == 120 and rep["excluded_zero_positive"]["full"] == 0
     assert rep["deployment"]["run_id"] == "confirm-e5-s1"
     with pytest.raises(FileExistsError):
         rp.confirmation_report("B")
+    assert [p.name for p in (tmp_path / "confirmation" / "B").iterdir()] == ["report.json"]
 
 
-def test_confirmation_report_rejects_hard_lexical_loss_and_wrong_weights(tmp_path, monkeypatch):
+def test_confirmation_report_reject_and_inconclusive(tmp_path, monkeypatch):
+    import mtgemb.report as rp
+
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "r")
+    _confirm_fixture(tmp_path / "r", -0.001)  # full +0.03, hard-lexical point < 0 vs BGE
+    rep = rp.confirmation_report("B")
+    assert rep["decision"] == "reject"
+    assert rep["contrasts"]["pretrained_e5"]["passes"]
+    assert not rep["contrasts"]["trained_bge"]["passes"]
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "i")
+    _confirm_fixture(tmp_path / "i", 0.01, fam_size=10)  # 24 families < MIN_CLUSTERS
+    assert rp.confirmation_report("B")["decision"] == "inconclusive"
+
+
+def test_confirmation_report_refuses_wrong_provenance(tmp_path, monkeypatch):
     import json
 
     import pytest
 
     import mtgemb.report as rp
 
-    monkeypatch.setattr(rp, "RUNS", tmp_path / "x")
-    _confirm_fixture(tmp_path / "x", -0.001)  # full +0.03, but hard-lexical point < 0 vs BGE
-    rep = rp.confirmation_report("B")
-    assert rep["decision"] == "not promoted"
-    assert rep["contrasts"]["pretrained_e5"]["passes"]
-    assert not rep["contrasts"]["trained_bge"]["passes"]
-    monkeypatch.setattr(rp, "RUNS", tmp_path / "y")
-    _confirm_fixture(tmp_path / "y", 0.01)
-    s = tmp_path / "y" / "eval" / "B" / "confirm-e5-s2" / "summary.json"
-    s.write_text(json.dumps({"meta": {"model_path": str(tmp_path / "y" / "other")}}), "utf-8")
-    with pytest.raises(ValueError, match="confirm-e5-s2"):
-        rp.confirmation_report("B")
+    def fresh(tag):
+        root = tmp_path / tag
+        monkeypatch.setattr(rp, "RUNS", root)
+        _confirm_fixture(root, 0.01)
+        return root
+
+    def edit(path, **kw):
+        d = json.loads(path.read_text("utf-8"))
+        node = d.get("meta", d.get("config"))
+        node.update(kw)
+        path.write_text(json.dumps(d), "utf-8")
+
+    cases = [
+        ("weights", "eval/B/confirm-e5-s2/summary.json", {"model_path": "elsewhere"}),
+        ("maxlen", "eval/B/confirm-bge-s3/summary.json", {"max_length": 94}),
+        ("pre", "eval/B/pretrained-e5-base-v2/summary.json", {"max_length": 128}),
+        ("seed", "confirm-e5-s3/manifest.json", {"data_seed": 0}),
+        ("recipe", "confirm-bge-s1/manifest.json", {"lr": 1e-5}),
+        ("select", "confirm-e5-s1/manifest.json", {"selection": "guarded_best"}),
+    ]
+    for tag, rel, kw in cases:
+        root = fresh(tag)
+        edit(root / rel, **kw)
+        with pytest.raises(ValueError):
+            rp.confirmation_report("B")

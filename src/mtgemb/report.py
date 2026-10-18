@@ -7,18 +7,25 @@ Reads only immutable run records (runs/<id>/) and evaluation records
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from .evaluate import PILOT_THRESHOLDS, PROMOTION, n_boot_for, paired_bootstrap
-from .util import RUNS, atomic_write_json, read_json, utcnow
+from .util import RUNS, read_json, utcnow
 
 BOOT_SEED = 20261017  # 
 # frozen confirmation design: one E5 candidate, trained-BGE control, seeds 1-3
 CONFIRM = {"candidate": "confirm-e5-s{}", "bge": "confirm-bge-s{}",
-           "pretrained": "pretrained-e5-base-v2", "seeds": (1, 2, 3), "deploy_seed": 1}
+           "pretrained": "pretrained-e5-base-v2", "seeds": (1, 2, 3), "deploy_seed": 1,
+           "recipe_from": {"candidate": "initial-1-e5-lr3e-05-s20",
+                           "bge": "initial-4-bge-lr3e-05-s20"},
+           "pretrained_backbone": "e5-base-v2", "pretrained_max_length": 94}
+# config keys a confirmation run may change from its frozen pilot recipe
+CONFIRM_FREE = {"run_id", "slot", "hypothesis", "comparator", "seed", "data_seed", "selection"}
+MIN_CLUSTERS = 100  # fewer eligible families than this makes a contrast inconclusive
 VIEWS = ("full", "hard_lexical")
 QUALIFIER = "provisional tag-proxy promotion on selection-exposed development"
 
@@ -117,11 +124,38 @@ def best_recipe(rows: list[dict]) -> dict | None:
     return best
 
 
+def _check_eval(bench_id: str, name: str, backbone: str, max_length: int,
+                model_path: Path | None) -> None:
+    meta = read_json(RUNS / "eval" / bench_id / name / "summary.json")["meta"]
+    got = Path(meta["model_path"]).resolve() if meta["model_path"] else None
+    want = model_path.resolve() if model_path else None
+    if (meta["backbone"], meta["max_length"], got) != (backbone, max_length, want):
+        raise ValueError(f"{name}: eval was not made from {want or 'the pretrained model'} "
+                         f"with {backbone} at max_length {max_length}")
+
+
+def _check_confirm_run(bench_id: str, name: str, seed: int, recipe_run: str) -> None:
+    res = read_json(RUNS / name / "result.json")
+    cfg = read_json(RUNS / name / "manifest.json")["config"]
+    ref = read_json(RUNS / recipe_run / "manifest.json")["config"]
+    if not (res["finished"] and res["selection"] == "final" == cfg["selection"]):
+        raise ValueError(f"{name}: not a finished selection='final' run")
+    if cfg["seed"] != seed or cfg["data_seed"] != seed:
+        raise ValueError(f"{name}: seed/data_seed {cfg['seed']}/{cfg['data_seed']} != {seed}")
+    diff = sorted(k for k in cfg.keys() | ref.keys()
+                  if k not in CONFIRM_FREE and cfg.get(k) != ref.get(k))
+    if diff:
+        raise ValueError(f"{name}: differs from frozen recipe {recipe_run} in {diff}")
+    _check_eval(bench_id, name, cfg["backbone"], cfg["max_length"], RUNS / name / "final")
+
+
 def confirmation_report(bench_id: str) -> dict:
     """Registered P7 contrasts and the promotion decision (MASTER_PLAN §5).
 
-    Every candidate and BGE eval must come from the matching confirmation run's final
-    weights. Written once to runs/confirmation/<bench_id>/report.json; never overwritten.
+    Every confirmation run must be the frozen recipe at its registered seed, and every eval
+    must come from that run's final weights (pretrained: the pinned backbone). Decision:
+    inconclusive if any contrast has < MIN_CLUSTERS families; else promote only if both
+    comparators pass; else reject. Written once to runs/confirmation/<bench_id>/report.json.
     """
     out = RUNS / "confirmation" / bench_id / "report.json"
     if out.exists():
@@ -129,28 +163,44 @@ def confirmation_report(bench_id: str) -> dict:
     seeds = CONFIRM["seeds"]
     cand = {s: CONFIRM["candidate"].format(s) for s in seeds}
     bge = {s: CONFIRM["bge"].format(s) for s in seeds}
-    for name in [*cand.values(), *bge.values()]:
-        res = read_json(RUNS / name / "result.json")
-        meta = read_json(RUNS / "eval" / bench_id / name / "summary.json")["meta"]
-        if not (res["finished"] and res["selection"] == "final"):
-            raise ValueError(f"{name}: not a finished selection='final' run")
-        if Path(meta["model_path"]).resolve() != (RUNS / name / "final").resolve():
-            raise ValueError(f"{name}: eval was not made from runs/{name}/final")
+    for s in seeds:
+        _check_confirm_run(bench_id, cand[s], s, CONFIRM["recipe_from"]["candidate"])
+        _check_confirm_run(bench_id, bge[s], s, CONFIRM["recipe_from"]["bge"])
+    _check_eval(bench_id, CONFIRM["pretrained"], CONFIRM["pretrained_backbone"],
+                CONFIRM["pretrained_max_length"], None)
     per = pd.read_parquet(RUNS / "eval" / bench_id / cand[seeds[0]] / "per_anchor.parquet")
     families = per[per["view"] == "full"].set_index("anchor")["family"]
+    excluded = {v: int(((per["view"] == v) & (per["n_rel"] == 0)).sum()) for v in VIEWS}
     comps = {"pretrained_e5": CONFIRM["pretrained"], "trained_bge": bge}
     m = len(comps) * len(VIEWS)
     contrasts = {}
     for key, comp in comps.items():
         c = {v: contrast(cand, comp, v, bench_id, m, families) for v in VIEWS}
-        contrasts[key] = {**c, "passes": promotion(c["full"], c["hard_lexical"])}
-    promoted = all(c["passes"] for c in contrasts.values())
+        for x in c.values():
+            x["diff_seed_range"] = [min(x["per_seed"]), max(x["per_seed"])]
+            x["cand_seed_range"] = [min(x["cand_seed_means"]), max(x["cand_seed_means"])]
+        contrasts[key] = {**c, "passes": promotion(c["full"], c["hard_lexical"]),
+                          "interpretable": all(x["n_clusters"] >= MIN_CLUSTERS
+                                               for x in c.values())}
+    if not all(c["interpretable"] for c in contrasts.values()):
+        decision = "inconclusive"
+    elif all(c["passes"] for c in contrasts.values()):
+        decision = "promote"
+    else:
+        decision = "reject"
     dep = cand[CONFIRM["deploy_seed"]]
     rep = {"benchmark_id": bench_id, "m_contrasts": m, "contrasts": contrasts,
-           "decision": "promote" if promoted else "not promoted",
-           "qualifier": QUALIFIER, "deployment": {
-               "seed": CONFIRM["deploy_seed"], "run_id": dep,
-               **{v: float(_ndcg(bench_id, dep, v).mean()) for v in VIEWS}},
-           "design": {**CONFIRM, "decisions": ["", ""]}, "created_utc": utcnow()}
-    atomic_write_json(out, rep)
+           "decision": decision, "qualifier": QUALIFIER,
+           "excluded_zero_positive": excluded, "min_clusters": MIN_CLUSTERS,
+           "deployment": {"seed": CONFIRM["deploy_seed"], "run_id": dep,
+                          **{v: float(_ndcg(bench_id, dep, v).mean()) for v in VIEWS}},
+           "design": {**CONFIRM, "decisions": ["", "", ""]},
+           "created_utc": utcnow()}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f"report.{os.getpid()}.tmp")
+    tmp.write_text(json.dumps(rep, indent=2), "utf-8")
+    try:
+        os.link(tmp, out)  # no overwrite: fails if a concurrent call already wrote it
+    finally:
+        tmp.unlink()
     return rep
