@@ -569,3 +569,32 @@ The user looked at the running app (release `fc4d438d`) and reported two bad nei
     - Blinding: each item in `pool.json` carries only `item_id`, `phase`, `anchor` and `candidate`.
     - The annotation server (`uv run mtgemb annotate runs/labels/471bafd58c8d`) runs on 127.0.0.1:8765. The page loads at 0/1256, and no labels have been written.
     - Labelling is the user's job (P10.5). No label is invented.
+
+## P12: ability-aware model (ideas from Delvefall), 2026-10-18
+
+**Credit.** The ten ideas in this phase come from **Delvefall** by Ballchinian (https://github.com/Ballchinian/Delvefall, mainly `finetune/README.md`), an MTG similar-card site that trains EmbeddingGemma on rules-text lines and Scryfall Tagger tags. Their repository has no licence, so we use the ideas only. No code, training data or exam items were copied; everything here is written from scratch.
+
+The ideas, as Delvefall describes them:
+1. Use one-line cards as free line-level labels: every tag on a one-line card belongs to that line.
+2. Train lines against the tags they carry ("what a line is about").
+3. Mechanism-flip hard negatives (tap/untap, enters/dies, gain/lose, draw-then-discard reversed).
+4. A shared clause must not swamp a differing one. Delvefall found 77% of its false positives shared a trigger condition and differed in effect.
+5. Number-only rewordings count as the same effect ("parameters are flexible").
+6. Old-to-new wording renames as same-meaning pairs.
+7. Replace a card's own name in its text.
+8. Infer which of a card's tags belongs to which line.
+9. A hand-verified trap exam (anchor, true match, near-identical trap) that grows from user reports and is never trained on, under the rule "same mechanism, flexible parameters".
+10. Rerun the previous exam after every retrain as a regression guard.
+
+1. **Programme registered (, `ee0f6f5`).**
+   - **Fit measurements:**
+     - 9,226 one-line text cards, of which 9,206 are tagged, with 4.47 tags on average.
+     - 11,380 of 46,909 lines open with a trigger or condition clause.
+     - Only 2,984 cards (12.2%) still contain their own name; 8,910 already use Oracle's "this creature" style.
+   - **Our deviation on idea 7:** names become "this <type>", not "this card", to match Oracle's own style.
+   - **Constraints:** only 3 extension runs and 3 confirmation runs remain, and the sealed split is spent, so new evidence comes from the user-verified trap exam, the dev tag proxy (as a regression guard), a second human pool and, later, a fresh-card holdout.
+   - **Run plan:**
+     - ext-1 = ideas 1+2.
+     - ext-2 = ideas 3–6, on the better of ext-1 and initial-1.
+     - ext-3 = idea 7.
+     - Ideas 8–10 need no training run.
