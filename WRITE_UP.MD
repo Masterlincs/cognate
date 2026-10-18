@@ -176,6 +176,8 @@ confirm-bge-s2 hit the native XPU abort at 03:41 UTC, about 4 min after its upda
 confirm-bge-s2 finished at 03:56 UTC (in-training eval 0.6629 / 0.6451; schedule 86fd6214, matched with confirm-e5-s2). confirm-e5-s3 started.
 confirm-e5-s3 hit the native XPU abort at 04:23 UTC, about 12.5 min after its update-250 eval (at or just before the 500 eval); auto-resume 1/3 continued it from update 250.
 confirm-e5-s3 finished at 05:54 UTC (in-training eval 0.7071 / 0.6919; schedule b5d67d44 as registered). confirm-bge-s3 started, the last confirmation run.
+confirm-bge-s3 hit the native XPU abort at 06:17 UTC, about 4 min after its update-1000 eval (mid-stretch); auto-resume 1/3 continued it from update 1000. Ten crashes in total so far, all recovered.
+confirm-bge-s3 finished at 06:36 UTC (in-training eval 0.6632 / 0.6458; schedule b5d67d44, matched with confirm-e5-s3). All six confirmation runs are complete (6 of the 9-run cap). Next: `mtgemb eval-encoder` on each `runs/confirm-*/final` (the registered eval records), then `mtgemb confirm-report`.
 6. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)

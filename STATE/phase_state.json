@@ -2,7 +2,7 @@
   "phase": "P7",
   "status": "RUNNING",
   "last_completed": "P6",
-  "next_action": "Confirmation chain: confirm-e5-s1, bge-s1, e5-s2, bge-s2, e5-s3, bge-s3. Then eval-encoder on each final/, report.contrast (M=4, n_boot 8000), promotion decision.",
+  "next_action": "eval-encoder on the six confirm finals, then confirm-report, promotion decision.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,8 +10,8 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T05:55:00Z",
-  "active_run": "confirm-bge-s3",
+  "updated_utc": "2026-10-18T06:38:00Z",
+  "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
@@ -26,7 +26,8 @@
     "confirm-bge-s1",
     "confirm-e5-s2",
     "confirm-bge-s2",
-    "confirm-e5-s3"
+    "confirm-e5-s3",
+    "confirm-bge-s3"
   ],
   "best_e5_recipe": "initial-1-e5-lr3e-05-s20",
   "frozen": {
