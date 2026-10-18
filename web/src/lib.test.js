@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterNeighbours, normalize, parseUrl, searchNames, serializeUrl, validateIds, validateRelease, withIds, validateReleasePointer, validateShard } from './lib.js';
+import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateIds, validateRelease, withIds, validateReleasePointer, validateShard } from './lib.js';
 
 const names = { names: ['Café Lantern', 'Blue Door', 'Green Thread // Thread Unbound'], aliases: [['Thread Unbound', 2]] };
 const ids = { ids: ['a', 'b', 'c'] };
@@ -30,7 +30,15 @@ describe('search and ranking helpers', () => {
 describe('URL state', () => {
   it('round trips card and filters', () => {
     const state = { card: 'oracle-123', color: 'G', minMv: 2, maxMv: null, creature: 'creature', type: 'human' };
-    expect(parseUrl(`?${serializeUrl(state)}`)).toEqual({ ...state, maxMv: null });
+    expect(parseUrl(`?${serializeUrl(state)}`)).toEqual({ ...state, ability: null, maxMv: null });
+  });
+  it('round trips an ability index and falls back to Whole card for invalid indexes', () => {
+    const state = { card: 'oracle-123', ability: 1, color: '', minMv: null, maxMv: null, creature: '', type: '' };
+    expect(parseUrl(`?${serializeUrl(state)}`).ability).toBe(1);
+    expect(parseUrl('?card=oracle-123&ability=bad').ability).toBeNull();
+    expect(parseUrl('?card=oracle-123&ability=-1').ability).toBeNull();
+    expect(resolveAbilityIndex(1, ['one', 'two'])).toBe(1);
+    expect(resolveAbilityIndex(2, ['one', 'two'])).toBeNull();
   });
 });
 
@@ -69,5 +77,36 @@ describe('bundle validation', () => {
     expect(() => validateShard(cards, [[]], release, 0)).toThrow(/length/);
     expect(() => validateShard(cards, [[[3, 0.9]], [[0, 0.8]]], release, 0)).toThrow(/index/);
     expect(() => validateShard([cards[1], cards[0]], [[[1, 0.9]], [[0, 0.8]]], release, 0, ['a', 'b'])).toThrow(/Card ID does not match/);
+  });
+
+  it('validates v3 ability manifests, alignment, text and neighbours', () => {
+    const v3 = {
+      schema: 'mtgemb-release-v3', n_cards: 2, shard_size: 2, k: 2, ability_k: 50,
+      abilities_status: 'exploratory: not evaluated on the tag proxy',
+      files: Object.fromEntries(['names.json', 'ids.json', 'cards/000.json', 'neighbours/000.json', 'abilities/000.json'].map((file) => [file, { sha256: 'a'.repeat(64), bytes: 1 }]))
+    };
+    const v3Names = { names: ['Multi', 'Blank'], aliases: [] };
+    const v3Cards = [
+      { id: 'a', faces: [{ oracle_text: 'Draw a card.\nGain 1 life.' }], color_identity: '', mv: 1, type_line: 'Artifact', is_creature: false, has_text: true },
+      { id: 'b', faces: [{ oracle_text: '' }], color_identity: '', mv: 1, type_line: 'Artifact', is_creature: false, has_text: false }
+    ];
+    const v3Neighbours = [[[1, 0.8]], []];
+    const v3Abilities = [
+      [
+        { text: 'Draw a card.', neighbours: [[1, 0.9]] },
+        { text: 'Gain 1 life.', neighbours: [[1, 0.8]] }
+      ],
+      []
+    ];
+    expect(validateRelease(v3, v3Names)).toBe(true);
+    expect(validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], v3Abilities)).toBe(true);
+    const missingManifest = { ...v3, files: { ...v3.files } };
+    delete missingManifest.files['abilities/000.json'];
+    expect(() => validateRelease(missingManifest, v3Names)).toThrow(/abilities\/000.json/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [v3Abilities[0]])).toThrow(/Ability shard.*length/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[{ ...v3Abilities[0][0], neighbours: [[0, 0.9]] }, v3Abilities[0][1]], []])).toThrow(/Ability neighbour index or score/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[{ ...v3Abilities[0][0], neighbours: [[2, 0.9]] }, v3Abilities[0][1]], []])).toThrow(/Ability neighbour index or score/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[v3Abilities[0][0]], []])).toThrow(/does not match/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [v3Abilities[0], [{ text: 'Invented line.', neighbours: [] }]])).toThrow(/Textless card/);
   });
 });

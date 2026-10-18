@@ -17,13 +17,14 @@ try {
   const pointerPath = path.join(dir, '..', 'current.json');
   try {
     await access(pointerPath);
-    validateReleasePointer(JSON.parse(await readFile(pointerPath, 'utf8')), release);
+    const pointer = JSON.parse(await readFile(pointerPath, 'utf8'));
+    if (pointer.release_id === release.release_id) validateReleasePointer(pointer, release);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
   }
   validateRelease(release, names);
   validateIds(release, ids);
-  const expectedFiles = ['names.json', 'ids.json', ...Array.from({ length: Math.ceil(release.n_cards / release.shard_size) }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`]).flat()];
+  const expectedFiles = ['names.json', 'ids.json', ...Array.from({ length: Math.ceil(release.n_cards / release.shard_size) }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(release.schema === 'mtgemb-release-v3' ? [`abilities/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
   for (const file of expectedFiles) {
     const bytes = await readFile(path.join(dir, file));
     const entry = release.files?.[file];
@@ -31,7 +32,7 @@ try {
   }
   for (let shard = 0; shard < Math.ceil(release.n_cards / release.shard_size); shard += 1) {
     const number = String(shard).padStart(3, '0');
-    validateShard(await readJson(`cards/${number}.json`), await readJson(`neighbours/${number}.json`), release, shard, ids.ids);
+    validateShard(await readJson(`cards/${number}.json`), await readJson(`neighbours/${number}.json`), release, shard, ids.ids, release.schema === 'mtgemb-release-v3' ? await readJson(`abilities/${number}.json`) : null);
   }
   console.log(`Bundle valid: ${release.release_id} (${release.n_cards} cards)`);
 } catch (error) {

@@ -37,12 +37,14 @@ export function filterNeighbours(entries, cardByIndex, filters) {
 export function parseUrl(search) {
   const params = new URLSearchParams(search);
   const num = (key) => params.has(key) && params.get(key) !== '' ? Number(params.get(key)) : null;
-  return { card: params.get('card') || '', color: params.get('color') || '', minMv: num('min'), maxMv: num('max'), creature: params.get('creature') || '', type: params.get('type') || '' };
+  const ability = num('ability');
+  return { card: params.get('card') || '', ability: Number.isInteger(ability) && ability >= 0 ? ability : null, color: params.get('color') || '', minMv: num('min'), maxMv: num('max'), creature: params.get('creature') || '', type: params.get('type') || '' };
 }
 
 export function serializeUrl(state) {
   const params = new URLSearchParams();
   if (state.card) params.set('card', state.card);
+  if (Number.isInteger(state.ability) && state.ability >= 0) params.set('ability', state.ability);
   if (state.color) params.set('color', state.color);
   if (state.minMv !== null && state.minMv !== '') params.set('min', state.minMv);
   if (state.maxMv !== null && state.maxMv !== '') params.set('max', state.maxMv);
@@ -51,10 +53,21 @@ export function serializeUrl(state) {
   return params.toString();
 }
 
+export function resolveAbilityIndex(index, abilities) {
+  return Number.isInteger(index) && index >= 0 && index < abilities.length ? index : null;
+}
+
 export function validateRelease(release, names) {
-  if (release?.schema !== 'mtgemb-release-v2') throw new Error(`Unsupported release schema: ${release?.schema ?? 'missing'}; expected mtgemb-release-v2.`);
+  if (!['mtgemb-release-v2', 'mtgemb-release-v3'].includes(release?.schema)) throw new Error(`Unsupported release schema: ${release?.schema ?? 'missing'}; expected mtgemb-release-v2 or mtgemb-release-v3.`);
   if (!Number.isInteger(release.n_cards) || release.n_cards < 1) throw new Error('Invalid card count in release.json.');
   if (!Number.isInteger(release.shard_size) || release.shard_size < 1) throw new Error('Invalid shard_size.');
+  const shards = Math.ceil(release.n_cards / release.shard_size);
+  const expectedFiles = ['names.json', 'ids.json', ...Array.from({ length: shards }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(release.schema === 'mtgemb-release-v3' ? [`abilities/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
+  if (release.schema === 'mtgemb-release-v3' && (release.ability_k !== 50 || release.abilities_status !== 'exploratory: not evaluated on the tag proxy')) throw new Error('Invalid ability metadata in release.json.');
+  if (release.schema === 'mtgemb-release-v3') for (const file of expectedFiles) {
+    const entry = release.files?.[file];
+    if (!entry || !/^[a-f0-9]{64}$/.test(entry.sha256) || !Number.isInteger(entry.bytes) || entry.bytes < 0) throw new Error(`Release manifest is missing or malformed for ${file}.`);
+  }
   if (names === undefined) return true;  // release-only check before names.json arrives
   if (!names || typeof names !== 'object' || Array.isArray(names)) throw new Error('Name index is missing or malformed.');
   if (!Array.isArray(names.names) || names.names.length !== release.n_cards || 'ids' in names) throw new Error('Name index counts do not match release.json or contains IDs.');
@@ -80,7 +93,13 @@ export function validateReleasePointer(current, release) {
   return true;
 }
 
-export function validateShard(cards, neighbours, release, shard, ids) {
+export function validateShard(cards, neighbours, release, shard, ids, abilities) {
+  validateCommonShard(cards, neighbours, release, shard, ids);
+  if (release.schema === 'mtgemb-release-v3') validateAbilityShard(cards, abilities, release, shard);
+  return true;
+}
+
+export function validateCommonShard(cards, neighbours, release, shard, ids) {
   const expected = Math.min(release.shard_size, release.n_cards - shard * release.shard_size);
   if (expected < 0 || !Array.isArray(cards) || cards.length !== expected) throw new Error(`Card shard ${shard} has the wrong length.`);
   if (!Array.isArray(neighbours) || neighbours.length !== expected) throw new Error(`Neighbour shard ${shard} has the wrong length.`);
@@ -99,6 +118,33 @@ export function validateShard(cards, neighbours, release, shard, ids) {
       previous = score;
     }
     if (!card.has_text && list.length) throw new Error(`Textless card ${index} must have no neighbours.`);
+  }
+  return true;
+}
+
+export function validateAbilityShard(cards, abilities, release, shard) {
+  const expected = Math.min(release.shard_size, release.n_cards - shard * release.shard_size);
+  if (!Array.isArray(cards) || cards.length !== expected || !Array.isArray(abilities) || abilities.length !== expected) throw new Error(`Ability shard ${shard} has the wrong length.`);
+  for (let offset = 0; offset < expected; offset += 1) {
+    const card = cards[offset];
+    const index = shard * release.shard_size + offset;
+    const entries = abilities[offset];
+    if (!Array.isArray(entries)) throw new Error(`Ability list ${index} is malformed.`);
+    if (!card.has_text && entries.length) throw new Error(`Textless card ${index} must have no ability entries.`);
+    const abilityTexts = card.faces.flatMap((face) => typeof face.oracle_text === 'string' ? face.oracle_text.split(/\r?\n/).filter((line) => line.trim()) : []);
+    if (abilityTexts.length < 2 && entries.length) throw new Error(`Card ${index} with fewer than two abilities must have no ability entries.`);
+    if (abilityTexts.length >= 2 && entries.length !== abilityTexts.length) throw new Error(`Ability list ${index} does not match the card's ability lines.`);
+    for (const ability of entries) {
+      if (!ability || typeof ability.text !== 'string' || !ability.text.trim() || !Array.isArray(ability.neighbours) || ability.neighbours.length > release.ability_k) throw new Error(`Ability entry is malformed for card ${index}.`);
+      let previousAbilityScore = Infinity;
+      for (const pair of ability.neighbours) {
+        const [target, score] = pair ?? [];
+        if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score) || Math.abs(score - Number(score.toFixed(4))) > 1e-9) throw new Error(`Ability neighbour index or score is invalid for card ${index}.`);
+        if (score > previousAbilityScore) throw new Error(`Ability neighbour scores are not descending for card ${index}.`);
+        previousAbilityScore = score;
+      }
+    }
+    if (entries.some((ability, abilityIndex) => ability.text !== abilityTexts[abilityIndex])) throw new Error(`Ability text does not match card ${index}.`);
   }
   return true;
 }

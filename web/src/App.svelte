@@ -1,5 +1,5 @@
 <script>
-  import { filterNeighbours, parseUrl, searchNames, serializeUrl, validateIds, withIds, validateRelease, validateReleasePointer, validateShard } from './lib.js';
+  import { filterNeighbours, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateAbilityShard, validateCommonShard, validateIds, withIds, validateRelease, validateReleasePointer } from './lib.js';
 
   let release;
   let names;
@@ -7,6 +7,9 @@
   let idsReady;
   let selectedIndex = -1;
   let selectedCard;
+  let wholeCardNeighbours = [];
+  let abilityEntries = [];
+  let activeAbility = null;
   let savedNeighbours = [];
   let visibleNeighbours = [];
   let suggestions = [];
@@ -24,6 +27,7 @@
   let token = 0;
   let filterToken = 0;
   const cache = new Map();
+  const abilityCache = new Map();
 
   const filters = () => ({ color, minMv: minMv === '' ? null : Number(minMv), maxMv: maxMv === '' ? null : Number(maxMv), creature, type });
   const base = import.meta.env.BASE_URL;
@@ -38,14 +42,25 @@
       fetchJson(`${base}data/${release.release_id}/cards/${String(shard).padStart(3, '0')}.json`),
       fetchJson(`${base}data/${release.release_id}/neighbours/${String(shard).padStart(3, '0')}.json`)
     ]).then(([cards, neighbours]) => {
-      validateShard(cards, neighbours, release, shard, ids?.ids);
+      validateCommonShard(cards, neighbours, release, shard, ids?.ids);
       return { cards, neighbours };
     }).catch((reason) => { cache.delete(shard); throw reason; }));
     return cache.get(shard);
   };
+  const getAbilities = async (shard) => {
+    if (release.schema !== 'mtgemb-release-v3') return null;
+    if (!abilityCache.has(shard)) abilityCache.set(shard, Promise.all([
+      getShard(shard),
+      fetchJson(`${base}data/${release.release_id}/abilities/${String(shard).padStart(3, '0')}.json`)
+    ]).then(([shardData, abilities]) => {
+      validateAbilityShard(shardData.cards, abilities, release, shard);
+      return abilities;
+    }).catch((reason) => { abilityCache.delete(shard); throw reason; }));
+    return abilityCache.get(shard);
+  };
   const getCard = async (index) => (await getShard(shardFor(index))).cards[index % release.shard_size];
   const updateUrl = (push = true, card = selectedCard?.id ?? parseUrl(location.search).card) => {
-    const queryString = serializeUrl({ card, ...filters() });
+    const queryString = serializeUrl({ card, ability: activeAbility, ...filters() });
     const next = `${location.pathname}${queryString ? `?${queryString}` : ''}`;
     history[push ? 'pushState' : 'replaceState']({}, '', next);
   };
@@ -63,7 +78,7 @@
     visibleNeighbours = filterNeighbours(savedNeighbours, (index) => cardCache.get(index), filters());
     if (urlMode === 'push') updateUrl(true);
   };
-  const selectIndex = async (index, push = true) => {
+  const selectIndex = async (index, push = true, requestedAbility = null) => {
     const request = ++token;
     loading = true;
     error = '';
@@ -73,22 +88,27 @@
     try {
       if (!ids) await idsReady;
       if (request !== token) return;
-      const [card, shardData] = await Promise.all([getCard(index), getShard(shardFor(index))]);
+      const shard = shardFor(index);
+      const [card, shardData, abilities] = await Promise.all([getCard(index), getShard(shard), getAbilities(shard)]);
       if (request !== token) return;
       selectedCard = card;
-      savedNeighbours = shardData.neighbours[index % release.shard_size];
+      wholeCardNeighbours = shardData.neighbours[index % release.shard_size];
+      abilityEntries = abilities?.[index % release.shard_size] ?? [];
+      activeAbility = resolveAbilityIndex(requestedAbility, abilityEntries);
+      savedNeighbours = activeAbility === null ? wholeCardNeighbours : abilityEntries[activeAbility].neighbours;
       visibleNeighbours = savedNeighbours;
       if (card.has_text) await refreshFilters('none', request);
       if (request !== token) return;
       loading = false;
       if (push) updateUrl(true, ids.ids[index]);
+      else if (requestedAbility !== null && activeAbility === null) updateUrl(false, ids.ids[index]);
     } catch (reason) {
       if (request !== token) return;
       error = reason.message;
       loading = false;
     }
   };
-  const selectId = async (id, push = true) => {
+  const selectId = async (id, push = true, requestedAbility = null) => {
     const request = ++token;
     try { if (!ids) await idsReady; }
     catch (reason) { if (request === token) { error = reason.message; loading = false; } return; }
@@ -98,6 +118,9 @@
       token += 1;
       selectedIndex = -1;
       selectedCard = undefined;
+      wholeCardNeighbours = [];
+      abilityEntries = [];
+      activeAbility = null;
       savedNeighbours = [];
       visibleNeighbours = [];
       unknownId = true;
@@ -107,7 +130,7 @@
       return;
     }
     query = names.names[index];
-    selectIndex(index, push);
+    selectIndex(index, push, requestedAbility);
   };
   const onSearch = (event) => {
     query = event.currentTarget.value;
@@ -126,15 +149,23 @@
     else if (event.key === 'Escape') suggestions = [];
   };
   const onFilter = () => refreshFilters('push').catch((reason) => { error = reason.message; });
+  const chooseAbility = (value) => {
+    activeAbility = value === '' ? null : Number(value);
+    savedNeighbours = activeAbility === null ? wholeCardNeighbours : abilityEntries[activeAbility].neighbours;
+    refreshFilters('push').catch((reason) => { error = reason.message; });
+  };
   const onHistory = () => {
     const state = parseUrl(location.search);
     color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type;
-    if (state.card) selectId(state.card, false);
+    if (state.card) selectId(state.card, false, state.ability);
     else {
       token += 1;
       filterToken += 1;
       selectedCard = undefined;
       selectedIndex = -1;
+      wholeCardNeighbours = [];
+      abilityEntries = [];
+      activeAbility = null;
       savedNeighbours = [];
       visibleNeighbours = [];
       query = '';
@@ -171,7 +202,7 @@
       color = state.color; minMv = state.minMv ?? ''; maxMv = state.maxMv ?? ''; creature = state.creature; type = state.type;
       const startupToken = token;
       await idsReady;
-      if (state.card && startupToken === token) selectId(state.card, false);
+      if (state.card && startupToken === token) selectId(state.card, false, state.ability);
     } catch (reason) { error = reason.message; loading = false; }
   })();
   addEventListener('popstate', onHistory);
@@ -220,6 +251,16 @@
         <div class="results-heading"><div><p class="eyebrow">RANKED BY EFFECT SIMILARITY</p><h2 id="neighbours-title">Nearby ideas <span>{savedNeighbours.length}</span></h2></div><div class="model-chip"><i></i>{release?.model?.status ?? 'unknown'}</div></div>
         {#if !selectedCard.has_text}<div class="notice empty"><strong>No neighbours for this card</strong><span>This card has no rules text, so no neighbours were computed.</span></div>
         {:else}
+          {#if abilityEntries.length}
+            <div class="similar-by">
+              <label for="similar-by">Similar by</label>
+              <select id="similar-by" value={activeAbility ?? ''} onchange={(event) => chooseAbility(event.currentTarget.value)}>
+                <option value="">Whole card</option>
+                {#each abilityEntries as ability, i}<option value={i} title={ability.text}>{ability.text.length > 72 ? `${ability.text.slice(0, 69)}…` : ability.text}</option>{/each}
+              </select>
+              <span>Ability matches are experimental (not evaluated).</span>
+            </div>
+          {/if}
           <p class="filter-label">Filtering the {savedNeighbours.length} saved neighbours</p>
           <div class="filters">
             <label>Colour identity<select bind:value={color} onchange={onFilter}><option value="">Any colour</option><option value="W">White</option><option value="U">Blue</option><option value="B">Black</option><option value="R">Red</option><option value="G">Green</option><option value="C">Colourless</option></select></label>
@@ -228,7 +269,8 @@
             <label>Card kind<select bind:value={creature} onchange={onFilter}><option value="">Any</option><option value="creature">Creature</option><option value="noncreature">Noncreature</option></select></label>
             <label class="type-filter">Type text<input type="search" placeholder="e.g. artifact" bind:value={type} oninput={onFilter} /></label>
           </div>
-          {#if visibleNeighbours.length}
+          {#if savedNeighbours.length === 0}<div class="notice empty"><strong>No similar cards</strong><span>No neighbours were saved for this selection.</span></div>
+          {:else if visibleNeighbours.length}
           <ol class="neighbour-list">{#each visibleNeighbours as [index, score], position}<li><button type="button" class="neighbour" onclick={() => selectIndex(index)}><span class="rank">{String(position + 1).padStart(2, '0')}</span><span class="neighbour-name">{names.names[index]}<small>{ids.ids[index]}</small></span><span class="score"><strong>{score.toFixed(3)}</strong><small>cosine (ranking score, not a probability)</small></span><span class="arrow">↗</span></button></li>{/each}</ol>
           {:else}<div class="notice empty"><strong>No matches in this list</strong><span>Try changing or clearing one of the filters.</span></div>{/if}
         {/if}
@@ -240,3 +282,11 @@
 </main>
 
 <footer><span>Card Atlas <i>·</i> {release?.model?.label ?? 'Release metadata unavailable'}</span><span>{release?.attribution}</span></footer>
+
+<style>
+  .similar-by { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .similar-by label { font-size: 11px; color: #5d6056; }
+  .similar-by select { max-width: min(100%, 360px); height: 34px; border: 1px solid #dad8ce; border-radius: 4px; background: #fbfaf7; color: #3f4239; padding: 0 8px; font: 11px 'DM Sans', sans-serif; }
+  .similar-by span { color: #77796f; font-size: 10px; }
+  .similar-by select:focus-visible { outline: 3px solid #526e5e; outline-offset: 2px; }
+</style>
