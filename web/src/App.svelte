@@ -159,7 +159,8 @@
         suggestions = searchNames(query, names, ids?.ids);
         loading = false;
       });
-      idsReady = fetchJson(`${bundle}ids.json`).then((loadedIds) => {
+      // fetch ids after names so they do not share bandwidth with the lookup index
+      idsReady = namesReady.then(() => fetchJson(`${bundle}ids.json`)).then((loadedIds) => {
         validateIds(release, loadedIds);
         ids = loadedIds;
         suggestions = searchNames(query, names ?? { names: [], aliases: [] }, ids.ids);
