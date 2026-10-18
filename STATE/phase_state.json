@@ -9,9 +9,9 @@
   "smokes_used": 3,
   "initial_runs_used": 9,
   "extension_runs_used": 0,
-  "confirmation_runs_used": 2,
-  "updated_utc": "2026-10-18T00:50:00Z",
-  "active_run": "confirm-bge-s1",
+  "confirmation_runs_used": 3,
+  "updated_utc": "2026-10-18T01:33:00Z",
+  "active_run": "confirm-e5-s2",
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
@@ -22,7 +22,8 @@
     "initial-7-e5-lr3e-05-s20-spec",
     "initial-8-e5-lr3e-05-s20-band31-100",
     "initial-9-e5-lr3e-05-s20-multipos",
-    "confirm-e5-s1"
+    "confirm-e5-s1",
+    "confirm-bge-s1"
   ],
   "best_e5_recipe": "initial-1-e5-lr3e-05-s20",
   "frozen": {

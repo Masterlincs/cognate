@@ -170,6 +170,7 @@ While confirmation trains, I wrote the P7 analysis step (893098c): `report.confi
    - Sol review, three rounds. Round 1 (changes needed): provenance only checked model_path; no inconclusive outcome or adequacy threshold; missing seed ranges and exclusions; write-once race. Fixed in 9f3acfb; the adequacy rule and decision vocabulary are registered as before any confirmation eval. Round 2 (changes needed): manifest identity (dataset, pairs, model revision, trainer code, benchmark) not compared; an empty cohort would crash the bootstrap before the inconclusive check. Fixed in b8381a0. Round 3: Sol accepts, no remaining findings. Not yet run end to end on real confirmation evals (they don't exist yet).
 
 confirm-e5-s1 finished at 00:48 UTC (2000 updates, final checkpoint; in-training dev eval 0.7055 / 0.6904; schedule 228be492 as registered). This is the in-training eval only; the registered contrasts use the separate eval-encoder records made after all six runs. confirm-bge-s1 started.
+confirm-bge-s1 finished at 01:32 UTC with no crash (in-training eval 0.6643 / 0.6464; same schedule 228be492 as confirm-e5-s1, so seed 1 is matched). confirm-e5-s2 started.
 6. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)
