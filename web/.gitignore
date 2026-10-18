@@ -2,3 +2,5 @@ dist/
 !public/
 !public/data/
 !public/data/**
+public/data/20*/
+public/data/*.partial/

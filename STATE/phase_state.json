@@ -1,8 +1,8 @@
 {
-  "phase": "P8",
+  "phase": "P9",
   "status": "RUNNING",
-  "last_completed": "P7 (promote, provisional tag-proxy)",
-  "next_action": "P8: export confirm-e5-s1/final as the promoted release (parity, vector and ranking checks), then P9 browser checks on the real release.",
+  "last_completed": "P8 (release 2026-10-16-e5-base-v2-d4c393ee, parity and reference checks passed)",
+  "next_action": "P9: browser checks and payload/startup measurements on the real release; then P10 handoff.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T06:55:00Z",
+  "updated_utc": "2026-10-18T07:58:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
@@ -51,5 +51,6 @@
     "qualifier": "provisional tag-proxy promotion on selection-exposed development",
     "deployment_run": "confirm-e5-s1",
     "report": "runs/confirmation/8bf2f48c0bba3b2c/report.json"
-  }
+  },
+  "release_id": "2026-10-16-e5-base-v2-d4c393ee"
 }

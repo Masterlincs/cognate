@@ -202,6 +202,17 @@ Registered contrasts (`mtgemb confirm-report`; M = 4; one-sided adjusted lower b
 Both comparisons pass every bound (full point ≥ 0.005 and lower > 0; hard-lexical point ≥ 0 and lower > -0.010). **Decision: promote, as a provisional tag-proxy promotion on selection-exposed development.** Deployment model: confirm-e5-s1 (seed 1, fixed before confirmation), full 0.7055, hard-lexical 0.6904. For context only (not a registered contrast): the lexical baseline scored 0.6042 / 0.5769.
 
 What this does and does not show: on this development benchmark's tag-overlap relevance, fine-tuned E5 retrieves effect-similar cards much better than pretrained E5 and better than BGE-small trained the same way, and the result is stable across three seeds. It is not a sealed-data result, development was used to choose the recipe, the tag proxy is not human judgement, and three seeds say little about the tails of training variability. The encoder, export and app correctness gates still have to pass (P8, P9).
+
+### P8: export of the promoted model (2026-10-18)
+
+`uv run mtgemb export e5-base-v2 --max-length 94 --label "e5-base-v2 fine-tuned (confirm-e5-s1)" --status promoted --model-path runs/confirm-e5-s1/final --run-id confirm-e5-s1`:
+- Release `2026-10-16-e5-base-v2-d4c393ee`: bundle in `web/public/data/` (39 MB, git-ignored), artifacts (vectors, ID order, parity, reference neighbours) in `artifacts/releases/`.
+- 27,866 catalogue cards (fit and dev only; sealed cards cannot enter the catalogue), 27,573 with text and vectors, top-50 neighbours, self excluded.
+- Encoder parity on 64 probe cards: CPU vs XPU minimum cosine 0.99999982 (threshold 0.9999); CPU-query top-10 overlap 1.0 mean and min (threshold 0.98, tie-aware).
+- Exact-neighbour reference: 20 seeded rows against an independent float64 sort, 0 failures (17 identical lists; the rest are tie-aware near-tie swaps).
+- release.json records label, status `promoted`, run `confirm-e5-s1`, model revision and the decision text "provisional tag-proxy promotion on selection-exposed development".
+- `web/public/data/current.json` now points at this release, so the app's model choice is the promoted model. The app's own `check-bundle` validates the bundle (hashes, byte counts, ID order, card-to-index mapping, pointer); 7 app tests pass; build passes.
+- Fixed a git-ignore slip: the root rule for release bundles was overridden by `web/.gitignore`'s `!public/data/**`; the rule now lives in `web/.gitignore` after the re-include. Nothing large was committed.
 6. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)
