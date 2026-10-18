@@ -138,6 +138,7 @@ The sealed test split is excluded by default and is never loaded for routine tra
 ## Limitations
 
 - Relevance labels are Scryfall Tagger tag proxies, not human judgements.
+- The proxy sums every shared tag equally, so on multi-ability cards a rider clause with several co-occurring tags can outrank the main effect. Example: for Deflecting Swat, commander/alternative-cost cards score higher than redirect cards, and the fine-tuned model ranks them first. Proxy gains therefore partly reward this behaviour (WRITE_UP, "User review of the app").
 - Development results are selection-exposed because they inform model and checkpoint choices. The sealed results come from one run and are not selection-exposed, but they use the same tag proxy.
 - App filters apply only to the **50 saved neighbours**; they do not search the full catalogue.
 - Cosine scores are ranking scores, not probabilities.

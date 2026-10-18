@@ -516,3 +516,17 @@ The user authorised gate 1 ("do 1"): one evaluation of the frozen artifacts on t
 13. **Recorded:** the README sealed section, STATE `sealed` block, the IMPLEMENTATION_PLAN entry, and . Publication (gate 2) remains unapproved.
 14. **Sol claims check** (`p10-sealed-claims-r1`): all numbers, seed means and "cleared" match the aggregates, and export is fit+dev only. One P2 overclaim was fixed (step 12 and the README wording). Sol did not verify the per-card equality of the archived attempt under its access restrictions; the lead checked it (step 10).
 15. **Deferred:** the user saved longer E5 training for later (2026-10-18). Recorded in STATE `deferred` with its caveats. Not started.
+
+## User review of the app: rider clauses dominate (2026-10-18)
+
+The user looked at the running app (release `fc4d438d`) and reported two bad neighbour lists. Both are development or training cards, and both were inspected with `.scratch/inspect_cards.py`, which never loads sealed rows.
+
+1. **Deflecting Swat** (dev). The text has two lines: "If you control a commander, cast free" and "choose new targets for a spell or ability".
+   - **Fine-tuned top 10:** all commander or alternative-cost cards (Deadly Rollick, Obscuring Haze, the commander "Storm" cycle). There are no redirect cards.
+   - **Pretrained E5:** includes Commandeer and Perplexing Chimera, which redirect.
+   - **Lexical:** includes Redirect and Wild Ricochet.
+   - **Cause: the proxy prefers the rider.** The metric scores Obscuring Haze (shares only the commander rider) at gain 16.62 and Redirect (shares the actual effect) at 10.56. The rider carries three co-occurring tags: synergy-commander, manaless value and alternative cost. The fine-tuned list scores *higher* on the proxy (nDCG 0.694 vs pretrained 0.684, lexical 0.688).
+2. **Bruenor Battlehammer** (fit). The text has two lines: "+2/+0 per attached Equipment" and "pay {0} for the first equip each turn".
+   - **Fine-tuned neighbours:** mostly equipment-count cards, five of which share no tag at all. Only one (Strong Back) shares the equip-cost tag.
+   - **Lexical:** finds the free-equip cards, Forge Anew and Kili.
+3. **Interpretation.** This is not overtraining in the usual sense; the development proxy was still rising at 2000 updates. Training pairs and the metric both treat every shared functional tag as equal, and summed. So on multi-ability cards a rider clause with several co-occurring tags can outrank the main effect, and fine-tuning learns exactly that. The proxy gains in the README are real gains *on the proxy*, but the proxy rewards this failure. This is a construct-validity limit, added to the README limitations. No claim, decision or artifact was changed.
