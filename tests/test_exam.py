@@ -34,6 +34,10 @@ def test_render_parse_round_trip_and_status_rules():
         exam.parse(md.replace("· proposed", "· maybe"))
     with pytest.raises(ValueError, match="needs anchor"):
         exam.parse(md.replace("trap: ", "trapp: "))
+    with pytest.raises(ValueError, match="numbered from 1"):
+        exam.parse(md.replace(" line 2 |", " line 0 |"))
+    with pytest.raises(ValueError, match="has no line 3"):
+        exam.score([{**p, "status": "accepted", "line": 3}], cards, lambda t: None)
     with pytest.raises(ValueError, match="malformed item heading"):
         exam.parse(md + "\n## T002 · user · proposed # note\n")
     with pytest.raises(ValueError, match="repeats its anchor"):

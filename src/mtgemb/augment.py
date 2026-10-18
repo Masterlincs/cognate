@@ -21,15 +21,16 @@ from .util import sha256_json
 SYNTH_FLIPS = [p for p in FLIPS if p != ("you", "opponent")]
 _FLIP_OF = {a: b for a, b in SYNTH_FLIPS} | {b: a for a, b in SYNTH_FLIPS}
 _FLIP_RE = re.compile(r"(?<![\w+/-])(" + "|".join(
-    re.escape(w) for w in sorted(_FLIP_OF, key=len, reverse=True)) + r")(?![\w/])", re.I)
+    re.escape(w) for w in sorted(_FLIP_OF, key=len, reverse=True)) + r")(?![\w/])"
+    r"(?! step)", re.I)  # "draw step" / "untap step" name turn steps, not mechanisms
 _WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
           "ten", "eleven"]
 # a number not inside "+1/+1"-style counters or power/toughness ("2/2")
 _NUMBER = re.compile(r"(?<![\w+/-])(\d+|" + "|".join(_WORDS[1:11]) + r")(?![\w/])", re.I)
 WORDING = [(re.compile(r"\benters(?! the battlefield)\b"), "enters the battlefield"),
            (re.compile(r"\bdies\b"), "is put into a graveyard from the battlefield"),
-           (re.compile(r"\bmana value\b"), "converted mana cost"),
-           (re.compile(r"\bcan't be blocked\b"), "is unblockable")]
+           (re.compile(r"\bmana value\b"), "converted mana cost")]
+# "can't be blocked" -> "is unblockable" is left out: plural subjects would need "are"
 
 
 def _rng(*key) -> np.random.Generator:
@@ -78,8 +79,10 @@ def opener_negatives(ids: list[str], texts: list[str], families: list[str],
     out = {}
     for members in by_open.values():
         for i in members:
-            cand = [j for j in members if families[j] != families[i]
-                    and not tags.get(ids[i], frozenset()) & tags.get(ids[j], frozenset())]
+            if not tags.get(ids[i]):
+                continue  # untagged means unknown, not "shares nothing"
+            cand = [j for j in members if families[j] != families[i] and tags.get(ids[j])
+                    and not tags[ids[i]] & tags[ids[j]]]
             if cand:
                 out[ids[i]] = ids[cand[int(_rng("opener", seed, ids[i]).integers(len(cand)))]]
     return out

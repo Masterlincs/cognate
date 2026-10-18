@@ -5,7 +5,8 @@ near-identical trap. A model passes an item when it scores the match above the t
 
 The worksheet `exam/traps.md` is the source of truth. Items are proposed by rule-based
 mining or from user reports; only the user turns `proposed` into `accepted` or `rejected`.
-Only accepted items are scored. Exam cards are never used for training (`exam_cards`).
+Only accepted items are scored. Exam card families are kept out of new training inputs;
+fit exam cards remain in the existing card pairs (, `exam_cards`).
 Sealed cards are never loaded, so they cannot appear.
 
 Mined sections (one-line cards only, so every tag on a card belongs to its single line):
@@ -76,6 +77,8 @@ def parse(md: str) -> list[dict]:
             cur[r.group(1)] = r.group(2)
             if r.group(1) == "anchor":
                 cur["line"] = int(r.group(3)) if r.group(3) else None
+                if cur["line"] == 0:
+                    raise ValueError(f"line {n}: ability lines are numbered from 1")
     for it in items:
         if not all(k in it for k in ("anchor", "match", "trap")):
             raise ValueError(f"{it['id']}: needs anchor, match and trap")
@@ -256,7 +259,10 @@ def score(items: list[dict], cards, encode) -> dict:
     for it in acc:
         a = cards.loc[it["anchor"], "text"]
         if it.get("line") is not None:
-            q = encode([split_abilities(a)[it["line"] - 1]])[0]
+            lines = split_abilities(a)
+            if not 1 <= it["line"] <= len(lines):
+                raise ValueError(f"{it['id']}: anchor has no line {it['line']}")
+            q = encode([lines[it["line"] - 1]])[0]
             s = [float(np.max(encode(split_abilities(cards.loc[it[r], "text"])) @ q))
                  for r in ("match", "trap")]
         else:

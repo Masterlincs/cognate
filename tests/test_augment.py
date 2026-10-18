@@ -10,6 +10,7 @@ def test_flip_swaps_one_mechanism_word_and_keeps_case():
     assert augment.flip("Put a +1/+1 counter on it.", 0, "a") == "Put a -1/-1 counter on it."
     # "you" is never flipped (ungrammatical results)
     assert augment.flip("you control", 0, "a") is None
+    assert augment.flip("Skip your draw step. Untap step.", 0, "a") is None
     assert augment.flip("Tap it. Untap it.", 0, "k") == augment.flip("Tap it. Untap it.", 0, "k")
 
 
@@ -23,7 +24,8 @@ def test_numbers_bumps_free_numbers_only():
 
 def test_wording_uses_older_oracle_phrases():
     assert augment.wording("When this creature enters, draw a card. It can't be blocked.") == (
-        "When this creature enters the battlefield, draw a card. It is unblockable.")
+        "When this creature enters the battlefield, draw a card. It can't be blocked.")
+    assert augment.wording("Creatures you control can't be blocked.") is None
     assert augment.wording("Whenever a creature dies, its mana value matters.") == (
         "Whenever a creature is put into a graveyard from the battlefield, its converted "
         "mana cost matters.")
@@ -42,3 +44,6 @@ def test_opener_negatives_need_same_opener_other_family_no_shared_tag():
     assert neg["a"] == "b"  # c shares "draw", d is a's family, e has two lines
     assert neg["b"] in {"a", "c", "d"} and neg["d"] in {"b", "c"}
     assert "e" not in neg
+    tags["b"] = frozenset()  # untagged means unknown: neither an anchor nor a negative
+    neg = augment.opener_negatives(ids, texts, fams, tags, seed=0)
+    assert "a" not in neg and "b" not in neg and "b" not in neg.values()
