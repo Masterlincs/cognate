@@ -298,7 +298,7 @@ Served `web/dist`, built with `current.json` → `2026-10-16-e5-base-v2-d4c393ee
 
    For each exported release, it checks the vectors sha256 and compares the vectors with the evaluated run's vectors.
 
-   Result: all 9 evals (6 confirmation, 3 baselines) replay with max abs per-anchor difference **0.0** and no hash mismatches. Both promoted releases (`d4c393ee`, v1; `fc4d438d`, v2) hold vectors **bitwise identical** to the evaluated `confirm-e5-s1` vectors, so the released model is the evaluated model. First report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T072329Z.json` (made from uncommitted code); re-run from the commit for clean provenance.
+   Result: all 9 evals (6 confirmation, 3 baselines) replay with max abs per-anchor difference **0.0** and no hash mismatches. Both promoted releases (`d4c393ee`, v1; `fc4d438d`, v2) hold vectors **bitwise identical** to the evaluated `confirm-e5-s1` vectors, so the released model is the evaluated model. First report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T072329Z.json` was made from uncommitted code. The record of reference is `2026-10-18T073201Z-1792308721253768800.json`: commit 101edee, clean tree, passed, max diff 0.0, both promoted releases 0.0. An intermediate run at de96fb2 was flagged dirty because of uncommitted doc edits; it also passed.
 2. **Run reconciliation.** 18 run directories: 3 smoke, 9 initial, 6 confirmation. Every one has STARTED and COMPLETED events in `runs/train.jsonl`, `finished: true`, a selected update and a passed guardrail.
    - Crashes, each followed by RESUMED: initial-2, 3, 4, 6, 8; confirm-e5-s1, e5-s3, bge-s2, bge-s3.
    - initial-3 also has one PAUSED/RESUMED pair.
@@ -312,3 +312,134 @@ Served `web/dist`, built with `current.json` → `2026-10-16-e5-base-v2-d4c393ee
    A fresh clone's `current.json` names the real release, which is git-ignored, so the app needs `npm run fixture` or an export first (documented in `web/README.md`).
 4. **No full retraining replay** has been performed; the evaluation replay is not equivalent.
 5. README status, results tables and limitations updated. All numbers were re-read from the eval summaries and the confirmation report.
+6. **Sol review of `replay-eval`, round 1:** accept after fixes. Six P2 findings, each a way `passed` could be wrongly true:
+   - releases without a comparable eval passed;
+   - missing eval records were skipped silently;
+   - benchmark and dataset identities were not checked;
+   - only the release vectors were hashed, not the bundle;
+   - recorded summaries were not compared;
+   - integer-typed metric columns were skipped.
+
+   I accepted all six and fixed them (f039ff8):
+   - Releases are matched to evals by recipe, max_length and weights.
+   - Every eval directory must be a complete record, and zero evals fails.
+   - Identities are checked.
+   - `release.json` and every bundle file are verified against their recorded hashes and byte counts.
+   - Whole summaries are compared.
+   - Metric columns are required and compared as float.
+
+   12 replay tests (10 tamperings, one per failure; all fail for the stated reason). Real run at f039ff8, clean tree: **passed**. 9 evals: per-anchor and summary diff 0.0. 3 releases, all 0.0: the pretrained dry run `9a16efe0` now matched to `pretrained-e5-base-v2`; `d4c393ee` and `fc4d438d` matched to `confirm-e5-s1`. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T073902Z-1792309142065552000.json`; this replaces the earlier report as the record of reference. Round 2 has been sent to Sol.
+7. **Sol review of `replay-eval`, round 2:** FAIL, three findings:
+   - P2: release vectors containing NaN passed, because `NaN > tol` is false;
+   - P2: two releases with the same `release_id` overwrote each other in the report, so a failing one could be hidden;
+   - P3: the boolean `True` matched the count `1` in the summary comparison.
+
+   I accepted all three and fixed them (6314a29):
+   - Comparisons are written as `not diff <= tol`, so NaN fails.
+   - Release vectors must be all finite.
+   - Releases are keyed by directory name, and `release_id` must equal that name.
+   - Booleans match only booleans.
+
+   Three new tampering tests (15 replay tests in all). Each fails on the r1 code and passes after the fix. Real run at 6314a29: **passed**. Same outcome as r1: 9 evals and 3 releases, all diffs 0.0. Report path is in step 8. Round 3 sent to Sol.
+8. **Replay record of reference:** a re-run at clean commit 7d921d7 (`uv run mtgemb replay-eval --ds data/processed/2026-10-16_no_reminder_v1`) **passed**. 9 evals with per-anchor and summary diffs of 0.0. 3 releases, each matching its eval with diff 0.0. Report: `runs/replay/8bf2f48c0bba3b2c/2026-10-18T075120Z-1792309880448685600.json`. It replaces the f039ff8 report as the record of reference. One intermediate report (`…074757Z…`) is marked dirty because `WRITE_UP.MD` was uncommitted at the time; it is kept but is not the record.
+9. **Sol review of `replay-eval`, round 3:** FAIL, two findings:
+   - P2: a missing `per_anchor.parquet` or missing release `vectors.npy` crashed the replay with `FileNotFoundError`, so no report was written;
+   - P3: boolean per-anchor count columns were cast to float and passed.
+
+   I accepted both and fixed them (c3e5e20):
+   - Missing files are reported as problems instead of crashing.
+   - Metric and count columns must be numeric and not boolean.
+
+   Three new tests (18 replay tests, 88 in total). Each fails on the r2 code. Real run at clean c3e5e20: **passed**. 9 evals and 3 releases, all diffs 0.0. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T075854Z-1792310334571453600.json`; this is now the record of reference. Round 4 sent to Sol.
+10. **Sol review of `replay-eval`, round 4:** FAIL, two findings:
+   - P2: truncated npy or parquet files, or non-finite eval vectors, still crashed the run without a report;
+   - P3: subtracting int8 release vectors overflowed, so a tampered vector could show a diff of 0.0 and pass.
+
+   I accepted both and fixed them at the root rather than case by case (03c9d08):
+   - Each eval and release check now runs inside a guard that turns any exception into a failed record, so a report is always written.
+   - Eval and release vectors must be finite 2-D float arrays, loaded without pickle.
+   - The release-versus-eval diff is computed in float64.
+
+   Four new tests (22 replay tests, 92 in total). Each fails on the r3 code. Real run at clean 03c9d08: **passed**. 9 evals and 3 releases, all diffs 0.0. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T080600Z-1792310760233301800.json`; this is now the record of reference. Round 5 sent to Sol.
+
+   Note: `runs/replay-eval.out` is stdout from the 07:39 run at f039ff8. That run passed, but it predates the r2 to r4 fixes and is not the record.
+11. **Sol review of `replay-eval`, round 5:** FAIL, one P2. Reading an eval's metadata still happened outside the guard, so a missing `meta` or a list-valued `model_path` crashed the run without a report. I accepted it and fixed it (d9df157): the replay of one eval and its metadata read now run together inside the guard. Two new tests (24 replay tests, 94 in total); both fail on the r4 code. Real run at clean d9df157: **passed**. 9 evals and 3 releases, all diffs 0.0. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T081202Z-1792311122382392400.json`; this is now the record of reference. Round 6 sent to Sol.
+12. **Sol review of `replay-eval`, round 6:** FAIL, one P2. Releases were found by globbing for `release_meta.json`, so a release whose meta file was unreadable or missing silently vanished. A failing release could therefore disappear and leave `passed` true. I accepted it and fixed it (89aae1a):
+   - Every directory under `artifacts/releases/` is now a release record, checked inside the guard; a missing or unreadable meta file is a failure.
+   - Unpublished exports are listed in the report as `unpublished_release_dirs` and not checked. These are `.partial` directories (export publishes only by renaming them) and `.failed-N` directories (failed exports kept aside, never deleted). The real tree has one: the empty `9a16efe0.failed-1`.
+
+   New and extended tests; both fail on the r5 code (25 replay tests, 95 in total). Real run at clean 89aae1a: **passed**. 9 evals and 3 releases, all diffs 0.0. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T082018Z-1792311618169986800.json`; this is now the record of reference. Round 7 sent to Sol.
+13. **Sol review of `replay-eval`, round 7:** FAIL, two P2 findings:
+   - An `is_dir()` error on a child entry escaped the guard.
+   - A bundle with `names.json` removed from its manifest passed once `release.json` was re-pinned in the release meta.
+
+   I accepted both (5e7ec19):
+   - Every entry under the eval and release roots is now a record checked inside the guard; a stray file fails.
+   - The second finding needs coordinated edits to two hash-pinned files, which I had scoped out as forgery. Manifest completeness is still a real gap (an exporter bug could cause it), so `release.json` must now:
+     - have a known schema (v1: `names.json`; v2: `names.json` + `ids.json`);
+     - have a `release_id` equal to the meta's;
+     - have an `n_cards` equal to the catalogue size;
+     - list every card and neighbour shard.
+
+   **My mistake, caught by the real run:** the first version compared `n_cards` to the benchmark universe. The replay at 5e7ec19 therefore **failed** all three releases, with bundle `n_cards` 27866 against 27573. The export catalogue is every fit+dev card, including cards without usable text. Only the 27573 cards with text have vectors. I fixed the check to use the catalogue (3922bf7). The failed report `…082827Z…` is kept as a record of the mistake.
+
+   Tests: 27 replay, 97 in total. Real run at clean 3922bf7: **passed**. 9 evals and 3 releases, all diffs 0.0. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T083246Z-1792312366565236500.json`; this is now the record of reference. Round 8 has been sent to Sol, with deliberate re-pinning forgery explicitly out of scope: the replay is an integrity and reproducibility check, not a signature.
+14. **Sol review of `replay-eval`, round 8:** FAIL, one P2. An eval record with empty or incomplete encoder metadata (`meta={}`, or no recipe or `max_length`) passed, even though nothing could be attributed to it. I accepted it and fixed it (5f208ec):
+   - `meta.system` must be `encoder` or `lexical`.
+   - `meta.recipe` must be a non-empty dict.
+   - Encoders need an integer `max_length`.
+
+   All 9 real records satisfy this. Two new tests (29 replay tests, 99 in total); both fail on the r7 code. Real run at clean 5f208ec: **passed**. 9 evals and 3 releases, all diffs 0.0. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T084126Z-1792312886269924900.json`; this is now the record of reference. Round 9 sent to Sol.
+15. **Sol review of `replay-eval`, round 9:** FAIL, one P2. When an eval's `meta.model_path` was absent, it was read as `None`, which means pretrained. A record with unknown weights could therefore match a pretrained release.
+
+   I accepted it and fixed it (ebd7e19): encoder records must contain the `model_path` key, either as an explicit null (pretrained) or as a string. A list-valued `model_path` is now caught by this check too, instead of by the crash guard.
+
+   One new test; 100 tests in total. Real run at clean ebd7e19: **passed**. 9 evals and 3 releases, all diffs 0.0. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T085415Z-1792313655152230400.json`; this is now the record of reference.
+
+   Round 10 sent to Sol. Sol is asked to sweep every metadata field the replay reads, for absent or wrongly typed values, and to report all remaining findings together rather than one per round.
+16. **Sol review of `replay-eval`, round 10** (a full metadata sweep, as asked): FAIL, four P2 groups. I accepted all four and fixed them (e596c52):
+   - **Fake encoder recipes passed, and lexical-labelled records could match encoder releases.**
+     - Encoder recipes must contain the six encoder-contract keys (`model_id`, `revision`, `prefix`, `pooling`, `normalize`, `dim`).
+     - Only encoder records can be matched to releases.
+     - Matching compares canonical JSON of (recipe, max_length, resolved path), so `True` never equals `1`.
+   - **The lexical refit ignored the recorded recipe.** A lexical record's recipe must now equal `LEXICAL_RECIPE`, which is what the refit uses.
+   - **A falsy release `model_path` (`false`, `0`, `[]`) matched pretrained.** `model_path` must now be null or a non-empty string, on both evals and releases. Encoder `max_length` must be a positive int.
+   - **`shard_size=-1` let shards go missing.** It must now be a positive int.
+
+   Five new tests (105 in total); each fails on the r9 code. Real run at clean e596c52: **passed**. 9 evals and 3 releases, all diffs 0.0, with the same release-to-eval matches as before. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T090640Z-1792314400337031000.json`; this is now the record of reference. Round 11 (another full sweep) sent to Sol.
+17. **Sol review of `replay-eval`, round 11** (full sweep): FAIL, two P2 findings:
+   - Encoder recipes had only their keys checked, so a null `model_id`, `pooling` or `dim` passed.
+   - The lexical comparison accepted `lowercase=1` and `ngram_range=[3.0, 5.0]`.
+
+   I accepted both and fixed them (9f90519):
+   - An encoder record's recipe must now canonically equal one entry of `encoder.RECIPES`, the recipes the encoder module can actually run. All 8 real encoder records do.
+   - The recipe's `dim` must equal the width of the saved vectors.
+   - Lexical recipes are compared as canonical JSON, so `1` never equals `true`.
+
+   Three new tests and one updated; 108 tests in total. Real run at clean 9f90519: **passed**. 9 evals and 3 releases, all diffs 0.0, with the same matches as before. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T091622Z-1792314982014177000.json`; this is now the record of reference. Round 12 sent to Sol.
+18. **Sol review of `replay-eval`, round 12** (full sweep): FAIL, exactly one P2, and Sol reported nothing else in scope. A release `encoder` stored as a list of pairs was silently turned into a dict by `dict(...)` and passed.
+
+   I accepted it and fixed it (996ef83): the release `encoder` must be a JSON object, otherwise the release fails and matches nothing. One new test (109 in total), which fails on the r11 code. Real run at clean 996ef83: **passed**. 9 evals and 3 releases, all diffs 0.0, with the same matches as before. Report `runs/replay/8bf2f48c0bba3b2c/2026-10-18T092430Z-1792315470167881000.json`; this is now the record of reference.
+
+   Round 13 sent to Sol, to verify this fix only.
+19. **Sol review of `replay-eval`, round 13: ACCEPT.** No findings; the r12 fix holds and introduces no regression. That ends the review series:
+   - 13 rounds;
+   - 26 findings accepted and fixed, from f039ff8 to 996ef83;
+   - 39 replay tests, 109 tests in total.
+
+   The record of reference is the clean run at 996ef83: `runs/replay/8bf2f48c0bba3b2c/2026-10-18T092430Z-1792315470167881000.json`.
+   - **passed:** all 9 eval records re-score with per-anchor and summary diffs of 0.0.
+   - All 3 release records match their evaluations exactly: `9a16efe0` → `pretrained-e5-base-v2`; `d4c393ee` and `fc4d438d` → `confirm-e5-s1`.
+   - One unpublished directory is listed: `9a16efe0.failed-1`.
+20. **P10 complete.** What it established and what it did not:
+   - **Established:**
+     - The evaluation replay is exact.
+     - All 18 runs are reconciled.
+     - A clean clone builds and tests.
+     - The README and handoff table are filled.
+   - **Not done:**
+     - No full retraining replay. The evaluation replay re-scores pinned embeddings; it does not retrain.
+     - No sealed (held-out) evaluation.
+     - No publication.
+
+     The last two are gates that need the user's explicit approval.

@@ -1,8 +1,8 @@
 {
-  "phase": "P9",
-  "status": "RUNNING",
-  "last_completed": "P8 (release 2026-10-16-e5-base-v2-d4c393ee, parity and reference checks passed)",
-  "next_action": "P9: browser checks and payload/startup measurements on the real release; then P10 handoff.",
+  "phase": "P10",
+  "status": "COMPLETE",
+  "last_completed": "P10 (replay-eval exact at 996ef83, Sol accepted after 13 rounds; runs reconciled; clean clone verified; README and handoff filled)",
+  "next_action": "Awaiting user decisions at the gates: sealed (held-out) evaluation (optional) and publication. Optional P10.5 human labels and P11 are not started.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T07:14:00Z",
+  "updated_utc": "2026-10-18T09:26:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
@@ -84,5 +84,13 @@
     },
     "warm_selection_ms": "25-33 cached, 137-174 with shard fetch",
     "review": "Sol r1 pending"
+  },
+  "replay": {
+    "command": "mtgemb replay-eval --ds data/processed/2026-10-16_no_reminder_v1",
+    "passed": true,
+    "commit": "996ef8331e545d570f378536073c83201c61444d",
+    "report": "runs/replay/8bf2f48c0bba3b2c/2026-10-18T092430Z-1792315470167881000.json",
+    "scope": "evaluation replay from pinned embeddings; no retraining replay performed",
+    "review": "Sol accepted (round 13, 996ef83)"
   }
 }
