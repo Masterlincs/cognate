@@ -1,8 +1,8 @@
 {
-  "phase": "P10",
-  "status": "COMPLETE",
+  "phase": "P12",
+  "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "User labels the pilot pool (P10.5) with `mtgemb annotate runs/labels/471bafd58c8d`; then the lead runs human.analyse. Publication (gate 2) still awaits the user's decision. Sealed evaluation is done and must not be repeated.",
+  "next_action": "User reviews exam/traps.md (accept/reject 51 proposed items) and labels the pilot pool (mtgemb annotate runs/labels/471bafd58c8d). Then the lead scores the deployed model on accepted items, registers ext-1 and runs it. Publication (gate 2) still awaits the user. Sealed evaluation must not be repeated.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 0,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-18T16:05:00Z",
+  "updated_utc": "2026-10-18T20:00:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
@@ -158,5 +158,25 @@
     "labels": 0,
     "tool": "uv run mtgemb annotate runs/labels/471bafd58c8d (annotate 1451e6c, Luna review pass)",
     "status": "awaiting user labels"
+  },
+  "p12": {
+    "decision": "",
+    "credit": "Delvefall (ideas only, no licence)",
+    "exam": {
+      "worksheet": "exam/traps.md",
+      "items_proposed": 51,
+      "items_accepted": 0,
+      "commit": "8a2bf54"
+    },
+    "ext1_aux": {
+      "commit": "6fffcd4",
+      "rows": 19299,
+      "lines": 9054,
+      "tags": 1489,
+      "row_hash": "2d5b9079d7024198",
+      "review": "Sol r1 pending",
+      "registered": false
+    },
+    "blocked_on": "user accepts/rejects exam items; ext-1 is registered only after a measured exam failure"
   }
 }

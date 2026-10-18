@@ -252,8 +252,9 @@ def score(items: list[dict], cards, encode) -> dict:
         else:
             v = encode([a, cards.loc[it["match"], "text"], cards.loc[it["trap"], "text"]])
             s = [float(v[1] @ v[0]), float(v[2] @ v[0])]
-        rows.append({"id": it["id"], "section": it["section"], "match": s[0], "trap": s[1],
-                     "margin": s[0] - s[1], "passed": s[0] > s[1]})
+        rows.append({"id": it["id"], "section": it["section"],
+                     "item": [it["anchor"], it.get("line"), it["match"], it["trap"]],
+                     "match": s[0], "trap": s[1], "margin": s[0] - s[1], "passed": s[0] > s[1]})
     by = {}
     for sec in SECTIONS:
         r = [x for x in rows if x["section"] == sec]
@@ -262,6 +263,21 @@ def score(items: list[dict], cards, encode) -> dict:
                        "mean_margin": float(np.mean([x["margin"] for x in r]))}
     return {"n": len(rows), "passed": sum(x["passed"] for x in rows), "sections": by,
             "items": rows}
+
+
+def guard(old: dict, new: dict) -> dict:
+    """Regression guard (#10, Delvefall): items both records scored, by identical item.
+
+    An item edited between the two records is not compared (it is a different item).
+    """
+    before = {(r["id"], tuple(r["item"])): r["passed"] for r in old["items"]}
+    after = {(r["id"], tuple(r["item"])): r["passed"] for r in new["items"]}
+    both = sorted(before.keys() & after.keys())
+    return {"n_compared": len(both),
+            "regressed": [k[0] for k in both if before[k] and not after[k]],
+            "fixed": [k[0] for k in both if after[k] and not before[k]],
+            "only_old": sorted(k[0] for k in before.keys() - after.keys()),
+            "only_new": sorted(k[0] for k in after.keys() - before.keys())}
 
 
 def exam_score(ds_dir, name: str, backbone: str, max_length: int,

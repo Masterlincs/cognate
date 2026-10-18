@@ -71,3 +71,16 @@ def test_score_whole_card_and_line_anchor():
     assert r["passed"] == 0 and r["sections"]["rider"] == {
         "n": 1, "passed": 0,
         "mean_margin": pytest.approx(np.cos(np.deg2rad(30)) - np.cos(np.deg2rad(5)))}
+
+
+def test_guard_compares_identical_items_only():
+    def rec(*rows):
+        return {"items": [{"id": i, "item": [A, None, M, T if not edited else A], "passed": p}
+                          for i, p, edited in rows]}
+    old = rec(("T001", True, False), ("T002", False, False), ("T003", True, False),
+              ("T004", True, False))
+    new = rec(("T001", False, False), ("T002", True, False), ("T003", True, True),
+              ("T005", True, False))
+    g = exam.guard(old, new)
+    assert g == {"n_compared": 2, "regressed": ["T001"], "fixed": ["T002"],
+                 "only_old": ["T003", "T004"], "only_new": ["T003", "T005"]}

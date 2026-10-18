@@ -51,6 +51,9 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--max-length", type=int, required=True)
     q.add_argument("--model-path")
     q.add_argument("--ds", default=DEFAULT_DS)
+    q = sub.add_parser("exam-guard", help="items that passed in OLD and fail in NEW (#10)")
+    q.add_argument("old")
+    q.add_argument("new")
     q = sub.add_parser("annotate", help="label an existing blinded human pilot pool locally")
     q.add_argument("pool_dir")
     q.add_argument("--port", type=int, default=8765)
@@ -66,6 +69,10 @@ def main(argv: list[str] | None = None) -> None:
 
         out = exam_score(a.ds, a.name, a.backbone, a.max_length, a.model_path)
         out = {k: out[k] for k in ("name", "n", "passed", "sections", "n_proposed")}
+    elif a.cmd == "exam-guard":
+        from .exam import guard
+
+        out = guard(read_json(a.old), read_json(a.new))
     elif a.cmd == "acquire":
         from .acquire import acquire
 

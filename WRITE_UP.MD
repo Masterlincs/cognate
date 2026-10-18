@@ -598,3 +598,18 @@ The ideas, as Delvefall describes them:
      - ext-2 = ideas 3–6, on the better of ext-1 and initial-1.
      - ext-3 = idea 7.
      - Ideas 8–10 need no training run.
+2. **Trap exam built (idea 9, `8a2bf54`).**
+   - `exam/traps.md` is a plain worksheet: each item is an anchor (whole card, or one line of it), a true match and a near-identical trap. The rule is Delvefall's "same mechanism, flexible parameters".
+   - Every item starts as **proposed**. Only the user can mark an item accepted or rejected. Only accepted items are ever scored (`mtgemb exam-score`). Nothing is labelled automatically.
+   - 51 proposed items: 2 from the user's app review (Deflecting Swat; Bruenor's free-equip line), 19 rider (same trigger opener, no shared tag), 10 mechanism flip (one word swapped, e.g. tap/untap), 20 parameters (the same text with only the numbers changed, as a true match).
+   - Candidates are mined by rules from fit and dev one-line cards (dev anchors first). A smoke score ran with n = 0 because nothing is accepted yet.
+   - All 153 exam cards, whatever their status, are kept out of every new training input (the aux rows and the later augmentations). They stay in the existing card pairs, which the comparator and the new runs share, so the comparison stays fair. The dev-only exam subset will be reported separately.
+3. **Line-tag stream for ext-1 (ideas 1+2, `6fffcd4`).**
+   - `linetag.build`: one row per (line, tag) from fit one-line cards, for pair-eligible tags only (fit df 2..500). At most 64 rows per tag (seeded), so broad tags do not dominate. Whole families of exam cards are excluded: a same-text twin of an exam card would otherwise leak its line (we found one, Headlong Rush, in an early mining pass).
+   - The tag text is the tag label plus the first sentence of its Tagger description.
+   - Real counts: 9,054 lines, 1,489 tags, 19,299 rows (row hash `2d5b9079d7024198`). 2000 updates of 32 rows is about 3.3 passes over the rows; in-batch masking hides about 0.5% of pairs.
+   - Training (`aux="line_tag"`): each update adds a symmetric masked InfoNCE loss between 32 lines and their 32 tag texts, with the same encoder and scale, to the unchanged card loss. A tag that a line also carries is never a negative.
+   - The card batch schedule is byte-identical to the aux-off schedule (tested), so ext-1 differs from initial-1 only by the added stream. One unavoidable difference: the extra forward pass consumes dropout randomness.
+   - The row hash enters the run identity; the checkpoint holds a combined schedule hash; the card schedule hash is logged on its own. Resume is exact (tested).
+   - Sent to Sol (`gpt-6.1-sol`, high) for independent review.
+4. **Regression guard (idea 10).** `mtgemb exam-guard OLD.json NEW.json` compares two exam score records and lists the items that passed before and fail now (and the reverse). Only items that are identical in both records (same anchor, line, match and trap) are compared; an edited item counts as a new item. Every retrain is scored on the exam and guarded against the deployed model's record.
