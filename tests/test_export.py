@@ -67,6 +67,8 @@ def test_release_digest_binds_catalogue_and_encoder():
     assert d != release_digest("ds2", *base[1:])
     assert d != release_digest("ds", ["b", "a"], *base[2:])
     assert d != release_digest("ds", base[1], {"model_id": "m", "max_length": 92}, *base[3:])
+    # a bundle layout change is a new release, never the old id with new files
+    assert d != release_digest(*base, schema="mtgemb-release-v1")
 
 
 def test_finish_interrupted_adopts_only_matching_artifacts(tmp_path):

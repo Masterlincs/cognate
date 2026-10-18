@@ -31,7 +31,7 @@ from .util import (
     utcnow,
 )
 
-SCHEMA = "mtgemb-release-v1"
+SCHEMA = "mtgemb-release-v2"  # ids.json split from names.json
 K = 50
 SHARD = 256
 ATTRIBUTION = ("Card data and images © Wizards of the Coast; data from Scryfall (scryfall.com). "
@@ -105,9 +105,10 @@ def ranking_parity(q: np.ndarray, v: np.ndarray, rows: np.ndarray, nidx: np.ndar
 
 
 def release_digest(dataset_id: str, ids: list[str], encoder: dict, model_hash: str,
-                   vec_hash: str) -> str:
-    """Everything that defines a release's content; same inputs -> same release_id."""
-    return sha256_json([dataset_id, sha256_json(ids), encoder, model_hash, vec_hash])[:8]
+                   vec_hash: str, schema: str = SCHEMA) -> str:
+    """Everything that defines a release's content and layout; same inputs -> same id."""
+    return sha256_json([schema, dataset_id, sha256_json(ids), encoder, model_hash,
+                        vec_hash])[:8]
 
 
 def finish_interrupted(final_out: Path, art: Path, final_art: Path) -> None:
@@ -211,8 +212,10 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
                      "type_line": c["type_line"], "is_creature": bool(c["is_creature"]),
                      "image": c["image"] or None, "scryfall_uri": c["scryfall_uri"],
                      "has_text": bool(has_text[i])})
-    files["names.json"] = _dump(out / "names.json", {
-        "ids": cards["oracle_id"].tolist(), "names": cards["name"].tolist(), "aliases": aliases})
+    # names.json is loaded at startup; the poorly compressing ids load beside it
+    files["names.json"] = _dump(out / "names.json",
+                                {"names": cards["name"].tolist(), "aliases": aliases})
+    files["ids.json"] = _dump(out / "ids.json", {"ids": cards["oracle_id"].tolist()})
     for s in range(0, len(cards), SHARD):
         nn = f"{s // SHARD:03d}.json"
         files[f"cards/{nn}"] = _dump(out / "cards" / nn, recs[s:s + SHARD])
