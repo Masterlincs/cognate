@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--run-id")
     q.add_argument("--web-dir")
     q.add_argument("--ds", default=DEFAULT_DS)
+    q = sub.add_parser("confirm-report", help="registered P7 contrasts and promotion decision")
+    q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("train", help="train or resume a run from a JSON config")
     q.add_argument("config")
     a = ap.parse_args(argv)
@@ -79,6 +81,11 @@ def main(argv: list[str] | None = None) -> None:
 
         out = export(a.ds, a.backbone, a.max_length, a.label, a.status, a.model_path,
                      a.run_id, a.web_dir)
+    elif a.cmd == "confirm-report":
+        from .evaluate import bench_path
+        from .report import confirmation_report
+
+        out = confirmation_report(read_json(bench_path(a.ds))["benchmark_id"])
     elif a.cmd == "train":
         from .evaluate import bench_path
         from .train import TrainConfig, train

@@ -63,3 +63,70 @@ def test_best_recipe_prefers_lower_lr_scale_unless_advanced():
     assert best_recipe([a, b2, c]) is b2  # +0.006 full, -0.004 hard-lexical: advances
     assert best_recipe([row(1e-5, 20, 0.7, 0.7, ok=False), b]) is b
     assert best_recipe([row(1e-5, 20, 0.7, 0.7, ok=False)]) is None
+
+
+def _confirm_fixture(root, cand_hl_shift):
+    import json
+
+    import numpy as np
+    import pandas as pd
+
+    anchors = [f"a{i}" for i in range(40)]
+    rng = np.random.default_rng(1)
+
+    def put(name, full, hl, run=True):
+        d = root / "eval" / "B" / name
+        d.mkdir(parents=True)
+        rows = [pd.DataFrame({"anchor": anchors, "view": v, "n_rel": 1, "ndcg": x,
+                              "family": [f"f{i // 2}" for i in range(40)]})
+                for v, x in (("full", full), ("hard_lexical", hl))]
+        pd.concat(rows).to_parquet(d / "per_anchor.parquet")
+        mp = str(root / name / "final") if run else None
+        (d / "summary.json").write_text(json.dumps({"meta": {"model_path": mp}}), "utf-8")
+        if run:
+            (root / name).mkdir()
+            (root / name / "result.json").write_text(
+                json.dumps({"finished": True, "selection": "final"}), "utf-8")
+
+    put("pretrained-e5-base-v2", np.full(40, 0.4), np.full(40, 0.4), run=False)
+    for s in (1, 2, 3):
+        b = rng.uniform(0.4, 0.6, 40)
+        put(f"confirm-bge-s{s}", b, b)
+        put(f"confirm-e5-s{s}", b + 0.03, b + cand_hl_shift)
+
+
+def test_confirmation_report_decides_and_writes_once(tmp_path, monkeypatch):
+    import pytest
+
+    import mtgemb.report as rp
+
+    monkeypatch.setattr(rp, "RUNS", tmp_path)
+    _confirm_fixture(tmp_path, 0.01)
+    rep = rp.confirmation_report("B")
+    assert rep["decision"] == "promote" and rep["m_contrasts"] == 4
+    assert rep["contrasts"]["trained_bge"]["full"]["point"] == pytest.approx(0.03)
+    assert rep["contrasts"]["trained_bge"]["full"]["lower_q"] == pytest.approx(0.0125)
+    assert rep["deployment"]["run_id"] == "confirm-e5-s1"
+    with pytest.raises(FileExistsError):
+        rp.confirmation_report("B")
+
+
+def test_confirmation_report_rejects_hard_lexical_loss_and_wrong_weights(tmp_path, monkeypatch):
+    import json
+
+    import pytest
+
+    import mtgemb.report as rp
+
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "x")
+    _confirm_fixture(tmp_path / "x", -0.001)  # full +0.03, but hard-lexical point < 0 vs BGE
+    rep = rp.confirmation_report("B")
+    assert rep["decision"] == "not promoted"
+    assert rep["contrasts"]["pretrained_e5"]["passes"]
+    assert not rep["contrasts"]["trained_bge"]["passes"]
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "y")
+    _confirm_fixture(tmp_path / "y", 0.01)
+    s = tmp_path / "y" / "eval" / "B" / "confirm-e5-s2" / "summary.json"
+    s.write_text(json.dumps({"meta": {"model_path": str(tmp_path / "y" / "other")}}), "utf-8")
+    with pytest.raises(ValueError, match="confirm-e5-s2"):
+        rp.confirmation_report("B")

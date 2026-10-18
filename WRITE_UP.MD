@@ -165,6 +165,8 @@ What the pilots show, within their limits:
 Freeze: no extension runs; one E5 candidate (initial-1 recipe); BGE control = initial-4 recipe; 2000 updates, final checkpoint; seeds 1-3 (seed = data_seed), matched per seed; deployment seed 1; M = 4 registered contrasts. Six confirmation runs, interleaved E5/BGE by seed.
 
 Confirmation started 22:54 UTC. confirm-e5-s1 hit the native XPU abort at 00:08 UTC on 18 Oct, 12 min after its update-1250 eval (one interval about 12 min, so at or just before the 1500 eval). Auto-resume 1/3 continued it from update 1250; an exact continuation stays in the same slot, and XPU resume is bitwise deterministic (smoke 2), so the final model is the one an uninterrupted run would give.
+
+While confirmation trains, I wrote the P7 analysis step (893098c): `report.confirmation_report` and `mtgemb confirm-report`. It checks each confirmation run finished with selection 'final' and that its eval was made from `runs/<run>/final`, runs the four registered contrasts (candidate vs pretrained E5 and vs matched-seed trained BGE, full and hard-lexical, M = 4, 8000 resamples, quantile 0.0125), applies the promotion rule against both baselines, reports the seed-1 deployment scores separately, and writes `runs/confirmation/<benchmark>/report.json` once. Two new tests (promote; hard-lexical loss → not promoted; wrong weights rejected; write-once). Sent to Sol for independent review.
 6. Monitoring: `tail -F` did not deliver events in Git Bash, so I replaced it with a 30 s polling monitor. Also, pytest had been writing test events into `runs/train.jsonl`; fixed and documented in .
 
 ## P9 (early): static app (2026-10-17)

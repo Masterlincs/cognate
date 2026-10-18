@@ -7,14 +7,20 @@ Reads only immutable run records (runs/<id>/) and evaluation records
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from .evaluate import PILOT_THRESHOLDS, PROMOTION, n_boot_for, paired_bootstrap
-from .util import RUNS, read_json
+from .util import RUNS, atomic_write_json, read_json, utcnow
 
 BOOT_SEED = 20261017  # 
+# frozen confirmation design: one E5 candidate, trained-BGE control, seeds 1-3
+CONFIRM = {"candidate": "confirm-e5-s{}", "bge": "confirm-bge-s{}",
+           "pretrained": "pretrained-e5-base-v2", "seeds": (1, 2, 3), "deploy_seed": 1}
+VIEWS = ("full", "hard_lexical")
+QUALIFIER = "provisional tag-proxy promotion on selection-exposed development"
 
 
 def run_row(run_id: str) -> dict:
@@ -109,3 +115,42 @@ def best_recipe(rows: list[dict]) -> dict | None:
         if best is None or advances(r, best):
             best = r
     return best
+
+
+def confirmation_report(bench_id: str) -> dict:
+    """Registered P7 contrasts and the promotion decision (MASTER_PLAN §5).
+
+    Every candidate and BGE eval must come from the matching confirmation run's final
+    weights. Written once to runs/confirmation/<bench_id>/report.json; never overwritten.
+    """
+    out = RUNS / "confirmation" / bench_id / "report.json"
+    if out.exists():
+        raise FileExistsError(out)
+    seeds = CONFIRM["seeds"]
+    cand = {s: CONFIRM["candidate"].format(s) for s in seeds}
+    bge = {s: CONFIRM["bge"].format(s) for s in seeds}
+    for name in [*cand.values(), *bge.values()]:
+        res = read_json(RUNS / name / "result.json")
+        meta = read_json(RUNS / "eval" / bench_id / name / "summary.json")["meta"]
+        if not (res["finished"] and res["selection"] == "final"):
+            raise ValueError(f"{name}: not a finished selection='final' run")
+        if Path(meta["model_path"]).resolve() != (RUNS / name / "final").resolve():
+            raise ValueError(f"{name}: eval was not made from runs/{name}/final")
+    per = pd.read_parquet(RUNS / "eval" / bench_id / cand[seeds[0]] / "per_anchor.parquet")
+    families = per[per["view"] == "full"].set_index("anchor")["family"]
+    comps = {"pretrained_e5": CONFIRM["pretrained"], "trained_bge": bge}
+    m = len(comps) * len(VIEWS)
+    contrasts = {}
+    for key, comp in comps.items():
+        c = {v: contrast(cand, comp, v, bench_id, m, families) for v in VIEWS}
+        contrasts[key] = {**c, "passes": promotion(c["full"], c["hard_lexical"])}
+    promoted = all(c["passes"] for c in contrasts.values())
+    dep = cand[CONFIRM["deploy_seed"]]
+    rep = {"benchmark_id": bench_id, "m_contrasts": m, "contrasts": contrasts,
+           "decision": "promote" if promoted else "not promoted",
+           "qualifier": QUALIFIER, "deployment": {
+               "seed": CONFIRM["deploy_seed"], "run_id": dep,
+               **{v: float(_ndcg(bench_id, dep, v).mean()) for v in VIEWS}},
+           "design": {**CONFIRM, "decisions": ["", ""]}, "created_utc": utcnow()}
+    atomic_write_json(out, rep)
+    return rep
