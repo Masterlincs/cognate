@@ -56,3 +56,33 @@ def test_jaccard():
     assert jaccard(a, b) == 1.0
     assert jaccard(frozenset(), frozenset()) == 0.0
     assert jaccard(word_tokens("a b"), word_tokens("b c")) == 1 / 3
+
+
+def test_self_noun_follows_oracle_style():
+    from mtgemb.text import self_noun
+
+    assert self_noun("Legendary Creature — Elf Druid") == "this creature"
+    assert self_noun("Enchantment Creature — Aura") == "this creature"
+    assert self_noun("Artifact — Equipment") == "this Equipment"
+    assert self_noun("Enchantment — Aura") == "this Aura"
+    assert self_noun("Legendary Planeswalker — Chandra") == "this planeswalker"
+    assert self_noun("Instant") == "this spell"
+    assert self_noun("Land — Forest") == "this land"
+    assert self_noun("Legendary Enchantment Artifact") == "this artifact"
+    assert self_noun("Conspiracy") == "this card"
+
+
+def test_no_reminder_v2_replaces_own_names_per_face():
+    from mtgemb.text import no_reminder_v2
+
+    faces = [{"type_line": "Legendary Creature — Elf", "oracle_text":
+              "Nissa, Worldsoul Speaker gets +1/+1. Nissa's power (reminder).\n"
+              "A deck can have any number of cards named Nissa."},
+             {"type_line": "Instant", "oracle_text": "Nissa deals 2 damage."}]
+    out = no_reminder_v2(faces, ["Nissa, Worldsoul Speaker", "Nissa"])
+    assert out["text"] == ("This creature gets +1/+1. This creature's power.\n"
+                           "A deck can have any number of cards named Nissa.\n//\n"
+                           "This spell deals 2 damage.")
+    assert no_reminder_v2([{"type_line": "Instant", "oracle_text": "Copy Nissa."}],
+                          ["Nissa"])["text"] == "Copy this spell."
+    assert out["status"] == "ok"

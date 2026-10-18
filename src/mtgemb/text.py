@@ -118,3 +118,54 @@ def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     if not a or not b:
         return 0.0
     return len(a & b) / len(a | b)
+
+
+# ---------------------------------------------------------------- no_reminder_v2 (#7)
+
+VERSION_V2 = "no_reminder_v2"
+_SUBTYPE_NOUNS = ("Equipment", "Aura", "Vehicle", "Saga", "Class", "Case", "Room", "Siege")
+_TYPE_NOUNS = (("Creature", "creature"), ("Planeswalker", "planeswalker"),
+               ("Battle", "battle"), ("Land", "land"), ("Artifact", "artifact"),
+               ("Enchantment", "enchantment"), ("Instant", "spell"), ("Sorcery", "spell"))
+
+
+def self_noun(type_line: str) -> str:
+    """Oracle-style self reference for one face: "this creature", "this Equipment", ...
+
+    Creature wins (bestow Auras and Vehicles that are creatures read "this creature"), then
+    the capitalised subtypes Oracle uses, then the card type; anything else is "this card".
+    """
+    types, _, subs = (type_line or "").partition("—")
+    if "Creature" in types:
+        return "this creature"
+    for s in _SUBTYPE_NOUNS:
+        if s in subs.split():
+            return f"this {s}"
+    for t, noun in _TYPE_NOUNS:
+        if t in types:
+            return f"this {noun}"
+    return "this card"
+
+
+def replace_self_names(text: str, names: list[str], noun: str) -> str:
+    """Own names (longest first) -> noun; "named <Name>" is a name reference and is kept.
+
+    ponytail: a bare word match; a card whose name is also an ordinary rules word would
+    be rewritten wherever that word appears. Measured before use.
+    """
+    for n in sorted(names, key=len, reverse=True):
+        text = re.sub(rf"(?<!named )(?<!\w){re.escape(n)}(?!\w)", noun, text)
+    # sentence starts read "This creature ..."
+    return re.sub(rf"(^|(?<=[.!?] )|(?<=: )){re.escape(noun)}", "T" + noun[1:], text,
+                  flags=re.M)
+
+
+def no_reminder_v2(faces: list[dict], names: list[str]) -> dict:
+    """v1 after replacing each face's own names with that face's Oracle-style noun.
+
+    `faces`: dicts with oracle_text and type_line; `names`: the card's self names (full
+    name, face names, the part before ", "), as data._self_names returns them.
+    """
+    return no_reminder_v1([replace_self_names(f.get("oracle_text") or "", names,
+                                              self_noun(f.get("type_line", "")))
+                           for f in faces])
