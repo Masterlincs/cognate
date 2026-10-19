@@ -2,7 +2,7 @@
   "phase": "P12",
   "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "x-1 running; apply when done. No publication; sealed split untouched.",
+  "next_action": "x-1 cleared (, dev proxy, one seed). Ask user: seed confirmation of 4000 updates, and/or promote. No publication; sealed split untouched.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,8 +10,8 @@
   "initial_runs_used": 9,
   "extension_runs_used": 1,
   "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-19T06:30:00Z",
-  "active_run": "x-1-e5-4000",
+  "updated_utc": "2026-10-19T10:35:00Z",
+  "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
@@ -217,9 +217,7 @@
       "chance": 0.449,
       "n": 12919
     },
-    "queue": [
-      "x-1-e5-4000 (, resumed from 250 at 06:15, last queue attempt)"
-    ],
+    "queue": [],
     "ext3_selfname": {
       "decision": "",
       "status": "DONE: did not clear",
@@ -238,6 +236,7 @@
         "hard_lexical": 0.6933,
         "exam": "48/51 (regressed T022)"
       }
-    }
+    },
+    "x1_more_steps": "DONE, cleared "
   }
 }
