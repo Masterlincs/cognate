@@ -2,7 +2,7 @@
   "phase": "P12",
   "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "x-1 cleared (, dev proxy, one seed). Ask user: seed confirmation of 4000 updates, and/or promote. No publication; sealed split untouched.",
+  "next_action": "Confirmation of x-1 running: confirm-x1-s1 then confirm-x1-s2. On each result: dev eval at final, exam-score, exam-guard vs confirm-e5-sN; record outcome. Comparator is x-1.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -11,7 +11,7 @@
   "extension_runs_used": 1,
   "confirmation_runs_used": 6,
   "updated_utc": "2026-10-19T10:35:00Z",
-  "active_run": null,
+  "active_run": "confirm-x1-s1",
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
@@ -181,7 +181,7 @@
       "registered": true,
       "decision": "",
       "config": "configs/ext-1-e5-linetag.json",
-      "comparator_exam": "initial-1 49/51 (fails T001, T021)",
+      "comparator_exam": "x-1 49/51 (fails T001, T021)",
       "status": "DONE: did not clear",
       "result": {
         "full": 0.7117,
@@ -217,7 +217,10 @@
       "chance": 0.449,
       "n": 12919
     },
-    "queue": [],
+    "queue": [
+      "confirm-x1-s1",
+      "confirm-x1-s2"
+    ],
     "ext3_selfname": {
       "decision": "",
       "status": "DONE: did not clear",
@@ -238,5 +241,6 @@
       }
     },
     "x1_more_steps": "DONE, cleared "
-  }
+  },
+  "comparator": "x-1-e5-4000"
 }
