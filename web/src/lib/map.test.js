@@ -54,3 +54,15 @@ describe('regionLabel', () => {
     expect(regionLabel('spot removal')).toBe('spot removal');
   });
 });
+
+describe('decodeMap duplicate points', () => {
+  it('fans out cards that share a point so each can be picked', () => {
+    const m = decodeMap(pack([[100, 100, 1], [100, 100, 2], [100, 100, 4], [500, 500, 8], [TEXTLESS, TEXTLESS, 0], [TEXTLESS, TEXTLESS, 0]]));
+    expect([m.x[0], m.y[0]]).toEqual([100, 100]);
+    const pts = new Set([0, 1, 2].map((i) => `${m.x[i]},${m.y[i]}`));
+    expect(pts.size).toBe(3);
+    for (const i of [1, 2]) expect(Math.hypot(m.x[i] - 100, m.y[i] - 100)).toBeLessThan(200);
+    expect([m.x[3], m.y[3]]).toEqual([500, 500]);
+    expect([m.x[4], m.x[5]]).toEqual([TEXTLESS, TEXTLESS]);
+  });
+});

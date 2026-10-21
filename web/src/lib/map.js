@@ -13,6 +13,19 @@ export function decodeMap(buf) {
     y[i] = view.getInt16(i * 5 + 2, true);
     color[i] = view.getUint8(i * 5 + 4);
   }
+  // cards with identical text share a point; fan the repeats out on a small golden-angle
+  // spiral (first card stays put) so each one can be hovered and picked when zoomed in
+  const seen = new Map();
+  for (let i = 0; i < n; i += 1) {
+    if (x[i] === TEXTLESS) continue;
+    const k = x[i] * 65536 + y[i];
+    const rep = seen.get(k) ?? 0;
+    seen.set(k, rep + 1);
+    if (!rep) continue;
+    const r = 24 * Math.sqrt(rep), a = rep * 2.39996;
+    x[i] = Math.max(-32767, Math.min(32767, Math.round(x[i] + r * Math.cos(a))));
+    y[i] = Math.max(-32767, Math.min(32767, Math.round(y[i] + r * Math.sin(a))));
+  }
   return { x, y, color, n };
 }
 
