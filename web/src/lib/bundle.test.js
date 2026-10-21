@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateIds, validateRelease, validateTags, withIds, validateReleasePointer, validateShard } from './lib.js';
+import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateIds, validateRelease, validateTags, withIds, validateReleasePointer, validateShard } from './bundle.js';
 
 const names = { names: ['Café Lantern', 'Blue Door', 'Green Thread // Thread Unbound'], aliases: [['Thread Unbound', 2]] };
 const ids = { ids: ['a', 'b', 'c'] };

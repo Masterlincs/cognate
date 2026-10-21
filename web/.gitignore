@@ -1,6 +1,9 @@
 dist/
+build/
+.svelte-kit/
 !public/
 !public/data/
 !public/data/**
 public/data/20*/
+public/data/site-*/
 public/data/*.partial/

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { validateIds, validateRelease, validateReleasePointer, validateShard } from '../src/lib.js';
+import { validateIds, validateRelease, validateReleasePointer, validateShard } from '../src/lib/bundle.js';
 
 const dir = path.resolve(process.argv[2] ?? '');
 if (!process.argv[2]) {
