@@ -65,7 +65,7 @@ def test_best_recipe_prefers_lower_lr_scale_unless_advanced():
     assert best_recipe([row(1e-5, 20, 0.7, 0.7, ok=False)]) is None
 
 
-def _confirm_fixture(root, cand_hl_shift, fam_size=2, n=240, n_rel=1):
+def _confirm_fixture(root, cand_hl_shift, fam_size=2, n=240, n_rel=1, x1_full=None):
     """Fake confirmation runs, frozen recipe runs and evals under root (= report.RUNS)."""
     import json
 
@@ -112,6 +112,13 @@ def _confirm_fixture(root, cand_hl_shift, fam_size=2, n=240, n_rel=1):
         run = {"seed": s, "data_seed": s, "selection": "final"}
         put(f"confirm-bge-s{s}", b, b, {**recipe["bge"], **run})
         put(f"confirm-e5-s{s}", b + 0.03, b + cand_hl_shift, {**recipe["e5"], **run})
+        if x1_full is not None:  # 4000-update recipe, x1_full above the incumbent
+            put(f"confirm-x1-s{s}", b + 0.03 + x1_full, b + cand_hl_shift + 0.001,
+                {**recipe["e5"], "total_updates": 4000, **run})
+    if x1_full is not None:
+        cfg = {**recipe["e5"], "total_updates": 4000, "seed": 0, "data_seed": 0,
+               "selection": "guarded_best"}
+        jw(root / "x-1-e5-4000" / "manifest.json", {"config": cfg, "identity": ident(cfg)})
 
 
 def test_confirmation_report_decides_and_writes_once(tmp_path, monkeypatch):
@@ -229,3 +236,37 @@ def test_sealed_report_retests_registered_contrasts_once(tmp_path, monkeypatch):
     sealed_copy(tmp_path / "stale", bid="B")  # records still claim the dev benchmark
     with pytest.raises(ValueError):
         rp.confirmation_report("S", train_bench="B")
+
+
+def test_x1_design_adds_incumbent_and_writes_under_tag(tmp_path, monkeypatch):
+    import pytest
+
+    import mtgemb.report as rp
+
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "p")
+    _confirm_fixture(tmp_path / "p", 0.01, x1_full=0.01)
+    rep = rp.confirmation_report("B", design=rp.CONFIRM_X1)
+    assert rep["decision"] == "promote" and rep["m_contrasts"] == 6
+    inc = rep["contrasts"]["incumbent_e5"]["full"]
+    assert inc["point"] == pytest.approx(0.01) and inc["comparator"][0] == "confirm-e5-s1"
+    assert rep["deployment"]["run_id"] == "confirm-x1-s1"
+    assert (tmp_path / "p" / "confirmation" / "B" / "x1" / "report.json").exists()
+    assert not (tmp_path / "p" / "confirmation" / "B" / "report.json").exists()
+    assert rp.confirmation_report("B")["decision"] == "promote"  # design still separate
+    with pytest.raises(ValueError, match="sealed"):
+        rp.confirmation_report("S", train_bench="B", design=rp.CONFIRM_X1)
+
+    # +0.003 over the incumbent: passes pretrained and BGE, fails the swap contrast
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "r")
+    _confirm_fixture(tmp_path / "r", 0.01, x1_full=0.003)
+    rep = rp.confirmation_report("B", design=rp.CONFIRM_X1)
+    assert rep["decision"] == "reject" and not rep["contrasts"]["incumbent_e5"]["passes"]
+    assert rep["contrasts"]["trained_bge"]["passes"]
+
+    # a candidate run not trained from the x-1 recipe is refused
+    monkeypatch.setattr(rp, "RUNS", tmp_path / "w")
+    _confirm_fixture(tmp_path / "w", 0.01, x1_full=0.01)
+    man = tmp_path / "w" / "confirm-x1-s2" / "manifest.json"
+    man.write_text(man.read_text("utf-8").replace('"total_updates": 4000', '"total_updates": 2000'))
+    with pytest.raises(ValueError, match="frozen recipe x-1-e5-4000"):
+        rp.confirmation_report("B", design=rp.CONFIRM_X1)

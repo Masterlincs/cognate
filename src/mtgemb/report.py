@@ -23,6 +23,13 @@ CONFIRM = {"candidate": "confirm-e5-s{}", "bge": "confirm-bge-s{}",
            "recipe_from": {"candidate": "initial-1-e5-lr3e-05-s20",
                            "bge": "initial-4-bge-lr3e-05-s20"},
            "pretrained_backbone": "e5-base-v2", "pretrained_max_length": 94}
+# the 4000-update recipe (x-1) under the same design, plus the deployed 2000-update E5
+# recipe as a third comparator (a swap must beat it too); report under confirmation/<id>/x1/
+CONFIRM_X1 = {**CONFIRM, "candidate": "confirm-x1-s{}",
+              "recipe_from": {**CONFIRM["recipe_from"], "candidate": "x-1-e5-4000",
+                              "incumbent": "initial-1-e5-lr3e-05-s20"},
+              "incumbent": "confirm-e5-s{}", "tag": "x1"}
+DESIGNS = {"d18": CONFIRM, "x1": CONFIRM_X1}
 # config keys a confirmation run may change from its frozen pilot recipe
 CONFIRM_FREE = {"run_id", "slot", "hypothesis", "comparator", "seed", "data_seed", "selection"}
 MIN_CLUSTERS = 100  # fewer eligible families than this makes a contrast inconclusive
@@ -163,7 +170,8 @@ def _check_confirm_run(bench_id: str, name: str, seed: int, recipe_run: str,
                 RUNS / name / "final", man["identity"]["recipe"])
 
 
-def confirmation_report(bench_id: str, train_bench: str | None = None) -> dict:
+def confirmation_report(bench_id: str, train_bench: str | None = None,
+                        design: dict = CONFIRM) -> dict:
     """Registered P7 contrasts and the promotion decision (MASTER_PLAN §5).
 
     Every confirmation run must be the frozen recipe at its registered seed, and every eval
@@ -177,20 +185,24 @@ def confirmation_report(bench_id: str, train_bench: str | None = None) -> dict:
     """
     sealed = train_bench is not None
     train_bench = train_bench or bench_id
-    out = RUNS / ("sealed" if sealed else "confirmation") / bench_id / "report.json"
+    if sealed and design is not CONFIRM:
+        raise ValueError("the sealed gate was run once, for the design only")
+    out = RUNS / ("sealed" if sealed else "confirmation") / bench_id
+    out = (out / design["tag"] if "tag" in design else out) / "report.json"
     if out.exists():
         raise FileExistsError(out)
-    seeds = CONFIRM["seeds"]
-    cand = {s: CONFIRM["candidate"].format(s) for s in seeds}
-    bge = {s: CONFIRM["bge"].format(s) for s in seeds}
+    seeds, rf = design["seeds"], design["recipe_from"]
+    cand = {s: design["candidate"].format(s) for s in seeds}
+    bge = {s: design["bge"].format(s) for s in seeds}
+    inc = {s: design["incumbent"].format(s) for s in seeds} if "incumbent" in design else None
     for s in seeds:
-        _check_confirm_run(train_bench, cand[s], s, CONFIRM["recipe_from"]["candidate"],
-                           bench_id)
-        _check_confirm_run(train_bench, bge[s], s, CONFIRM["recipe_from"]["bge"], bench_id)
-    e5_recipe = read_json(RUNS / CONFIRM["recipe_from"]["candidate"] /
-                          "manifest.json")["identity"]["recipe"]
-    _check_eval(bench_id, CONFIRM["pretrained"], CONFIRM["pretrained_backbone"],
-                CONFIRM["pretrained_max_length"], None, e5_recipe)
+        _check_confirm_run(train_bench, cand[s], s, rf["candidate"], bench_id)
+        _check_confirm_run(train_bench, bge[s], s, rf["bge"], bench_id)
+        if inc:
+            _check_confirm_run(train_bench, inc[s], s, rf["incumbent"], bench_id)
+    e5_recipe = read_json(RUNS / rf["candidate"] / "manifest.json")["identity"]["recipe"]
+    _check_eval(bench_id, design["pretrained"], design["pretrained_backbone"],
+                design["pretrained_max_length"], None, e5_recipe)
     per = pd.read_parquet(RUNS / "eval" / bench_id / cand[seeds[0]] / "per_anchor.parquet")
     families = per[per["view"] == "full"].set_index("anchor")["family"]
     excluded = {v: int(((per["view"] == v) & (per["n_rel"] == 0)).sum()) for v in VIEWS}
@@ -198,7 +210,9 @@ def confirmation_report(bench_id: str, train_bench: str | None = None) -> dict:
     # every system; check adequacy before bootstrapping (an empty cohort cannot be resampled)
     eligible = per[per["n_rel"] > 0]
     clusters = {v: int(eligible.loc[eligible["view"] == v, "family"].nunique()) for v in VIEWS}
-    comps = {"pretrained_e5": CONFIRM["pretrained"], "trained_bge": bge}
+    comps = {"pretrained_e5": design["pretrained"], "trained_bge": bge}
+    if inc:
+        comps["incumbent_e5"] = inc
     m = len(comps) * len(VIEWS)
     adequate = min(clusters.values()) >= MIN_CLUSTERS
     contrasts = {}
@@ -214,14 +228,14 @@ def confirmation_report(bench_id: str, train_bench: str | None = None) -> dict:
         decision = "promote"
     else:
         decision = "reject"
-    dep = cand[CONFIRM["deploy_seed"]]
+    dep = cand[design["deploy_seed"]]
     rep = {"benchmark_id": bench_id, "m_contrasts": m, "contrasts": contrasts,
            "decision": decision, "qualifier": QUALIFIER,
            "excluded_zero_positive": excluded, "eligible_clusters": clusters,
            "min_clusters": MIN_CLUSTERS,
            "deployment": {"seed": CONFIRM["deploy_seed"], "run_id": dep,
                           **{v: float(_ndcg(bench_id, dep, v).mean()) for v in VIEWS}},
-           "design": {**CONFIRM, "decisions": ["", "", ""]},
+           "design": {**design, "decisions": ["", "", ""] + ([""] if inc else [])},
            "created_utc": utcnow()}
     if sealed:
         rep["sealed_gate"] = SEALED_GATE[rep.pop("decision")]

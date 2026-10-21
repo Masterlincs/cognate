@@ -1,0 +1,31 @@
+{
+ "run_id": "confirm-x1-s3",
+ "slot": "confirm-x1-s3",
+ "hypothesis": "x-1 recipe (4000 updates) at seed 3, third seed for the promotion test",
+ "comparator": "confirm-e5-s3 / pretrained E5 / confirm-bge-s3",
+ "backbone": "e5-base-v2",
+ "max_length": 94,
+ "lr": 3e-05,
+ "scale": 20.0,
+ "batch_pairs": 32,
+ "hard_negatives": 1,
+ "neg_band": [
+  1,
+  30
+ ],
+ "weight_decay": 0.01,
+ "total_updates": 4000,
+ "warmup_frac": 0.1,
+ "grad_clip": 1.0,
+ "eval_every": 250,
+ "seed": 3,
+ "data_seed": 3,
+ "objective": "masked_infonce",
+ "pair_weighting": "none",
+ "batch_mode": "random",
+ "precision": "fp32",
+ "max_skip_rate": 0.01,
+ "guardrail_hard_lexical": 0.5391280239807161,
+ "selection": "final",
+ "dataset_dir": "data/processed/2026-10-16_no_reminder_v1"
+}
