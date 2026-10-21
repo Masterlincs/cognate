@@ -1,6 +1,6 @@
 # Card Atlas redesign: design
 
-Date: 2026-10-21. Status: draft for the user's approval.
+Date: 2026-10-21. Status: approved by the user 2026-10-21 (answers below).
 
 ## Intent
 
@@ -8,7 +8,7 @@ The current app (`web/`) is a single search page. It looks tidy but hides what t
 
 ## Goals
 
-1. **Case study page (`/`), A + D.** Reads top to bottom as a project write-up:
+1. **Case study page (`/how-it-works`), A + D.** Reads top to bottom as a project write-up:
    - Hero: one-line pitch ("Find Magic cards by what they do, not what they say"), a search box and example cards that jump into the explorer.
    - The problem: keyword search matches words; the example shows a lexical twin that does the opposite (Ghosts of the Innocent vs Furnace of Rath).
    - The approach: data (Scryfall cards, Scryfall Tagger tags as labels, family-grouped splits, sealed test set), training (contrastive fine-tuning of e5-base-v2 on tag-sharing pairs with lexical hard negatives), shown as a small diagram.
@@ -16,12 +16,12 @@ The current app (`web/`) is a single search page. It looks tidy but hides what t
    - Results: charts of dev nDCG@10 (full and hard-lexical) for the lexical baseline, pretrained E5, pretrained BGE, fine-tuned BGE and fine-tuned E5 (seed spread shown); the promotion test's bounds; the one-time sealed test; the trap exam; 2000 vs 4000 updates.
    - Limits, stated plainly: tag labels are a proxy; Deflecting Swat as the worked failure (its labels favour the wrong neighbour); T021.
    - Footer: repository link, write-up link, data attribution.
-2. **Explorer page (`/explore`), B + C.** One tool page with two linked views:
+2. **Explorer page (`/`, the default), B + C.** One tool page with two linked views:
    - **Map**: every card as a dot on a 2D projection of the deployed model's vectors, coloured by colour identity, regions labelled by their most characteristic tag; pan and zoom; click a dot to select a card; the selected card and its neighbours are highlighted.
    - **Results**: the selected card (image, rules text, tags) and its neighbours as cards showing image, rules text and score. Each neighbour can open a side-by-side compare, with lines that appear on both cards highlighted.
    - The card's ability lines are clickable ("similar by this line"); filters (colour, mana value, type) sit in one collapsible row.
    - The URL holds the state (card, ability, filters), so links can be shared.
-3. **Good design and fast.** The case study is prerendered HTML and loads no card data until the reader asks for it. The explorer loads data shards on demand, as now. Targets: Lighthouse performance ≥ 95 on `/`, no layout shift, works at 360 px wide, keyboard-usable, light and dark themes.
+3. **Good design and fast.** The case study is prerendered HTML and loads no card data until the reader asks for it. The explorer loads data shards on demand, as now. Targets: Lighthouse performance ≥ 95 on `/how-it-works`, no layout shift, works at 360 px wide, keyboard-usable, light and dark themes.
 
 ## Non-goals
 
@@ -58,6 +58,8 @@ The current app (`web/`) is a single search page. It looks tidy but hides what t
 - Showcase cards for the before-and-after, chosen where both columns are readable and the difference is clear. One must be an honest mixed case.
 - "Lines on both cards" means exact matches after number masking; the model's per-line evidence (ability neighbours) is used only where the bundle already has it.
 
-## Open for the user
+## User answers (2026-10-21)
 
-- Who is the main reader? This sets the tone: ML hiring manager vs MTG player.
+- Readers: both. MTG players land on the explorer, which is the default page (`/`); ML readers follow a clear link to the case study (`/how-it-works`).
+- The repository will be made public by the user when done; the site links to `https://github.com/Masterlincs/mtg-embeddings`.
+- Hosting: the user self-hosts the static build on their VPS at the site root. The build is a plain static folder (no server code); publishing it is the user's action.
