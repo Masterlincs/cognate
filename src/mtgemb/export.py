@@ -223,10 +223,26 @@ def _dump(path: Path, obj) -> dict:
     return {"sha256": sha256_file(path), "bytes": len(data)}
 
 
+def model_meta(label: str, status: str, recipe: dict, run_id: str | None,
+               decision: str | None = None) -> dict:
+    """The release's model block; `decision` names the promotion decision (promoted only)."""
+    if decision is not None and status != "promoted":
+        raise ValueError("a decision is only recorded for a promoted release")
+    meta = {"label": label, "status": status, "backbone": recipe["model_id"],
+            "revision": recipe["revision"], "run_id": run_id}
+    if status == "promoted":
+        # the first promoted release predates this argument
+        meta["decision"] = decision or ("tag-proxy promotion on selection-exposed development "
+                                        "; gate also cleared on one sealed run")
+    return meta
+
+
 def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
            model_path: str | None = None, run_id: str | None = None,
            web_dir: str | Path | None = None, parity_n: int = 64, ref_n: int = 20,
-           from_release: str | None = None) -> dict:
+           from_release: str | None = None, decision: str | None = None) -> dict:
+    if decision is not None and status != "promoted":  # fail before encoding
+        raise ValueError("a decision is only recorded for a promoted release")
     if status not in ("promoted", "experimental", "pretrained-fallback"):
         raise ValueError(status)
     ds = load_dataset(ds_dir)
@@ -352,13 +368,9 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
         files[f"neighbours/{nn}"] = _dump(out / "neighbours" / nn, neigh[s:s + SHARD])
         files[f"lines/{nn}"] = _dump(out / "lines" / nn, line_rows[s:s + SHARD])
         files[f"abilities/{nn}"] = _dump(out / "abilities" / nn, ability_rows[s:s + SHARD])
-    model_meta = {"label": label, "status": status, "backbone": recipe["model_id"],
-                  "revision": recipe["revision"], "run_id": run_id}
-    if status == "promoted":
-        model_meta["decision"] = ("tag-proxy promotion on selection-exposed development "
-                                  "; gate also cleared on one sealed run")
+    meta_model = model_meta(label, status, recipe, run_id, decision)
     release = {"schema": SCHEMA, "release_id": release_id, "fixture": False,
-               "snapshot_date": snapshot, "created_utc": utcnow(), "model": model_meta,
+               "snapshot_date": snapshot, "created_utc": utcnow(), "model": meta_model,
                "n_cards": len(cards), "k": K, "shard_size": SHARD, "files": files,
                "ability_k": K, "line_k": K,
                "line_status": "exploratory: line match; below the whole-card ranking on the "

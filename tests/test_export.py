@@ -331,7 +331,7 @@ def test_export_cli_forwards_from_release(monkeypatch, capsys):
     monkeypatch.setattr(exporter, "export", fake_export)
     cli.main(["export", "e5-base-v2", "--max-length", "94", "--label", "fake",
               "--status", "experimental", "--from-release", "source-v3"])
-    assert received == {"from_release": "source-v3"}
+    assert received == {"from_release": "source-v3", "decision": None}
     assert capsys.readouterr().out.strip() == "{}"
 
 
@@ -349,3 +349,28 @@ def test_finish_interrupted_adopts_only_matching_artifacts(tmp_path):
     assert (final_art / "release_meta.json").exists() and not art.exists()
     with pytest.raises(FileExistsError):  # no partial artifacts left
         finish_interrupted(out, tmp_path / "missing", tmp_path / "art2")
+
+
+def test_model_meta_decision_text():
+    import mtgemb.export as exporter
+
+    recipe = {"model_id": "m", "revision": "r"}
+    old = exporter.model_meta("x", "promoted", recipe, "run")
+    assert "" in old["decision"] and "" in old["decision"]
+    new = exporter.model_meta("x", "promoted", recipe, "run", decision="no sealed run")
+    assert new == {"label": "x", "status": "promoted", "backbone": "m", "revision": "r",
+                   "run_id": "run", "decision": "no sealed run"}
+    assert "decision" not in exporter.model_meta("x", "experimental", recipe, None)
+    with pytest.raises(ValueError, match="promoted"):
+        exporter.model_meta("x", "experimental", recipe, None, decision="")
+
+
+def test_export_cli_forwards_decision(monkeypatch):
+    import mtgemb.cli as cli
+    import mtgemb.export as exporter
+
+    received = {}
+    monkeypatch.setattr(exporter, "export", lambda *a, **kw: received.update(kw) or {})
+    cli.main(["export", "e5-base-v2", "--max-length", "94", "--label", "fake",
+              "--status", "promoted", "--decision", ""])
+    assert received["decision"] == ""
