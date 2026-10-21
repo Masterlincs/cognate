@@ -85,6 +85,28 @@
         "runs/eval/8bf2f48c0bba3b2c/confirm-e5-s2/summary.json",
         "runs/eval/8bf2f48c0bba3b2c/confirm-e5-s3/summary.json"
       ]
+    },
+    "fine-tuned E5, 4000 updates": {
+      "full": [
+        0.7141551057402165,
+        0.7165311013419494,
+        0.7180392754030894
+      ],
+      "hard_lexical": [
+        0.6987311240037506,
+        0.7009811408635771,
+        0.7034531985665023
+      ],
+      "runs": [
+        "confirm-x1-s1",
+        "confirm-x1-s2",
+        "confirm-x1-s3"
+      ],
+      "source": [
+        "runs/eval/8bf2f48c0bba3b2c/confirm-x1-s1/summary.json",
+        "runs/eval/8bf2f48c0bba3b2c/confirm-x1-s2/summary.json",
+        "runs/eval/8bf2f48c0bba3b2c/confirm-x1-s3/summary.json"
+      ]
     }
   },
   "dev_benchmark": "8bf2f48c0bba3b2c",
@@ -141,7 +163,77 @@
       },
       "source": "runs/confirmation/8bf2f48c0bba3b2c/report.json"
     },
-    "x1": null
+    "x1": {
+      "decision": "promote",
+      "qualifier": "provisional tag-proxy promotion on selection-exposed development",
+      "m_contrasts": 6,
+      "deployment": {
+        "seed": 1,
+        "run_id": "confirm-x1-s1",
+        "full": 0.7141551057402165,
+        "hard_lexical": 0.6987311240037506
+      },
+      "contrasts": {
+        "pretrained_e5": {
+          "full": {
+            "point": 0.1507427053545144,
+            "lower_adjusted": 0.1405813385900827,
+            "ci95": [
+              0.14249127742757894,
+              0.15878243507055514
+            ]
+          },
+          "hard_lexical": {
+            "point": 0.1619271304972272,
+            "lower_adjusted": 0.1512752807571006,
+            "ci95": [
+              0.15309323341255426,
+              0.17058407047662355
+            ]
+          },
+          "passes": true
+        },
+        "trained_bge": {
+          "full": {
+            "point": 0.052733587358807066,
+            "lower_adjusted": 0.0457476693632185,
+            "ci95": [
+              0.04718974101827623,
+              0.0581918903261332
+            ]
+          },
+          "hard_lexical": {
+            "point": 0.055274635370640375,
+            "lower_adjusted": 0.048107831084402614,
+            "ci95": [
+              0.04946606703120451,
+              0.060932456701742264
+            ]
+          },
+          "passes": true
+        },
+        "incumbent_e5": {
+          "full": {
+            "point": 0.009826928875685396,
+            "lower_adjusted": 0.006303906536335087,
+            "ci95": [
+              0.006963092332610795,
+              0.012744923847195866
+            ]
+          },
+          "hard_lexical": {
+            "point": 0.010164579346833099,
+            "lower_adjusted": 0.006268931082471587,
+            "ci95": [
+              0.00693960825010131,
+              0.013338881870053169
+            ]
+          },
+          "passes": true
+        }
+      },
+      "source": "runs/confirmation/8bf2f48c0bba3b2c/x1/report.json"
+    }
   },
   "sealed": {
     "qualifier": "registered gate re-tested once on sealed anchors (tag proxy); does not change the P7 decision",
@@ -323,6 +415,28 @@
           "id": "T021",
           "section": "rider",
           "margin": -0.35938459634780884
+        }
+      ]
+    },
+    "confirm-x1-s3": {
+      "passed": 48,
+      "n": 51,
+      "source": "runs/exam/confirm-x1-s3/2026-10-21T201221Z-1792613541498417500.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.49746474623680115
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.3231905996799469
+        },
+        {
+          "id": "T029",
+          "section": "mechanism",
+          "margin": -0.04085242748260498
         }
       ]
     },
@@ -600,6 +714,10 @@
     "2": {
       "2000": 0.7066287095610543,
       "4000": 0.7165311013419494
+    },
+    "3": {
+      "2000": 0.7070728514226714,
+      "4000": 0.7180392754030894
     }
   },
   "data": {
@@ -615,9 +733,9 @@
     "multi_face": 847
   },
   "deployed": {
-    "release_id": "2026-10-16-e5-base-v2-68086be1",
-    "label": "e5-base-v2 fine-tuned (confirm-e5-s1)",
-    "run_id": "confirm-e5-s1",
+    "release_id": "2026-10-16-e5-base-v2-841ee2af",
+    "label": "e5-base-v2 fine-tuned, 4000 updates (confirm-x1-s1)",
+    "run_id": "confirm-x1-s1",
     "encoder": {
       "model_id": "intfloat/e5-base-v2",
       "prefix": "query: ",
@@ -630,12 +748,12 @@
       "lr": 3e-05,
       "batch_pairs": 32,
       "hard_negatives": 1,
-      "total_updates": 2000,
+      "total_updates": 4000,
       "scale": 20.0,
       "warmup_frac": 0.1,
       "max_length": 94,
       "seed": 1,
-      "source": "runs/confirm-e5-s1/manifest.json"
+      "source": "runs/confirm-x1-s1/manifest.json"
     }
   },
   "showcase": [
@@ -665,9 +783,9 @@
       "why": "the lists are identical: when the wording already matches, the untuned model does fine too."
     },
     {
-      "id": "ad0070db-6454-41cb-861f-8f5b8fc2a3b8",
-      "name": "Ghostly Flicker",
-      "why": "mixed: after adds flicker effects such as Spaceshift, but also Into the Core and Dust to Dust, which exile two artifacts for good. Shared wording still wins sometimes."
+      "id": "9243bd95-5467-490d-9bd2-4d5ce1ebc589",
+      "name": "Ghosts of the Innocent",
+      "why": "a miss: before, other damage-replacement cards, including Furnace of Rath, which doubles damage instead of halving it; after, a loose mix of damage and life-loss cards. Neither list finds a damage-prevention card such as Kitsune Palliator."
     }
   ]
 }

@@ -22,10 +22,12 @@
   const exDep = dep ? exam[dep.run_id] : null;
   const margin = (rec, id) => rec?.failed.find((f) => f.id === id)?.margin ?? null;
   const fineTuned = m.dev['fine-tuned E5'];
+  // the dev row whose runs include the deployed run (falls back to the first E5 recipe)
+  const depRow = Object.values(m.dev).find((r) => r.runs.includes(dep?.run_id)) ?? fineTuned;
   const lexical = m.dev['keyword baseline (character TF-IDF)'];
   const pretrained = m.dev['pretrained E5-base'];
   const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  const devRows = Object.entries(m.dev).map(([label, r]) => ({ label, values: { full: r.full, hard_lexical: r.hard_lexical }, highlight: label.startsWith('fine-tuned E5'), note: r.runs.length > 1 ? `mean of ${r.runs.length} seeds, range shown` : '' }));
+  const devRows = Object.entries(m.dev).map(([label, r]) => ({ label, values: { full: r.full, hard_lexical: r.hard_lexical }, highlight: r === depRow, note: r.runs.length > 1 ? `mean of ${r.runs.length} seeds, range shown` : '' }));
   const stepRows = Object.entries(m.steps).map(([s, v]) => ({ label: `seed ${s}`, a: v['2000'], b: v['4000'] }));
   const split = m.data.split_counts;
 
@@ -65,7 +67,7 @@
     <dl class="facts">
       <div><dt>Cards in the explorer</dt><dd class="num">{n(split.fit + split.dev)}</dd></div>
       <div><dt>Effect tags used as labels</dt><dd class="num">{n(m.data.tags_functional)}</dd></div>
-      <div><dt>Dev score, fine-tuned</dt><dd class="num">{fixed(mean(fineTuned.full))}</dd></div>
+      <div><dt>Dev score, fine-tuned</dt><dd class="num">{fixed(mean(depRow.full))}</dd></div>
       <div><dt>Dev score, before tuning</dt><dd class="num">{fixed(pretrained.full[0])}</dd></div>
     </dl>
   </header>
@@ -153,7 +155,7 @@
       <div class="stat">
         <p class="eyebrow">Sealed test · one-time</p>
         <p class="big num">{delta(sealed.contrasts.pretrained_e5.full.point)}</p>
-        <p>over pretrained E5 on the sealed cards, lower bound {delta(sealed.contrasts.pretrained_e5.full.lower_adjusted)}. Scored once, after the decision; the gate was {sealed.sealed_gate}. Deployed model: {fixed(sealed.deployment.full)} full, {fixed(sealed.deployment.hard_lexical)} hard-lexical.</p>
+        <p>over pretrained E5 on the sealed cards, lower bound {delta(sealed.contrasts.pretrained_e5.full.lower_adjusted)}. Scored once, after the decision; the gate was {sealed.sealed_gate}. Model scored: {sealed.deployment.run_id}, {fixed(sealed.deployment.full)} full, {fixed(sealed.deployment.hard_lexical)} hard-lexical. {#if dep && sealed.deployment.run_id !== dep.run_id}The model deployed now was promoted later, on the development cards only, and has not been sealed-tested.{/if}</p>
       </div>
       <div class="stat">
         <p class="eyebrow">Trap exam</p>
@@ -164,7 +166,7 @@
 
     {#if stepRows.length}
       <h3 class="sub">Training longer: 2000 vs 4000 updates</h3>
-      <p>Doubling the training length raised the dev score on every seed tried. {#if x1}A formal promotion test of the 4000-update recipe finished with the decision: <b>{x1.decision}</b> ({x1.qualifier}).{:else}A formal promotion test of the 4000-update recipe needs a third seed, which is still training, so the deployed model is the 2000-update one.{/if}</p>
+      <p>Doubling the training length raised the dev score on every seed tried. {#if x1}A second promotion test, the same design with the 2000-update recipe added as a third comparator ({x1.m_contrasts} contrasts), decided: <b>{x1.decision}</b> ({x1.qualifier}). Against the 2000-update recipe the gain is {delta(x1.contrasts.incumbent_e5.full.point)} full (adjusted lower bound {delta(x1.contrasts.incumbent_e5.full.lower_adjusted)}) and {delta(x1.contrasts.incumbent_e5.hard_lexical.point)} hard-lexical. {#if dep?.run_id === x1.deployment?.run_id}The deployed model is now the 4000-update recipe, seed {x1.deployment.seed}.{/if}{:else}A formal promotion test of the 4000-update recipe needs a third seed, which is still training, so the deployed model is the 2000-update one.{/if}</p>
       <DotPlot rows={stepRows} aLabel="2000 updates" bLabel="4000 updates" caption="Dev tag-proxy nDCG@10 (full view) at the end of training, same seed and data order." />
     {/if}
   </section>
@@ -179,7 +181,7 @@
     </div>
     <div class="limit">
       <h3>Lexical twins still fool it</h3>
-      <p>Ghosts of the Innocent still ranks Furnace of Rath above Kitsune Palliator (trap-exam margin {margin(exDep, 'T021') !== null ? fixed(margin(exDep, 'T021')) : '—'}). A run with three hard negatives per card instead of one is queued to test whether more contrast against lookalikes helps.</p>
+      <p>Ghosts of the Innocent still ranks Furnace of Rath above Kitsune Palliator (trap-exam margin {margin(exDep, 'T021') !== null ? fixed(margin(exDep, 'T021')) : '—'}). A run with three hard negatives per card instead of one is testing whether more contrast against lookalikes helps; its result is not in yet.</p>
     </div>
     <ul class="plain">
       <li><b>Proxy, not people.</b> All scores measure agreement with community tags. No human relevance study has been run yet.</li>

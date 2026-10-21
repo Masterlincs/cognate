@@ -2,16 +2,16 @@
   "phase": "P12",
   "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "PAUSED (user GPU window ended 15:00 local 2026-10-21). On user go-ahead: delete runs/queue.stop, restart run_queue.py: confirm-x1-s3 resumes from ckpt-0001750, then un-hold x-2 in queue.txt. Then eval-encoder confirm-x1-s1..3 and confirm-report --design x1; swap only on promote.",
+  "next_action": "x-2-e5-hn3 training from 2026-10-21 20:56 UTC via run_queue.py; when it finishes: eval, exam-score, judge against x-1 per . Site (Card Atlas) done and deployed locally on release 2026-10-16-e5-base-v2-841ee2af; nothing published.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
   "smokes_used": 3,
   "initial_runs_used": 9,
   "extension_runs_used": 1,
-  "confirmation_runs_used": 6,
-  "updated_utc": "2026-10-19T10:35:00Z",
-  "active_run": null,
+  "confirmation_runs_used": 9,
+  "updated_utc": "2026-10-21T21:10:00Z",
+  "active_run": "x-2-e5-hn3",
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
@@ -27,7 +27,10 @@
     "confirm-e5-s2",
     "confirm-bge-s2",
     "confirm-e5-s3",
-    "confirm-bge-s3"
+    "confirm-bge-s3",
+    "confirm-x1-s1",
+    "confirm-x1-s2",
+    "confirm-x1-s3"
   ],
   "best_e5_recipe": "initial-1-e5-lr3e-05-s20",
   "frozen": {
@@ -218,8 +221,7 @@
       "n": 12919
     },
     "queue": [
-      "confirm-x1-s3 PAUSED at 1750",
-      "x-2-e5-hn3 HELD"
+      "x-2-e5-hn3 RUNNING"
     ],
     "ext3_selfname": {
       "decision": "",
@@ -241,7 +243,19 @@
       }
     },
     "x1_more_steps": "DONE, cleared ",
-    "x1_confirmation": "DONE, confirmed 3 seeds"
+    "x1_confirmation": "DONE, confirmed 3 seeds",
+    "x1_promotion": {
+      "decision": "",
+      "outcome": "promote, provisional tag-proxy, no sealed run",
+      "deployed_run": "confirm-x1-s1",
+      "release": "2026-10-16-e5-base-v2-841ee2af",
+      "previous_release": "2026-10-16-e5-base-v2-68086be1 (kept on disk)"
+    },
+    "site": {
+      "spec": "docs/superpowers/specs/2026-10-21-card-atlas-redesign-design.md",
+      "status": "built locally; not published",
+      "build": "web/ npm run build -> web/build"
+    }
   },
   "comparator": "x-1-e5-4000"
 }
