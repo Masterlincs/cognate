@@ -2,7 +2,7 @@
   "phase": "P12",
   "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "confirmed. Comparator x-1. Idle; ask user what next (e.g. promotion test of 4000-update recipe, new extension idea vs x-1). Disk 38 GB free.",
+  "next_action": "PAUSED (user GPU window ended 15:00 local 2026-10-21). On user go-ahead: delete runs/queue.stop, restart run_queue.py: confirm-x1-s3 resumes from ckpt-0001750, then un-hold x-2 in queue.txt. Then eval-encoder confirm-x1-s1..3 and confirm-report --design x1; swap only on promote.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -217,7 +217,10 @@
       "chance": 0.449,
       "n": 12919
     },
-    "queue": [],
+    "queue": [
+      "confirm-x1-s3 PAUSED at 1750",
+      "x-2-e5-hn3 HELD"
+    ],
     "ext3_selfname": {
       "decision": "",
       "status": "DONE: did not clear",
