@@ -34,7 +34,7 @@ The case-study numbers come from `src/lib/generated/metrics.json`, which is comm
 uv run mtgemb site-data --metrics-only
 ```
 
-`site-data` refuses to overwrite an existing `site-<release_id>/` folder; a new release gets a new folder. If the site folder is missing, the explorer still works and the map and before-and-after say they are unavailable.
+`site-data` refuses to overwrite an existing `site-<release_id>/` folder; a new release gets a new folder. It writes to `site-<release_id>.partial` and renames at the end; on Windows, stop `npm run dev` first, because the dev server's file watcher blocks the rename. If the site folder is missing, the explorer still works and the map and before-and-after say they are unavailable.
 
 `npm run fixture` switches `current.json` to a small synthetic bundle for development. Fixture names and rules text are made up.
 
