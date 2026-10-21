@@ -1,0 +1,32 @@
+{
+ "run_id": "x-2-e5-hn3",
+ "slot": "x-2",
+ "hypothesis": "three lexical hard negatives per row instead of one reduce lexical-twin traps with no shared tag (exam T021 type)",
+ "comparator": "x-1-e5-4000 (same config, hard_negatives 1, no checkpointing)",
+ "backbone": "e5-base-v2",
+ "max_length": 94,
+ "lr": 3e-05,
+ "scale": 20.0,
+ "batch_pairs": 32,
+ "hard_negatives": 3,
+ "neg_band": [
+  1,
+  30
+ ],
+ "weight_decay": 0.01,
+ "total_updates": 4000,
+ "warmup_frac": 0.1,
+ "grad_clip": 1.0,
+ "eval_every": 250,
+ "seed": 0,
+ "data_seed": 0,
+ "objective": "masked_infonce",
+ "pair_weighting": "none",
+ "batch_mode": "random",
+ "precision": "fp32",
+ "max_skip_rate": 0.01,
+ "guardrail_hard_lexical": 0.5391280239807161,
+ "selection": "guarded_best",
+ "dataset_dir": "data/processed/2026-10-16_no_reminder_v1",
+ "grad_checkpointing": true
+}
