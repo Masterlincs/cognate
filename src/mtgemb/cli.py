@@ -43,6 +43,9 @@ def main(argv: list[str] | None = None) -> None:
     q = sub.add_parser("confirm-report", help="registered P7 contrasts and promotion decision")
     q.add_argument("--ds", default=DEFAULT_DS)
     q.add_argument("--design", choices=["d18", "x1"], default="d18")
+    q = sub.add_parser("site-data", help="map, pretrained neighbours and metrics for the site")
+    q.add_argument("--release", metavar="ID")
+    q.add_argument("--metrics-only", action="store_true")
     q = sub.add_parser("sealed-eval", help="authorised one-shot sealed evaluation")
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("train", help="train or resume a run from a JSON config")
@@ -126,6 +129,10 @@ def main(argv: list[str] | None = None) -> None:
 
         out = confirmation_report(read_json(bench_path(a.ds))["benchmark_id"],
                                   design=DESIGNS[a.design])
+    elif a.cmd == "site-data":
+        from .sitedata import build_site_data, write_metrics
+
+        out = (str(write_metrics()) if a.metrics_only else build_site_data(a.release))
     elif a.cmd == "sealed-eval":
         from .sealed import sealed_eval
 
