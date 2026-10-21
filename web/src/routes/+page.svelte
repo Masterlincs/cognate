@@ -65,6 +65,7 @@
     const t = ++token;
     busy = true;
     notice = '';
+    error = '';
     compare = null;
     shown = PAGE;
     try {

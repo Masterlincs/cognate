@@ -25,6 +25,7 @@
     try {
       const [card, tuned, pre] = await Promise.all([getCard(index), getNeighbours(index), getPretrained(index)]);
       if (pre === null) { phase = 'missing'; return; }
+      if (!card.has_text) { if (t === token) { current = card; cols = null; } return; }
       const load = (list) => Promise.all(list.slice(0, TOP).map(([i, s]) => getCard(i).then((c) => ({ i, c, s }))));
       const [a, b] = await Promise.all([load(pre), load(tuned)]);
       if (t !== token) return;
@@ -73,6 +74,8 @@
     <p class="notice">The before-and-after comparison is not available for this release.</p>
   {:else if error}
     <p class="notice" role="alert">Could not load the comparison: {error}</p>
+  {:else if current && !current.has_text}
+    <p class="notice">{current.name} has no rules text, so neither model has anything to compare.</p>
   {:else if cols && current}
     <p class="summary">
       <strong>{current.name}</strong>: {showcase.find((s) => s.id === current.id)?.why ?? 'a card you picked.'}
