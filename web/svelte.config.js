@@ -4,6 +4,7 @@ export default {
   kit: {
     adapter: adapter({ pages: 'build', assets: 'build', strict: true }),
     files: { assets: 'public' },
-    paths: { relative: true }
+    paths: { relative: true },
+    inlineStyleThreshold: 16384
   }
 };

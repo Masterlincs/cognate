@@ -226,9 +226,9 @@
   .splits figcaption { font-weight: 600; margin-bottom: 10px; }
   .splitbar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; font: 0.72rem/30px var(--mono); color: #fff; }
   .splitbar span { padding: 0 6px; white-space: nowrap; overflow: hidden; }
-  .fit { background: var(--wubrg-u); }
-  .dev { background: var(--wubrg-g); }
-  .sealed { background: var(--wubrg-b); }
+  .fit { background: color-mix(in srgb, var(--wubrg-u) 70%, #000); }
+  .dev { background: color-mix(in srgb, var(--wubrg-g) 70%, #000); }
+  .sealed { background: color-mix(in srgb, var(--wubrg-b) 70%, #000); }
   .splits ul { margin: 12px 0 8px; padding-left: 1.1em; }
   .splits li { margin: 3px 0; }
   .flow { display: flex; align-items: stretch; gap: 10px; margin: 18px 0 24px; }
