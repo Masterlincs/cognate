@@ -60,20 +60,26 @@ def test_site_metrics_reads_records(tmp_path, monkeypatch):
            "contrasts": {"pretrained_e5": {"full": view, "hard_lexical": view, "passes": True}}}
     put(runs / "confirmation" / bench / "report.json", rep)
     put(runs / "sealed" / sitedata.SEALED_BENCH / "report.json", {**rep, "sealed_gate": "cleared"})
-    put(runs / "exam" / "confirm-e5-s1" / "2026.json", {"n": 51, "passed": 47})
+    put(runs / "exam" / "confirm-e5-s1" / "2026.json", {"n": 51, "passed": 47, "items": [
+        {"id": "T001", "section": "user", "margin": -0.5, "passed": False},
+        {"id": "T002", "section": "user", "margin": 0.2, "passed": True}]})
     put(runs / "confirm-e5-s1" / "result.json", {"evals": [{"full": 0.70, "update": 2000}]})
     put(runs / "confirm-x1-s1" / "result.json", {"evals": [{"full": 0.71, "update": 4000}]})
     put(data / "dataset.json", {"report": {"split_counts": {"fit": 8, "dev": 1, "sealed": 1},
                                            "tags_functional": 5, "functional_memberships": 9}})
     monkeypatch.setattr(sitedata, "RUNS", runs)
     monkeypatch.setattr(sitedata, "DATASET", data)
+    monkeypatch.setattr(sitedata, "WEB", tmp_path / "web")
     m = sitedata.site_metrics()
+    assert m["deployed"] is None
     assert m["dev"]["fine-tuned E5"]["full"] == [0.5, 0.5, 0.5]
     assert m["dev"]["fine-tuned E5"]["source"][0].endswith("summary.json")
     assert m["promotion"]["d18"]["contrasts"]["pretrained_e5"]["full"]["point"] == 0.1
     assert m["promotion"]["x1"] is None
     assert m["sealed"]["sealed_gate"] == "cleared"
     assert m["exam"]["confirm-e5-s1"]["passed"] == 47
+    assert m["exam"]["confirm-e5-s1"]["failed"] == [{"id": "T001", "section": "user",
+                                                     "margin": -0.5}]
     assert m["steps"]["1"] == {"2000": 0.70, "4000": 0.71}
     assert "2" not in m["steps"]
     assert m["data"]["split_counts"]["fit"] == 8

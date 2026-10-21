@@ -153,6 +153,28 @@ def _final_full(run: str) -> float | None:
     return _read(p)["evals"][-1]["full"] if p.is_file() else None
 
 
+TRAIN_KEYS = ("objective", "lr", "batch_pairs", "hard_negatives", "total_updates", "scale",
+              "warmup_frac", "max_length", "seed")
+
+
+def _deployed() -> dict | None:
+    """The deployed release's model and its training config, or None without a release."""
+    cur = WEB / "public" / "data" / "current.json"
+    if not cur.is_file():
+        return None
+    rid = _read(cur)["release_id"]
+    model = _read(WEB / "public" / "data" / rid / "release.json")["model"]
+    meta = ARTIFACTS / "releases" / rid / "release_meta.json"
+    out = {"release_id": rid, "label": model["label"], "run_id": model.get("run_id"),
+           "encoder": {k: v for k, v in _read(meta)["encoder"].items()
+                       if k in ("model_id", "prefix", "pooling", "dim", "max_length")}}
+    man = RUNS / str(model.get("run_id")) / "manifest.json"
+    if man.is_file():
+        cfg = _read(man)["config"]
+        out["training"] = {k: cfg[k] for k in TRAIN_KEYS if k in cfg} | {"source": _rel(man)}
+    return out
+
+
 def site_metrics(showcase: list[dict] | None = None) -> dict:
     """Every figure the site shows, read from run and evaluation records."""
     dev = {label: _dev_row(names) for label, names in DEV_MODELS.items()}
@@ -164,7 +186,10 @@ def site_metrics(showcase: list[dict] | None = None) -> dict:
         recs = sorted(d.glob("*.json"))
         if recs:
             e = _read(recs[-1])
-            exam[d.name] = {"passed": e["passed"], "n": e["n"], "source": _rel(recs[-1])}
+            exam[d.name] = {"passed": e["passed"], "n": e["n"], "source": _rel(recs[-1]),
+                            "failed": [{"id": i["id"], "section": i["section"],
+                                        "margin": i["margin"]}
+                                       for i in e.get("items", []) if not i["passed"]]}
     steps = {}
     for s in SEEDS:
         a, b = _final_full(f"confirm-e5-s{s}"), _final_full(f"confirm-x1-s{s}")
@@ -179,6 +204,7 @@ def site_metrics(showcase: list[dict] | None = None) -> dict:
         "exam": exam, "steps": steps,
         "data": {k: ds.get(k) for k in ("n_cards", "split_counts", "tags_functional",
                                         "functional_memberships", "families", "multi_face")},
+        "deployed": _deployed(),
         "showcase": showcase or [],
     }
 

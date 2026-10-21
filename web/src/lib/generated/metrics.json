@@ -199,67 +199,397 @@
     "confirm-bge-s1": {
       "passed": 46,
       "n": 51,
-      "source": "runs/exam/confirm-bge-s1/2026-10-18T191936Z-1792351176708705100.json"
+      "source": "runs/exam/confirm-bge-s1/2026-10-18T191936Z-1792351176708705100.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.34954509139060974
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.3134416341781616
+        },
+        {
+          "id": "T022",
+          "section": "mechanism",
+          "margin": -0.17041456699371338
+        },
+        {
+          "id": "T028",
+          "section": "mechanism",
+          "margin": -0.0007630586624145508
+        },
+        {
+          "id": "T029",
+          "section": "mechanism",
+          "margin": -0.09236860275268555
+        }
+      ]
     },
     "confirm-e5-s1": {
       "passed": 47,
       "n": 51,
-      "source": "runs/exam/confirm-e5-s1/2026-10-18T191817Z-1792351097604758100.json"
+      "source": "runs/exam/confirm-e5-s1/2026-10-18T191817Z-1792351097604758100.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.5731181651353836
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.1997242569923401
+        },
+        {
+          "id": "T022",
+          "section": "mechanism",
+          "margin": -0.11806577444076538
+        },
+        {
+          "id": "T029",
+          "section": "mechanism",
+          "margin": -0.15113157033920288
+        }
+      ]
     },
     "confirm-e5-s2": {
       "passed": 47,
       "n": 51,
-      "source": "runs/exam/confirm-e5-s2/2026-10-20T004316Z-1792456996569012100.json"
+      "source": "runs/exam/confirm-e5-s2/2026-10-20T004316Z-1792456996569012100.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.5360872745513916
+        },
+        {
+          "id": "T007",
+          "section": "rider",
+          "margin": -0.006397843360900879
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.2576027512550354
+        },
+        {
+          "id": "T022",
+          "section": "mechanism",
+          "margin": -0.01870092749595642
+        }
+      ]
     },
     "confirm-x1-s1": {
       "passed": 47,
       "n": 51,
-      "source": "runs/exam/confirm-x1-s1/2026-10-21T100224Z-1792576944557835200.json"
+      "source": "runs/exam/confirm-x1-s1/2026-10-21T100224Z-1792576944557835200.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.4688255190849304
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.22295302152633667
+        },
+        {
+          "id": "T022",
+          "section": "mechanism",
+          "margin": -0.1183730959892273
+        },
+        {
+          "id": "T029",
+          "section": "mechanism",
+          "margin": -0.209969162940979
+        }
+      ]
     },
     "confirm-x1-s2": {
       "passed": 49,
       "n": 51,
-      "source": "runs/exam/confirm-x1-s2/2026-10-21T100301Z-1792576981838185700.json"
+      "source": "runs/exam/confirm-x1-s2/2026-10-21T100301Z-1792576981838185700.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.4080039858818054
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.35938459634780884
+        }
+      ]
     },
     "ext-1-e5-linetag": {
       "passed": 49,
       "n": 51,
-      "source": "runs/exam/ext-1-e5-linetag/2026-10-18T231400Z-1792365240416358200.json"
+      "source": "runs/exam/ext-1-e5-linetag/2026-10-18T231400Z-1792365240416358200.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.4201887845993042
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.2771476209163666
+        }
+      ]
     },
     "ext-2b-e5-synth-gc": {
       "passed": 48,
       "n": 51,
-      "source": "runs/exam/ext-2b-e5-synth-gc/2026-10-19T061851Z-1792390731906618800.json"
+      "source": "runs/exam/ext-2b-e5-synth-gc/2026-10-19T061851Z-1792390731906618800.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.5694759488105774
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.24256634712219238
+        },
+        {
+          "id": "T022",
+          "section": "mechanism",
+          "margin": -0.007631182670593262
+        }
+      ]
     },
     "ext-3-e5-selfname": {
       "passed": 47,
       "n": 51,
-      "source": "runs/exam/ext-3-e5-selfname/2026-10-19T012120Z-1792372880463480800.json"
+      "source": "runs/exam/ext-3-e5-selfname/2026-10-19T012120Z-1792372880463480800.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.4982559382915497
+        },
+        {
+          "id": "T003",
+          "section": "rider",
+          "margin": -0.0038799047470092773
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.20798027515411377
+        },
+        {
+          "id": "T022",
+          "section": "mechanism",
+          "margin": -0.00456392765045166
+        }
+      ]
     },
     "initial-1-e5-lr3e-05-s20": {
       "passed": 49,
       "n": 51,
-      "source": "runs/exam/initial-1-e5-lr3e-05-s20/2026-10-18T195818Z-1792353498562654300.json"
+      "source": "runs/exam/initial-1-e5-lr3e-05-s20/2026-10-18T195818Z-1792353498562654300.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.564155787229538
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.21585708856582642
+        }
+      ]
     },
     "pretrained-bge-small-en-v1.5": {
       "passed": 37,
       "n": 51,
-      "source": "runs/exam/pretrained-bge-small-en-v1.5/2026-10-18T191852Z-1792351132654147300.json"
+      "source": "runs/exam/pretrained-bge-small-en-v1.5/2026-10-18T191852Z-1792351132654147300.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.08651810884475708
+        },
+        {
+          "id": "T005",
+          "section": "rider",
+          "margin": -0.1220400333404541
+        },
+        {
+          "id": "T009",
+          "section": "rider",
+          "margin": -0.07399928569793701
+        },
+        {
+          "id": "T017",
+          "section": "rider",
+          "margin": -0.06401914358139038
+        },
+        {
+          "id": "T019",
+          "section": "rider",
+          "margin": -0.03871041536331177
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.23004162311553955
+        },
+        {
+          "id": "T022",
+          "section": "mechanism",
+          "margin": -0.07417064905166626
+        },
+        {
+          "id": "T023",
+          "section": "mechanism",
+          "margin": -0.0018648505210876465
+        },
+        {
+          "id": "T025",
+          "section": "mechanism",
+          "margin": -0.026067376136779785
+        },
+        {
+          "id": "T026",
+          "section": "mechanism",
+          "margin": -0.02121967077255249
+        },
+        {
+          "id": "T027",
+          "section": "mechanism",
+          "margin": -0.03769385814666748
+        },
+        {
+          "id": "T028",
+          "section": "mechanism",
+          "margin": -0.009622454643249512
+        },
+        {
+          "id": "T029",
+          "section": "mechanism",
+          "margin": -0.02742600440979004
+        },
+        {
+          "id": "T030",
+          "section": "mechanism",
+          "margin": -0.0017500519752502441
+        }
+      ]
     },
     "pretrained-e5-base-v2": {
       "passed": 36,
       "n": 51,
-      "source": "runs/exam/pretrained-e5-base-v2/2026-10-18T191756Z-1792351076023813400.json"
+      "source": "runs/exam/pretrained-e5-base-v2/2026-10-18T191756Z-1792351076023813400.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.06384533643722534
+        },
+        {
+          "id": "T005",
+          "section": "rider",
+          "margin": -0.003279566764831543
+        },
+        {
+          "id": "T006",
+          "section": "rider",
+          "margin": -0.04410755634307861
+        },
+        {
+          "id": "T008",
+          "section": "rider",
+          "margin": -0.029845833778381348
+        },
+        {
+          "id": "T009",
+          "section": "rider",
+          "margin": -0.05126762390136719
+        },
+        {
+          "id": "T011",
+          "section": "rider",
+          "margin": -0.007121741771697998
+        },
+        {
+          "id": "T017",
+          "section": "rider",
+          "margin": -0.05382877588272095
+        },
+        {
+          "id": "T019",
+          "section": "rider",
+          "margin": -0.0072190165519714355
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.13228005170822144
+        },
+        {
+          "id": "T022",
+          "section": "mechanism",
+          "margin": -0.04589265584945679
+        },
+        {
+          "id": "T025",
+          "section": "mechanism",
+          "margin": -0.024714112281799316
+        },
+        {
+          "id": "T026",
+          "section": "mechanism",
+          "margin": -0.03638589382171631
+        },
+        {
+          "id": "T028",
+          "section": "mechanism",
+          "margin": -0.03744310140609741
+        },
+        {
+          "id": "T029",
+          "section": "mechanism",
+          "margin": -0.03704631328582764
+        },
+        {
+          "id": "T030",
+          "section": "mechanism",
+          "margin": -0.008578896522521973
+        }
+      ]
     },
     "smoke": {
       "passed": 0,
       "n": 0,
-      "source": "runs/exam/smoke/2026-10-18T165523Z-1792342523351324200.json"
+      "source": "runs/exam/smoke/2026-10-18T165523Z-1792342523351324200.json",
+      "failed": []
     },
     "x-1-e5-4000": {
       "passed": 49,
       "n": 51,
-      "source": "runs/exam/x-1-e5-4000/2026-10-19T222336Z-1792448616024005300.json"
+      "source": "runs/exam/x-1-e5-4000/2026-10-19T222336Z-1792448616024005300.json",
+      "failed": [
+        {
+          "id": "T001",
+          "section": "user",
+          "margin": -0.4487704038619995
+        },
+        {
+          "id": "T021",
+          "section": "rider",
+          "margin": -0.26371657848358154
+        }
+      ]
     }
   },
   "steps": {
@@ -283,6 +613,30 @@
     "functional_memberships": 175457,
     "families": 28999,
     "multi_face": 847
+  },
+  "deployed": {
+    "release_id": "2026-10-16-e5-base-v2-68086be1",
+    "label": "e5-base-v2 fine-tuned (confirm-e5-s1)",
+    "run_id": "confirm-e5-s1",
+    "encoder": {
+      "model_id": "intfloat/e5-base-v2",
+      "prefix": "query: ",
+      "pooling": "mean",
+      "dim": 768,
+      "max_length": 94
+    },
+    "training": {
+      "objective": "masked_infonce",
+      "lr": 3e-05,
+      "batch_pairs": 32,
+      "hard_negatives": 1,
+      "total_updates": 2000,
+      "scale": 20.0,
+      "warmup_frac": 0.1,
+      "max_length": 94,
+      "seed": 1,
+      "source": "runs/confirm-e5-s1/manifest.json"
+    }
   },
   "showcase": []
 }

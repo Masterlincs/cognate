@@ -2,7 +2,7 @@
   import { searchNames } from './bundle.js';
 
   // names: names.json (null while loading); onpick(index)
-  let { names, onpick, id = 'card-search', label = 'Search for a card', placeholder = 'Search any card, e.g. Lightning Bolt' } = $props();
+  let { names, onpick, onfocus = null, id = 'card-search', label = 'Search for a card', placeholder = 'Search any card, e.g. Lightning Bolt' } = $props();
   let query = $state('');
   let active = $state(-1);
   let open = $state(false);
@@ -26,7 +26,7 @@
   <label class="sr-only" for={id}>{label}</label>
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
   <input {id} type="search" role="combobox" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="{id}-list" aria-expanded={options.length > 0} aria-activedescendant={active >= 0 ? `${id}-${active}` : undefined}
-    placeholder={names ? placeholder : 'Loading card names…'} disabled={!names} bind:value={query} oninput={() => { open = true; active = -1; }} onkeydown={keydown} onblur={() => setTimeout(() => (open = false), 120)} />
+    {placeholder} bind:value={query} onfocus={() => onfocus?.()} oninput={() => { open = true; active = -1; }} onkeydown={keydown} onblur={() => setTimeout(() => (open = false), 120)} />
   {#if options.length}
     <ul id="{id}-list" role="listbox">
       {#each options as option, i (option.index)}
