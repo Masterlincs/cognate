@@ -638,5 +638,36 @@
       "source": "runs/confirm-e5-s1/manifest.json"
     }
   },
-  "showcase": []
+  "showcase": [
+    {
+      "id": "4457ed35-7c10-48c8-9776-456485fdf070",
+      "name": "Lightning Bolt",
+      "why": "before, cards that share the word “Lightning”, some of which hit every opponent or split the damage; after, other 3-damage burn such as Volcanic Hammer and Searing Spear, whatever they are called."
+    },
+    {
+      "id": "5748ebf1-24e3-499d-ab7c-c2cebd462a24",
+      "name": "Giant Growth",
+      "why": "before, three −3/−3 removal spells: near-identical wording, opposite effect; after, only pump spells."
+    },
+    {
+      "id": "b1544f21-7e98-461b-aed5-e748b0168c52",
+      "name": "Swords to Plowshares",
+      "why": "after, creatures that carry the same exile-and-gain-life effect, such as Luminate Primordial and Solitude."
+    },
+    {
+      "id": "8539f295-5d58-4436-a73a-b9277c4c7795",
+      "name": "Rampant Growth",
+      "why": "before, lands that sacrifice themselves to fetch a land, such as Evolving Wilds; after, creatures that fetch a basic land when they enter."
+    },
+    {
+      "id": "68954295-54e3-4303-a6bc-fc4547a4e3a3",
+      "name": "Llanowar Elves",
+      "why": "the lists are identical: when the wording already matches, the untuned model does fine too."
+    },
+    {
+      "id": "ad0070db-6454-41cb-861f-8f5b8fc2a3b8",
+      "name": "Ghostly Flicker",
+      "why": "mixed: after adds flicker effects such as Spaceshift, but also Into the Core and Dust to Dust, which exile two artifacts for good. Shared wording still wins sometimes."
+    }
+  ]
 }

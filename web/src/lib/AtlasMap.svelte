@@ -139,7 +139,7 @@
     const xs = pts.map((i) => map.x[i]), ys = pts.map((i) => map.y[i]);
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
     const span = Math.max(x1 - x0, y1 - y0, 1500);
-    const scale = Math.min(fit * 24, Math.max(fit * 1.5, (Math.min(width, height) * 0.7) / span));
+    const scale = Math.min(fit * 3, Math.max(fit * 1.5, (Math.min(width, height) * 0.7) / span));
     const cx = map.x[selected], cy = map.y[selected];
     flyTo({ scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale });
   }
