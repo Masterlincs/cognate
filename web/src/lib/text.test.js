@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { cardLines, manaTokens, maskNumbers, sharedLines, manaSymbol } from './text.js';
+import { readFileSync } from 'node:fs';
+import { cardLines, manaClass, manaTokens, maskNumbers, sharedLines } from './text.js';
 
 const card = (name, ...texts) => ({ name, faces: texts.map((t, i) => ({ name: i ? `${name} back` : name, oracle_text: t, mana_cost: '', type_line: '' })) });
 
@@ -34,20 +35,18 @@ describe('text helpers', () => {
   });
 });
 
-describe('manaSymbol', () => {
-  it('colours a single mana symbol', () => {
-    expect(manaSymbol('R')).toEqual({ colours: ['r'], text: 'R' });
-    expect(manaSymbol('3')).toEqual({ colours: [], text: '3' });
-    expect(manaSymbol('T')).toEqual({ colours: [], text: '↷' });
+describe('manaClass', () => {
+  it('maps symbols to Mana font classes', () => {
+    expect(['R', '3', '12', 'X', 'T', 'Q', 'TK', 'E', 'S', 'P', 'C'].map(manaClass)).toEqual(['r', '3', '12', 'x', 'tap', 'untap', 'tk', 'e', 's', 'p', 'c']);
+    expect(['W/U', '2/R', 'B/P', 'G/U/P', 'C/W'].map(manaClass)).toEqual(['wu', '2r', 'bp', 'gup', 'cw']);
   });
-  it('splits hybrid symbols into two colours with no letters', () => {
-    expect(manaSymbol('W/U')).toEqual({ colours: ['w', 'u'], text: '' });
+  it('returns null for symbols the font does not draw', () => {
+    expect(manaClass('HW')).toBeNull();
+    expect(manaClass('<script>')).toBeNull();
   });
-  it('keeps the number of a two-or-colour hybrid', () => {
-    expect(manaSymbol('2/R')).toEqual({ colours: ['r'], text: '2' });
-  });
-  it('marks Phyrexian mana', () => {
-    expect(manaSymbol('B/P')).toEqual({ colours: ['b'], text: 'φ' });
-    expect(manaSymbol('G/U/P')).toEqual({ colours: ['g', 'u'], text: 'φ' });
+  it('every class it returns exists in the vendored stylesheet', () => {
+    const css = readFileSync(new URL('./vendor/mana.css', import.meta.url), 'utf8');
+    const seen = ['W', 'U', 'B', 'R', 'G', 'C', 'X', 'T', 'Q', 'TK', 'E', 'S', 'P', '0', '1', '9', '10', '16', '20', '1/2', 'W/B', 'U/R', 'R/W', 'G/U', 'G/W', 'B/R', 'U/B', 'W/U', 'B/G', 'R/G', '2/W', '2/U', '2/B', '2/R', '2/G', 'W/P', 'U/P', 'B/P', 'R/P', 'G/P', 'G/U/P', 'G/W/P', 'R/G/P', 'R/W/P', 'C/W', 'C/U', 'C/B', 'C/R', 'C/G'];
+    for (const s of seen) expect(css.includes(`.ms-${manaClass(s)}::before`) || css.includes(`.ms-${manaClass(s)}:before`), s).toBe(true);
   });
 });

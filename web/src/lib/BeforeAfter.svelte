@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { asset, resolve } from '$app/paths';
+  import Rules from './Rules.svelte';
   import Search from './Search.svelte';
   import { getCard, getNeighbours, getPretrained, loadRelease, loadSiteData, setRoot } from './data.js';
   import { resolveSelection } from './explorer.js';
@@ -80,7 +81,7 @@
     <p class="summary">
       <strong>{current.name}</strong>: {showcase.find((s) => s.id === current.id)?.why ?? 'a card you picked.'}
       <span class="muted">{cols.overlap} of the top {TOP} appear in both lists.</span>
-      <a href="{resolve('/')}?card={current.id}">Open in the explorer →</a>
+      <a href="{resolve('/')}?card={current.id}">Open in the explorer</a>
     </p>
     <div class="cols">
       {#each [['Before', 'pretrained e5-base-v2', cols.pre], ['After', 'fine-tuned on card tags', cols.tuned]] as [title, sub, rows] (title)}
@@ -90,7 +91,7 @@
             {#each rows as r (r.i)}
               <li class:both={r.both}>
                 <span class="name">{r.c.name}</span>
-                <span class="line">{firstLine(r.c)}</span>
+                <span class="line"><Rules text={firstLine(r.c)} /></span>
               </li>
             {/each}
           </ol>
@@ -107,7 +108,7 @@
   .pick { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 5px 11px; font-size: 0.84rem; }
-  .chip.on { border-color: var(--accent); background: var(--accent-soft); }
+  .chip.on { border-color: var(--ink); background: var(--ink); color: var(--bg); }
   .chip:disabled { opacity: 0.6; cursor: default; }
   .search { width: min(100%, 300px); }
   .search :global(input) { height: 40px; box-shadow: none; }
@@ -115,15 +116,15 @@
   .summary a { white-space: nowrap; }
   .cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   section { padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
-  section.after { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  section.after { border-color: var(--ink); }
   section.ghost { min-height: 420px; background: var(--sunken); border: 0; }
   h3 { font-size: 1.1rem; margin-bottom: 8px; }
-  h3 span { display: block; font: 400 0.78rem var(--body); color: var(--muted); }
+  h3 span { display: block; font: 400 0.78rem var(--sans); color: var(--muted); }
   ol { margin: 0; padding-left: 1.4em; }
   li { padding: 6px 0; border-top: 1px solid var(--line); font-size: 0.86rem; }
-  li::marker { color: var(--muted); font: 0.75rem var(--mono); }
+  li::marker { color: var(--muted); font: 0.75rem var(--sans); }
   .name { display: block; font-weight: 600; }
-  .line { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; color: var(--muted); }
+  .line { font-family: var(--serif); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; color: var(--muted); }
   li.both .name { box-shadow: inset 0 -0.45em var(--mark); }
   .key { font-size: 0.8rem; margin-top: 8px; display: flex; align-items: center; gap: 6px; }
   .both-key { display: inline-block; width: 22px; height: 8px; background: var(--mark); }

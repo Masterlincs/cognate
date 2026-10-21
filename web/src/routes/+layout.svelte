@@ -1,8 +1,7 @@
 <script>
-  import '@fontsource-variable/fraunces/opsz.css';
-  import '@fontsource-variable/fraunces/wght-italic.css';
-  import '@fontsource-variable/inter';
-  import '@fontsource/jetbrains-mono/latin-400.css';
+  import '@fontsource-variable/schibsted-grotesk';
+  import '@fontsource-variable/source-serif-4';
+  import '#lib/vendor/mana.css';
   import '../app.css';
   import { page } from '$app/state';
   import { resolve } from '$app/paths';
@@ -19,10 +18,7 @@
 
 <a class="skip" href="#main">Skip to content</a>
 <header class="site-header">
-  <a class="wordmark" href={resolve('/')}>
-    <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" /><circle class="dot" cx="11" cy="13" r="2.4" /><circle class="dot" cx="20" cy="11" r="1.8" /><circle class="dot" cx="19" cy="20" r="2.8" /></svg>
-    Card Atlas
-  </a>
+  <a class="wordmark" href={resolve('/')}>Card Atlas</a>
   <nav aria-label="Main">
     <a href={resolve('/')} aria-current={page.url.pathname.endsWith('/how-it-works') ? undefined : 'page'}>Explore</a>
     <a href={resolve('/how-it-works')} aria-current={page.url.pathname.endsWith('/how-it-works') ? 'page' : undefined}>How it works</a>

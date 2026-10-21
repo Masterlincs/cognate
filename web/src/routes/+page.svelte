@@ -5,9 +5,11 @@
   import AtlasMap from '#lib/AtlasMap.svelte';
   import CardText from '#lib/CardText.svelte';
   import CardTile from '#lib/CardTile.svelte';
+  import ColourFilter from '#lib/ColourFilter.svelte';
   import Compare from '#lib/Compare.svelte';
   import Rules from '#lib/Rules.svelte';
   import Search from '#lib/Search.svelte';
+  import Segmented from '#lib/Segmented.svelte';
   import { parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
   import { getAbilities, getCard, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
   import { activeFilters, hasMore, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
@@ -15,7 +17,8 @@
   import metrics from '#lib/generated/metrics.json';
 
   const PAGE = 12;
-  const NO_FILTERS = { color: '', minMv: null, maxMv: null, creature: '', type: '' };
+  const NO_FILTERS = { color: '', colorMode: 'include', minMv: null, maxMv: null, creature: '', type: '' };
+  const PARAM_NAMES = { color: 'colour', cm: 'colour match', min: 'minimum mana value', max: 'maximum mana value', creature: 'creatures' };
   let release = $state(null);
   let names = $state(null);
   let ids = null;
@@ -97,12 +100,15 @@
   }
 
   function apply(state) {
-    filters = { color: state.color, minMv: state.minMv, maxMv: state.maxMv, creature: state.creature, type: state.type };
+    filters = { color: state.color, colorMode: state.colorMode, minMv: state.minMv, maxMv: state.maxMv, creature: state.creature, type: state.type };
     rank = hasLines ? state.rank : 'whole';
     const r = resolveSelection(ids, state);
-    if (r.unknown) { clear(); notice = 'That link points to a card that is not in this release.'; return; }
-    if (r.index < 0) { clear(); return; }
-    select(r.index, { push: false, abilityIndex: state.ability });
+    if (r.unknown) clear();
+    else if (r.index < 0) clear();
+    else select(r.index, { push: false, abilityIndex: state.ability });
+    // select() clears the notice before its first await, so these land after it
+    const dropped = state.dropped.length ? `This link has a value the explorer does not recognise for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}, so that filter is off.` : '';
+    notice = [r.unknown ? 'That link points to a card that is not in this release.' : '', dropped].filter(Boolean).join(' ');
   }
 
   function setAbility(k) {
@@ -124,6 +130,11 @@
 
   function setFilter(key, value) {
     filters = { ...filters, [key]: value };
+    updateUrl(false);
+  }
+
+  function setColour(color, colorMode) {
+    filters = { ...filters, color, colorMode };
     updateUrl(false);
   }
 
@@ -187,9 +198,8 @@
 
     {#if !card}
       <div class="intro">
-        <p class="eyebrow">Magic: The Gathering · {release ? release.n_cards.toLocaleString('en') : '…'} cards</p>
-        <h1>Find cards by <em>what they do</em>.</h1>
-        <p class="lede">Pick a card and Card Atlas lists the cards whose rules do the most similar thing, ranked by a language model fine-tuned on card text. The map places every card by the same similarity, so related effects sit together.</p>
+        <h1>Find Magic cards by what they do.</h1>
+        <p class="lede">Pick a card to see the cards whose rules do the most similar thing, out of {release ? release.n_cards.toLocaleString('en') : 'all'} cards. A language model fine-tuned on rules text does the ranking. The map places every card by the same similarity, so related effects sit together.</p>
         <Search {names} onpick={(i) => select(i)} />
         {#if showcase.length}
           <div class="examples">
@@ -199,14 +209,13 @@
             {/each}
           </div>
         {/if}
-        <p class="how"><a href={resolve('/how-it-works')}>How the model was built and how well it works →</a></p>
+        <p class="how"><a href={resolve('/how-it-works')}>How the model was built, and how well it works</a></p>
       </div>
     {:else}
       <div class="top-search"><Search {names} id="card-search-top" onpick={(i) => select(i)} /></div>
       <article class="selected" aria-labelledby="selected-name">
         {#if card.image}<img src={card.image} alt="" width="488" height="680" />{/if}
         <div class="selected-body">
-          <p class="eyebrow">Selected card</p>
           <h1 id="selected-name">{card.name} {#if card.faces.length === 1 && card.faces[0].mana_cost}<span class="cost"><Rules text={card.faces[0].mana_cost} /></span>{/if}</h1>
           <CardText {card} />
           {#if card.tags?.length}
@@ -225,15 +234,13 @@
         <div class="similar-by" id="results">
           <h2>Similar cards</h2>
           {#if hasLines || abilities.length > 1}
-            <div class="by" role="group" aria-label="Rank by">
-              <button type="button" class:on={ability === null && !byLine} aria-pressed={ability === null && !byLine} onclick={() => setRank('whole')}>Whole card</button>
-              {#if hasLines}<button type="button" class:on={byLine} aria-pressed={byLine} onclick={() => setRank('line')}>Line match</button>{/if}
-            </div>
+            {#if hasLines}<Segmented label="Rank by" options={[{ value: 'whole', label: 'Whole card' }, { value: 'line', label: 'Line match' }]} value={ability === null ? rank : null} onchange={setRank} />{/if}
+            {#if !hasLines}<button type="button" class="btn" class:on={ability === null} aria-pressed={ability === null} onclick={() => setRank('whole')}>Whole card</button>{/if}
             {#if abilities.length > 1}
               <p class="by-label muted">Or match one line:</p>
               <div class="by" role="group" aria-label="Match one line">
                 {#each abilities as a, k (k)}
-                  <button type="button" class:on={ability === k} aria-pressed={ability === k} onclick={() => setAbility(k)}><Rules text={a.text} /></button>
+                  <button type="button" aria-pressed={ability === k} onclick={() => setAbility(k)}><Rules text={a.text} /></button>
                 {/each}
               </div>
             {/if}
@@ -241,36 +248,25 @@
           {/if}
         </div>
 
-        <details class="filters" open={filtering}>
-          <summary>Filter results{filtering ? ` · ${visible.length} of ${saved.length} match` : ''}</summary>
-          <div class="filter-row">
-            <label>Colour
-              <select value={filters.color} onchange={(e) => setFilter('color', e.currentTarget.value)}>
-                <option value="">Any</option><option value="W">White</option><option value="U">Blue</option><option value="B">Black</option><option value="R">Red</option><option value="G">Green</option><option value="C">Colourless</option>
-              </select>
-            </label>
-            <label>Mana value
-              <span class="mv"><input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} onchange={(e) => setFilter('minMv', numberOrNull(e.currentTarget.value))} aria-label="Minimum mana value" />–<input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} onchange={(e) => setFilter('maxMv', numberOrNull(e.currentTarget.value))} aria-label="Maximum mana value" /></span>
-            </label>
-            <label>Type
-              <input type="text" placeholder="e.g. instant" value={filters.type} onchange={(e) => setFilter('type', e.currentTarget.value)} />
-            </label>
-            <label>Creatures
-              <select value={filters.creature} onchange={(e) => setFilter('creature', e.currentTarget.value)}>
-                <option value="">Any</option><option value="creature">Only creatures</option><option value="noncreature">No creatures</option>
-              </select>
-            </label>
-            {#if filtering}<button type="button" class="btn" onclick={() => { filters = { ...NO_FILTERS }; updateUrl(false); }}>Clear</button>{/if}
+        <div class="filters" role="group" aria-label="Filter results">
+          <div class="f"><span class="fl">Colour</span><ColourFilter color={filters.color} mode={filters.colorMode} onchange={setColour} /></div>
+          <div class="f"><span class="fl">Type</span>
+            <Segmented label="Creatures" options={[{ value: '', label: 'Any' }, { value: 'creature', label: 'Creatures' }, { value: 'noncreature', label: 'Non-creatures' }]} value={filters.creature} onchange={(v) => setFilter('creature', v)} />
+            <input type="text" class="type" placeholder="Type line has…" aria-label="Type line contains" value={filters.type} onchange={(e) => setFilter('type', e.currentTarget.value)} />
           </div>
-        </details>
+          <div class="f"><span class="fl">Mana value</span>
+            <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} onchange={(e) => setFilter('minMv', numberOrNull(e.currentTarget.value))} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} onchange={(e) => setFilter('maxMv', numberOrNull(e.currentTarget.value))} aria-label="Maximum mana value" />
+          </div>
+          <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; updateUrl(false); }}>Clear filters</button>{:else}Filters narrow the {saved.length} most similar cards; they do not search the whole catalogue.{/if}</p>
+        </div>
 
-        <ol class="grid" aria-busy={busy || pending}>
+        <ol class="results" aria-busy={busy || pending}>
           {#each pageRows as [i, score], r (i)}
             <li><CardTile card={byIndex[i]} {score} rank={r + 1} oncompare={(c) => (compare = { card: c, score })} onselect={() => select(i)} /></li>
           {/each}
           {#if pending}{#each { length: Math.max(0, Math.min(shown, saved.length) - pageRows.length) } as _, k (k)}<li class="ghost" aria-hidden="true"></li>{/each}{/if}
         </ol>
-        {#if !pending && filtering && !visible.length}<p class="notice">No similar card passes these filters.</p>{/if}
+        {#if !pending && filtering && !visible.length}<p class="notice">None of the {saved.length} most similar cards passes these filters.</p>{/if}
         {#if hasMore({ saved, visible, shown, filtering })}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
         <p class="model-note muted">Scores are {byLine ? 'weighted line-match scores' : 'cosine similarities'} from {release.model.label}. Rankings are the model's judgement; check the cards before relying on them.</p>
       {/if}
@@ -281,61 +277,64 @@
 <Compare a={card} b={compare?.card ?? null} score={compare?.score ?? null} onclose={() => (compare = null)} onselect={pick} />
 
 <style>
-  .explorer { display: grid; grid-template-columns: minmax(0, 46fr) minmax(0, 54fr); gap: 24px; padding: 18px clamp(14px, 3vw, 28px) 32px; max-width: 1600px; margin: 0 auto; }
+  .explorer { display: grid; grid-template-columns: minmax(0, 46fr) minmax(0, 54fr); gap: 28px; padding: 18px clamp(14px, 3vw, 28px) 32px; max-width: 1600px; margin: 0 auto; }
   .tabs { display: none; }
   .map-pane { position: sticky; top: 74px; height: calc(100dvh - 92px); min-height: 420px; }
   .map-loading { height: 100%; border-radius: var(--radius); background: var(--sunken); }
   .map-bar { display: none; }
   .results-pane { min-width: 0; }
-  .intro { padding: clamp(8px, 6vh, 72px) 0 24px; max-width: 620px; }
-  .intro h1 { margin: 10px 0 14px; }
-  .intro h1 em { font-style: italic; color: var(--accent); }
-  .lede { font-size: 1.08rem; color: var(--muted); margin-bottom: 22px; }
-  .examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 14px; font-size: 0.9rem; }
-  .examples .chip { text-decoration: none; color: var(--ink); background: var(--surface); border: 1px solid var(--line); }
-  .examples .chip:hover { border-color: var(--accent); color: var(--accent); }
-  .how { margin-top: 26px; font-weight: 500; }
-  .top-search { margin-bottom: 18px; }
-  .selected { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 20px; padding: 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
-  .selected img { width: 200px; height: auto; aspect-ratio: 488 / 680; border-radius: 10px; background: var(--sunken); }
+  .intro { padding: clamp(8px, 7vh, 88px) 0 24px; max-width: 600px; }
+  .intro h1 { margin: 0 0 16px; }
+  .lede { font-size: 1.06rem; color: var(--muted); margin-bottom: 24px; max-width: 54ch; }
+  .examples { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 14px; font-size: 0.92rem; }
+  .examples .chip { padding: 0; background: none; border-radius: 0; color: var(--ink); font-size: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.25em; }
+  .examples .chip:hover { text-decoration-color: currentColor; }
+  .how { margin-top: 32px; font-size: 0.95rem; }
+  .top-search { margin-bottom: 22px; }
+  .selected { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
+  .selected img { width: 180px; height: auto; aspect-ratio: 488 / 680; border-radius: 9px; background: var(--sunken); }
   .selected-body { min-width: 0; }
-  .selected h1 { font-size: clamp(1.5rem, 2.6vw, 2rem); margin: 4px 0 10px; }
-  .cost { font-size: 1rem; vertical-align: middle; white-space: nowrap; }
-  .tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 12px; font-size: 0.82rem; }
-  .links { margin: 12px 0 0; font-size: 0.88rem; }
-  .similar-by { margin: 28px 0 10px; scroll-margin-top: 70px; }
-  .similar-by h2 { margin-bottom: 10px; }
-  .by { display: flex; flex-wrap: wrap; gap: 6px; }
-  .by button { max-width: 100%; padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 0.84rem; text-align: left; overflow-wrap: anywhere; }
-  .by button.on { border-color: var(--accent); background: var(--accent-soft); }
-  .by-note { font-size: 0.84rem; margin: 8px 0 0; }
-  .by-label { font-size: 0.84rem; margin: 10px 0 6px; }
-  .filters { margin: 12px 0 14px; font-size: 0.9rem; }
-  .filters summary { cursor: pointer; color: var(--muted); }
-  .filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 10px; }
-  .filter-row label { display: grid; gap: 4px; font-size: 0.8rem; color: var(--muted); }
-  .filter-row select, .filter-row input { height: 34px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
-  .filter-row input[type='text'] { width: 130px; }
-  .mv { display: flex; align-items: center; gap: 4px; }
-  .mv input { width: 64px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-  .grid > li { display: grid; min-width: 0; }
-  .ghost { min-height: 150px; border-radius: var(--radius); background: var(--sunken); }
-  .more { margin: 16px auto 0; display: flex; }
-  .model-note { font-size: 0.8rem; margin-top: 20px; }
+  .selected h1 { font-size: clamp(1.6rem, 2.6vw, 2.1rem); margin: 2px 0 12px; }
+  .selected :global(.card-text) { font-size: 1.02rem; }
+  .cost { font-size: 1.05rem; vertical-align: 0.2em; white-space: nowrap; letter-spacing: 0; }
+  .tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 14px; font-size: 0.82rem; }
+  .links { margin: 14px 0 0; font-size: 0.9rem; }
+  .similar-by { margin: 26px 0 0; scroll-margin-top: 70px; }
+  .similar-by h2 { margin-bottom: 12px; }
+  .by { display: flex; flex-direction: column; gap: 2px; }
+  .by button { max-width: 100%; padding: 6px 10px; border: 0; border-left: 2px solid var(--line); background: none; font-size: 0.88rem; text-align: left; overflow-wrap: anywhere; color: var(--muted); }
+  .by button:hover { color: var(--ink); }
+  .by button[aria-pressed='true'] { border-left-color: var(--ink); color: var(--ink); background: var(--surface); }
+  .btn.on { border-color: var(--ink); }
+  .by-note { font-size: 0.84rem; margin: 10px 0 0; max-width: 70ch; }
+  .by-label { font-size: 0.84rem; margin: 14px 0 6px; }
+  .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 26px; margin: 22px 0 6px; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .f { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .fl { font-size: 0.84rem; font-weight: 600; }
+  .filters input { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 0.88rem; }
+  .filters input[type='number'] { width: 66px; }
+  .filters input.type { width: 140px; }
+  .fstatus { flex-basis: 100%; margin: 0; font-size: 0.82rem; }
+  .linkish { padding: 0; border: 0; background: none; font-size: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 0.2em; }
+  .results { margin: 0; padding: 0; list-style: none; }
+  .results > li { display: grid; min-width: 0; border-bottom: 1px solid var(--line); }
+  .ghost { min-height: 120px; margin: 8px 0; border-radius: var(--radius); background: var(--sunken); }
+  .more { margin: 18px auto 0; display: flex; }
+  .model-note { font-size: 0.8rem; margin-top: 22px; }
   @media (max-width: 900px) {
     .explorer { grid-template-columns: minmax(0, 1fr); gap: 14px; padding-top: 12px; }
-    .tabs { display: flex; gap: 4px; padding: 4px; background: var(--sunken); border-radius: 10px; }
-    .tabs button { flex: 1; padding: 7px; border: 0; border-radius: 8px; background: none; font-weight: 500; color: var(--muted); }
-    .tabs button[aria-selected='true'] { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+    .tabs { display: flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+    .tabs button { flex: 1; padding: 7px; border: 0; background: var(--surface); font-weight: 500; color: var(--muted); }
+    .tabs button + button { border-left: 1px solid var(--line); }
+    .tabs button[aria-selected='true'] { background: var(--ink); color: var(--bg); }
     .explorer:not(.has-card) .tabs { display: none; }
     .explorer:not(.has-card) .map-pane { display: block; position: static; height: 46dvh; min-height: 280px; order: 2; }
     .map-pane { position: relative; top: 0; height: 72dvh; }
     .hidden { display: none; }
     .explorer:not(.has-card) .results-pane { display: block; }
-    .map-bar { display: flex; position: absolute; left: 10px; right: 52px; top: 10px; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border-radius: 10px; background: var(--surface); box-shadow: var(--shadow); font-weight: 600; font-size: 0.9rem; }
+    .map-bar { display: flex; position: absolute; left: 10px; right: 52px; top: 10px; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-weight: 600; font-size: 0.9rem; }
     .map-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .selected { grid-template-columns: 110px minmax(0, 1fr); gap: 14px; padding: 14px; }
+    .selected { grid-template-columns: 110px minmax(0, 1fr); gap: 14px; }
     .selected img { width: 110px; }
     .intro { padding-top: 8px; }
   }

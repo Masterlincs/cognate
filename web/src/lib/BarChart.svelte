@@ -63,7 +63,7 @@
   .legend .s1 { background: color-mix(in srgb, var(--accent) 45%, transparent); }
   .whisker { position: absolute; top: 50%; height: 2px; margin-top: -1px; background: var(--ink); min-width: 2px; }
   .value { position: absolute; right: 0; top: 0; font-size: 0.72rem; color: var(--muted); line-height: 12px; }
-  .ticks { position: relative; height: 16px; font: 0.7rem var(--mono); color: var(--muted); }
+  .ticks { position: relative; height: 16px; font: 0.7rem var(--sans); color: var(--muted); }
   .ticks span { position: absolute; transform: translateX(-50%); }
   .ticks span:first-child { transform: none; }
   .ticks span:last-child { transform: translateX(-100%); }

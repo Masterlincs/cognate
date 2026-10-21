@@ -30,7 +30,7 @@ describe('search and ranking helpers', () => {
 describe('URL state', () => {
   it('round trips card and filters', () => {
     const state = { card: 'oracle-123', color: 'G', minMv: 2, maxMv: null, creature: 'creature', type: 'human' };
-    expect(parseUrl(`?${serializeUrl(state)}`)).toEqual({ ...state, ability: null, rank: 'whole', maxMv: null });
+    expect(parseUrl(`?${serializeUrl(state)}`)).toEqual({ ...state, colorMode: 'include', ability: null, rank: 'whole', maxMv: null, dropped: [] });
   });
   it('round trips an ability index and falls back to Whole card for invalid indexes', () => {
     const state = { card: 'oracle-123', ability: 1, color: '', minMv: null, maxMv: null, creature: '', type: '' };
@@ -156,5 +156,32 @@ describe('parseUrl drops invalid filter values', () => {
   });
   it('keeps valid ones', () => {
     expect(parseUrl('?color=C&creature=noncreature&min=0')).toMatchObject({ color: 'C', creature: 'noncreature', minMv: 0 });
+  });
+});
+
+describe('colour combinations', () => {
+  const ci = ['', 'R', 'WR', 'WUR', 'U'];
+  const run = (color, colorMode) => filterNeighbours(ci.map((_, i) => [i, 1]), (i) => ({ color_identity: ci[i], mv: 1, type_line: '', is_creature: false }), { color, colorMode }).map(([i]) => ci[i]);
+  it('include: has every picked colour', () => expect(run('WR', 'include')).toEqual(['WR', 'WUR']));
+  it('exact: exactly the picked colours', () => expect(run('WR', 'exact')).toEqual(['WR']));
+  it('within: no colour outside the picked ones (colourless counts)', () => expect(run('WR', 'within')).toEqual(['', 'R', 'WR']));
+  it('C means colourless in every mode', () => expect(run('C', 'within')).toEqual(['']));
+  it('defaults to include', () => expect(run('R')).toEqual(['R', 'WR', 'WUR']));
+});
+
+describe('colour URL state', () => {
+  it('canonicalises colour order and round trips the mode', () => {
+    const s = parseUrl('?color=rw&cm=exact');
+    expect(s).toMatchObject({ color: 'WR', colorMode: 'exact', dropped: [] });
+    expect(serializeUrl(s)).toBe('color=WR&cm=exact');
+  });
+  it('omits the default mode and the mode for colourless', () => {
+    expect(serializeUrl({ color: 'G', colorMode: 'include' })).toBe('color=G');
+    expect(serializeUrl({ color: 'C', colorMode: 'exact' })).toBe('color=C');
+  });
+  it('reports dropped filters by parameter name', () => {
+    expect(parseUrl('?color=WW&cm=sideways&min=abc&creature=maybe').dropped).toEqual(['color', 'cm', 'min', 'creature']);
+    expect(parseUrl('?color=CW').dropped).toEqual(['color']);
+    expect(parseUrl('?min=&type=elf').dropped).toEqual([]);
   });
 });

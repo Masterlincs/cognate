@@ -42,9 +42,9 @@
 <style>
   .search { position: relative; width: 100%; }
   svg { position: absolute; left: 14px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); fill: none; stroke: var(--muted); stroke-width: 2; pointer-events: none; }
-  input { width: 100%; height: 48px; padding: 0 16px 0 42px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: 1rem; box-shadow: var(--shadow); }
-  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-  ul { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px; list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
-  li { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+  input { width: 100%; height: 48px; padding: 0 16px 0 42px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 1rem; }
+  input:focus { outline: none; border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+  ul { position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 6px); margin: 0; padding: 6px; list-style: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / 12%); }
+  li { padding: 7px 10px; border-radius: 4px; cursor: pointer; }
   li.active, li:hover { background: var(--accent-soft); }
 </style>

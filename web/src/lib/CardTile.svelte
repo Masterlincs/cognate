@@ -7,7 +7,7 @@
   const cost = $derived(card.faces[0]?.mana_cost ?? '');
 </script>
 
-<article class="tile">
+<article class="row">
   <div class="art">
     {#if card.image}<img src={small(card.image)} alt="" loading="lazy" decoding="async" width="146" height="204" />{/if}
   </div>
@@ -17,30 +17,32 @@
       <h3><button type="button" class="name" onclick={() => onselect?.(card)}>{card.name}</button></h3>
       {#if cost && card.faces.length === 1}<span class="cost"><Rules text={cost} /></span>{/if}
     </header>
-    <CardText {card} {highlight} clamp={6} />
-    <footer>
-      {#if score !== null}
-        <span class="score" title="Similarity to the selected card"><span class="bar" style:--s={Math.max(0, score)}></span><span class="num">{score.toFixed(2)}</span></span>
-      {/if}
-      {#if oncompare}<button type="button" class="btn" onclick={() => oncompare(card)}>Compare</button>{/if}
-    </footer>
+    <CardText {card} {highlight} clamp={5} />
+  </div>
+  <div class="side">
+    {#if score !== null}<span class="score num" title="Similarity to the selected card">{score.toFixed(2)}</span>{/if}
+    {#if oncompare}<button type="button" class="btn" onclick={() => oncompare(card)}>Compare</button>{/if}
   </div>
 </article>
 
 <style>
-  .tile { display: grid; grid-template-columns: 88px 1fr; gap: 12px; padding: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
-  .art { width: 88px; aspect-ratio: 146 / 204; border-radius: 5px; overflow: hidden; background: var(--sunken); }
+  .row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; padding: 14px 0; min-width: 0; }
+  .art { width: 64px; aspect-ratio: 146 / 204; border-radius: 4px; overflow: hidden; background: var(--sunken); }
   .art img { width: 100%; height: 100%; object-fit: cover; }
-  .body { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-  header { display: flex; align-items: baseline; gap: 8px; }
-  .rank { color: var(--muted); font-size: 0.78rem; }
-  h3 { flex: 1; min-width: 0; font-size: 1.02rem; }
+  .body { min-width: 0; }
+  header { display: flex; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+  .rank { color: var(--muted); font-size: 0.8rem; min-width: 1.4em; }
+  h3 { min-width: 0; }
   .name { all: unset; cursor: pointer; overflow-wrap: anywhere; }
-  .name:hover { color: var(--accent); }
-  .name:focus-visible { outline: 2px solid var(--accent); }
-  .cost { white-space: nowrap; font-size: 0.9rem; }
-  footer { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .score { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 0.78rem; }
-  .bar { width: 48px; height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--accent) calc(var(--s) * 100%), var(--sunken) 0); }
-  .btn { padding: 4px 11px; font-size: 0.8rem; }
+  .name:hover { text-decoration: underline; text-underline-offset: 0.2em; }
+  .name:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+  .cost { white-space: nowrap; font-size: 0.92rem; }
+  .side { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 8px; }
+  .score { font-size: 0.95rem; font-weight: 600; }
+  .btn { padding: 3px 10px; font-size: 0.8rem; }
+  @media (max-width: 520px) {
+    .row { grid-template-columns: 52px minmax(0, 1fr); }
+    .art { width: 52px; }
+    .side { grid-column: 2; flex-direction: row; align-items: center; }
+  }
 </style>

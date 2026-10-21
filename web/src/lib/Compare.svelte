@@ -20,7 +20,7 @@
       <button type="button" class="close" onclick={() => dialog.close()} aria-label="Close">×</button>
     </header>
     <p class="meta">
-      {#if score !== null}Similarity <span class="num">{score.toFixed(3)}</span> · {/if}
+      {#if score !== null}Similarity <span class="num">{score.toFixed(3)}</span>. {/if}
       {shared.size ? `${shared.size} ${shared.size > 1 ? 'lines appear' : 'line appears'} on both cards (highlighted; numbers and card names ignored).` : 'No line appears on both cards, so the similarity does not come from identical wording.'}
     </p>
     <div class="cols">
@@ -37,8 +37,8 @@
 </dialog>
 
 <style>
-  dialog { width: min(920px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg); color: var(--ink); box-shadow: var(--shadow); }
-  dialog::backdrop { background: rgb(10 8 5 / 55%); backdrop-filter: blur(2px); }
+  dialog { width: min(920px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); padding: 20px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); box-shadow: 0 20px 60px rgb(0 0 0 / 30%); }
+  dialog::backdrop { background: rgb(10 12 16 / 55%); }
   header { display: flex; justify-content: space-between; gap: 12px; align-items: start; }
   h2 { font-size: 1.4rem; }
   .close { border: 0; background: none; font-size: 1.6rem; line-height: 1; padding: 0 4px; color: var(--muted); }

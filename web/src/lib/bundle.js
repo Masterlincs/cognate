@@ -19,12 +19,21 @@ export function searchNames(query, names, ids = null, limit = 12) {
   return [...exacts, ...prefixes, ...substrings].slice(0, limit).map((index) => ({ index, id: ids?.[index] ?? '', name: names.names[index] }));
 }
 
+// C = colourless; otherwise picked is a WUBRG subset matched as include (has all picked),
+// exact (the same colours) or within (no colour outside picked; colourless cards pass)
+export function colourMatch(identity, picked, mode = 'include') {
+  if (picked === 'C') return identity === '';
+  const has = (c) => identity.includes(c);
+  if (mode === 'within') return [...identity].every((c) => picked.includes(c));
+  return [...picked].every(has) && (mode !== 'exact' || identity.length === picked.length);
+}
+
 export function filterNeighbours(entries, cardByIndex, filters) {
   const query = normalize(filters.type ?? '');
   return entries.filter(([index]) => {
     const card = cardByIndex(index);
     if (!card) return false;
-    if (filters.color && (filters.color === 'C' ? card.color_identity !== '' : !card.color_identity.includes(filters.color))) return false;
+    if (filters.color && !colourMatch(card.color_identity, filters.color, filters.colorMode)) return false;
     if (Number.isFinite(filters.minMv) && card.mv < filters.minMv) return false;
     if (Number.isFinite(filters.maxMv) && card.mv > filters.maxMv) return false;
     if (query && !normalize(card.type_line).includes(query)) return false;
@@ -36,11 +45,18 @@ export function filterNeighbours(entries, cardByIndex, filters) {
 
 export function parseUrl(search) {
   const params = new URLSearchParams(search);
-  // a hand-edited link with a bad value drops that filter rather than hiding every result
-  const num = (key) => { const v = params.get(key); return v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null; };
-  const oneOf = (key, allowed) => allowed.includes(params.get(key)) ? params.get(key) : '';
-  const ability = num('ability');
-  return { card: params.get('card') || '', ability: Number.isInteger(ability) && ability >= 0 ? ability : null, rank: params.get('rank') === 'line' ? 'line' : 'whole', color: oneOf('color', ['W', 'U', 'B', 'R', 'G', 'C']), minMv: num('min'), maxMv: num('max'), creature: oneOf('creature', ['creature', 'noncreature']), type: params.get('type') || '' };
+  // a hand-edited link with a bad value drops that filter rather than hiding every result; dropped lists them
+  const dropped = [];
+  const given = (key) => params.get(key) !== null && params.get(key) !== '';
+  const bad = (key, fallback) => { dropped.push(key); return fallback; };
+  const num = (key) => !given(key) ? null : Number.isFinite(Number(params.get(key))) ? Number(params.get(key)) : bad(key, null);
+  const oneOf = (key, allowed, fallback = '') => !given(key) ? fallback : allowed.includes(params.get(key)) ? params.get(key) : bad(key, fallback);
+  const raw = (params.get('color') ?? '').toUpperCase();
+  const color = !raw ? '' : raw === 'C' ? 'C' : /^[WUBRG]+$/.test(raw) && new Set(raw).size === raw.length ? [...'WUBRG'].filter((c) => raw.includes(c)).join('') : bad('color', '');
+  const colorMode = oneOf('cm', ['include', 'exact', 'within'], 'include');
+  const ability = Number(params.get('ability'));
+  const minMv = num('min'), maxMv = num('max');
+  return { card: params.get('card') || '', ability: given('ability') && Number.isInteger(ability) && ability >= 0 ? ability : null, rank: params.get('rank') === 'line' ? 'line' : 'whole', color, colorMode, minMv, maxMv, creature: oneOf('creature', ['creature', 'noncreature']), type: params.get('type') || '', dropped };
 }
 
 export function serializeUrl(state) {
@@ -49,8 +65,9 @@ export function serializeUrl(state) {
   if (Number.isInteger(state.ability) && state.ability >= 0) params.set('ability', state.ability);
   if (state.rank === 'line') params.set('rank', 'line');
   if (state.color) params.set('color', state.color);
-  if (state.minMv !== null && state.minMv !== '') params.set('min', state.minMv);
-  if (state.maxMv !== null && state.maxMv !== '') params.set('max', state.maxMv);
+  if (state.color && state.color !== 'C' && state.colorMode && state.colorMode !== 'include') params.set('cm', state.colorMode);
+  if (Number.isFinite(state.minMv)) params.set('min', state.minMv);
+  if (Number.isFinite(state.maxMv)) params.set('max', state.maxMv);
   if (state.creature) params.set('creature', state.creature);
   if (state.type) params.set('type', state.type);
   return params.toString();

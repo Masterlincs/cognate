@@ -224,9 +224,10 @@
     <button type="button" aria-label="Show the whole map" onclick={() => { const t = { ...v }; fitAll(); const target = v; v = t; flyTo(target); }}>⤢</button>
   </div>
   <ul class="legend" aria-label="Colour identity">
-    {#each [['w', 'White'], ['u', 'Blue'], ['b', 'Black'], ['r', 'Red'], ['g', 'Green'], ['m', 'Multi'], ['c', 'Colourless']] as [k, label]}
-      <li><span style:background="var(--wubrg-{k})"></span>{label}</li>
+    {#each [['w', 'White'], ['u', 'Blue'], ['b', 'Black'], ['r', 'Red'], ['g', 'Green'], ['c', 'Colourless']] as [k, label]}
+      <li title={label}><i class="ms ms-cost ms-{k}" aria-hidden="true"></i><span class="sr-only">{label}</span></li>
     {/each}
+    <li><span class="multi"></span>Multicolour</li>
   </ul>
 </div>
 
@@ -236,9 +237,10 @@
   canvas:active { cursor: grabbing; }
   .tip { position: absolute; transform: translate(-50%, calc(-100% - 10px)); padding: 4px 8px; border-radius: 6px; background: var(--ink); color: var(--bg); font-size: 0.8rem; white-space: nowrap; pointer-events: none; }
   .controls { position: absolute; right: 10px; top: 10px; display: grid; gap: 4px; }
-  .controls button { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 1.05rem; line-height: 1; }
-  .controls button:hover { border-color: var(--accent); }
-  .legend { position: absolute; left: 10px; bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; padding: 5px 9px; list-style: none; border-radius: 8px; background: color-mix(in srgb, var(--surface) 85%, transparent); font-size: 0.72rem; color: var(--muted); }
+  .controls button { width: 32px; height: 32px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 1.05rem; line-height: 1; }
+  .controls button:hover { border-color: var(--ink); }
+  .legend { position: absolute; left: 10px; bottom: 8px; display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 0; padding: 5px 9px; list-style: none; border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 88%, transparent); font-size: 0.75rem; color: var(--muted); }
   .legend li { display: flex; align-items: center; gap: 4px; }
-  .legend span { width: 8px; height: 8px; border-radius: 2px; }
+  .legend .multi { width: 0.9em; height: 0.9em; border-radius: 50%; background: var(--wubrg-m); }
+  .legend .ms { font-size: 0.9rem; }
 </style>

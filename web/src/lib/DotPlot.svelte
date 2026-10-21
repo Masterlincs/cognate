@@ -52,7 +52,7 @@
   .b { background: var(--accent); }
   .d { font-size: 0.78rem; text-align: right; color: var(--muted); }
   .axis { height: 18px; }
-  .ticks { position: relative; height: 100%; font: 0.68rem var(--mono); color: var(--muted); }
+  .ticks { position: relative; height: 100%; font: 0.68rem var(--sans); color: var(--muted); }
   .ticks span { position: absolute; transform: translateX(-50%); }
   figcaption { margin-top: 10px; font-size: 0.84rem; color: var(--muted); }
 </style>

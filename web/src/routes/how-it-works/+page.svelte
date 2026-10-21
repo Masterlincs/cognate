@@ -4,6 +4,7 @@
   import BarChart from '#lib/BarChart.svelte';
   import BeforeAfter from '#lib/BeforeAfter.svelte';
   import DotPlot from '#lib/DotPlot.svelte';
+  import Rules from '#lib/Rules.svelte';
   import Search from '#lib/Search.svelte';
   import { loadRelease, setRoot } from '#lib/data.js';
   import { delta, fixed } from '#lib/format.js';
@@ -57,8 +58,7 @@
 
 <article class="study">
   <header class="hero">
-    <p class="eyebrow">Case study · fine-tuning a text-embedding model</p>
-    <h1>Find Magic cards by what they <em>do</em>, not what they say.</h1>
+    <h1>Finding Magic cards by what they do, not what they say</h1>
     <p class="lede">Card Atlas ranks {n(m.data.split_counts.fit + m.data.split_counts.dev)} Magic: The Gathering cards by how similar their effects are. Under it is a small open text-embedding model, e5-base-v2, fine-tuned on community tags so that cards doing the same job end up close together even when their wording differs. This page covers the problem, the data, the training, how the model was tested and where it still goes wrong.</p>
     <div class="hero-actions">
       <div class="hero-search"><Search {names} id="hero-search" label="Open a card in the explorer" placeholder="Try a card, e.g. Counterspell" onfocus={loadNames} onpick={open} /></div>
@@ -73,19 +73,17 @@
   </header>
 
   <section>
-    <p class="eyebrow">01 · The problem</p>
     <h2>Keyword search matches words, not effects</h2>
     <p>Magic has over thirty thousand distinct cards, and players often want "something that does what this card does": a cheaper copy, the same effect in another colour, or a card for a deck theme. Search engines match words. These two cards share almost every word and do opposite things:</p>
     <div class="pair">
       <figure class="quote"><figcaption>Ghosts of the Innocent</figcaption><p>If a source would deal damage to a permanent or player, it deals <mark>half</mark> that damage, rounded down, to that permanent or player instead.</p></figure>
       <figure class="quote"><figcaption>Furnace of Rath</figcaption><p>If a source would deal damage to a permanent or player, it deals <mark>double</mark> that damage to that permanent or player instead.</p></figure>
-      <figure class="quote good"><figcaption>Kitsune Palliator <span>a real match, different words</span></figcaption><p>{'{T}'}: Prevent the next 1 damage that would be dealt to each creature and each player this turn.</p></figure>
+      <figure class="quote good"><figcaption>Kitsune Palliator <span>a real match, different words</span></figcaption><p><Rules text={'{T}'} />: Prevent the next 1 damage that would be dealt to each creature and each player this turn.</p></figure>
     </div>
     <p>A model that reads meaning should place Ghosts next to damage-prevention cards such as Kitsune Palliator, not next to Furnace. Word overlap is still a strong signal: on the development set below, a plain keyword baseline (character TF-IDF) scores {fixed(lexical.full[0])}, above the untuned embedding model at {fixed(pretrained.full[0])}.</p>
   </section>
 
   <section>
-    <p class="eyebrow">02 · The data</p>
     <h2>Community tags as a stand-in for "same effect"</h2>
     <div class="cols2">
       <div>
@@ -110,14 +108,13 @@
   </section>
 
   <section>
-    <p class="eyebrow">03 · The model</p>
     <h2>Contrastive fine-tuning of a small encoder</h2>
     <div class="flow" aria-label="Encoding pipeline">
-      <div class="box"><small>input</small>"{enc?.prefix ?? ''}" + rules text<br /><span class="muted">up to {enc?.max_length} tokens</span></div>
+      <div class="box"><small>Input</small>"{enc?.prefix ?? ''}" + rules text<br /><span class="muted">up to {enc?.max_length} tokens</span></div>
       <span class="arrow" aria-hidden="true">→</span>
-      <div class="box accent"><small>encoder</small>{enc?.model_id ?? 'e5-base-v2'}<br /><span class="muted">{enc?.pooling} pooling</span></div>
+      <div class="box accent"><small>Encoder</small>{enc?.model_id ?? 'e5-base-v2'}<br /><span class="muted">{enc?.pooling} pooling</span></div>
       <span class="arrow" aria-hidden="true">→</span>
-      <div class="box"><small>output</small>{enc?.dim}-number vector<br /><span class="muted">compared by cosine</span></div>
+      <div class="box"><small>Output</small>{enc?.dim}-number vector<br /><span class="muted">compared by cosine</span></div>
     </div>
     <div class="cols2">
       <div>
@@ -126,39 +123,37 @@
         <p class="muted small">Deployed run: {train?.total_updates} updates, learning rate {train?.lr?.toExponential()}, seed {train?.seed} (<code>{train?.source}</code>).</p>
       </div>
       <figure class="triplet" aria-label="Training example">
-        <div class="t anchor"><small>card</small>Ghosts of the Innocent</div>
-        <div class="t pos"><small>pulled closer · shares a tag</small>Kitsune Palliator</div>
-        <div class="t neg"><small>pushed away · similar words, no shared tag</small>Furnace of Rath</div>
+        <div class="t anchor"><small>Card</small>Ghosts of the Innocent</div>
+        <div class="t pos"><small>Pulled closer: shares a tag</small>Kitsune Palliator</div>
+        <div class="t neg"><small>Pushed away: similar words, no shared tag</small>Furnace of Rath</div>
       </figure>
     </div>
   </section>
 
   <section class="wide">
-    <p class="eyebrow">04 · Before and after</p>
     <h2>The same card, before and after fine-tuning</h2>
     <p>Top {8} neighbours from the pretrained model (left) and the deployed fine-tuned model (right). Cards in both lists are marked. Pick an example or type any card.</p>
     <BeforeAfter showcase={m.showcase} />
   </section>
 
   <section class="wide">
-    <p class="eyebrow">05 · Results</p>
     <h2>How much better, and how sure</h2>
     <p>The main score is nDCG@10 on the {n(split.dev)} development cards: for each card, how good its top 10 neighbours are by shared tags, with higher ranks counting more (1.0 is perfect). The <b>hard-lexical</b> view removes reprints and near-identical wording from the candidates, so a model cannot score by finding copies.</p>
     <BarChart rows={devRows} series={[{ key: 'full', label: 'full' }, { key: 'hard_lexical', label: 'hard-lexical' }]} caption="Dev tag-proxy nDCG@10 (higher is better). Trained models were run with 3 seeds; whiskers show the seed range." />
 
     <div class="cards3">
       <div class="stat">
-        <p class="eyebrow">Promotion test</p>
+        <h3>Promotion test</h3>
         <p class="big num">{delta(d18.contrasts.pretrained_e5.full.point)}</p>
         <p>over pretrained E5 (full view), adjusted lower bound {delta(d18.contrasts.pretrained_e5.full.lower_adjusted)}; {delta(d18.contrasts.trained_bge.full.point)} over a fine-tuned BGE-small. Cluster bootstrap over card families, {d18.m_contrasts} contrasts with a multiple-comparison correction. Decision: {d18.decision} ({d18.qualifier}).</p>
       </div>
       <div class="stat">
-        <p class="eyebrow">Sealed test · one-time</p>
+        <h3>Sealed test, run once</h3>
         <p class="big num">{delta(sealed.contrasts.pretrained_e5.full.point)}</p>
         <p>over pretrained E5 on the sealed cards, lower bound {delta(sealed.contrasts.pretrained_e5.full.lower_adjusted)}. Scored once, after the decision; the gate was {sealed.sealed_gate}. Model scored: {sealed.deployment.run_id}, {fixed(sealed.deployment.full)} full, {fixed(sealed.deployment.hard_lexical)} hard-lexical. {#if dep && sealed.deployment.run_id !== dep.run_id}The model deployed now was promoted later, on the development cards only, and has not been sealed-tested.{/if}</p>
       </div>
       <div class="stat">
-        <p class="eyebrow">Trap exam</p>
+        <h3>Trap exam</h3>
         <p class="big num">{exPre?.passed} → {exDep?.passed}<span class="of">/{exDep?.n}</span></p>
         <p>{exDep?.n} reviewed items, each a card, its true match and a lookalike that must rank lower (shared rider clauses, one-word flips, changed numbers). Pretrained E5 passes {exPre?.passed}; the deployed model passes {exDep?.passed}.</p>
       </div>
@@ -172,12 +167,11 @@
   </section>
 
   <section>
-    <p class="eyebrow">06 · Limits</p>
     <h2>Where it still goes wrong</h2>
     <div class="limit">
       <h3>Deflecting Swat: the labels favour the wrong neighbour</h3>
       <p>Deflecting Swat redirects a spell, and it is free if you control a commander. The ideal neighbour is Redirect. The fine-tuned model ranks Obscuring Haze above it, which shares only the free-if-commander line. The tags explain it: Swat shares three tags with Obscuring Haze and two with Redirect, so training on tags pulls the wrong card closer. On the trap exam the margin went from {margin(exPre, 'T001') !== null ? fixed(margin(exPre, 'T001')) : '—'} before tuning to {margin(exDep, 'T001') !== null ? fixed(margin(exDep, 'T001')) : '—'} after (below zero is a fail). Fixing it means changing the labels, not the model. In the explorer, picking Swat's redirect line under "similar cards" does find Redirect.</p>
-      <p><a href="{resolve('/')}?card=ae120613-97d6-4393-b39d-c3e6c076f5d6">See Deflecting Swat in the explorer →</a></p>
+      <p><a href="{resolve('/')}?card=ae120613-97d6-4393-b39d-c3e6c076f5d6">See Deflecting Swat in the explorer</a></p>
     </div>
     <div class="limit">
       <h3>Lexical twins still fool it</h3>
@@ -185,13 +179,13 @@
     </div>
     <ul class="plain">
       <li><b>Proxy, not people.</b> The ranking scores and promotion tests measure agreement with community tags. The trap exam is a set of 51 hand-made card comparisons, accepted by the author rather than a panel. No human relevance study has been run yet.</li>
-      <li><b>Line matching is exploratory.</b> The explorer's "match one line" ranking was not evaluated on the proxy.</li>
+      <li><b>Line matching is exploratory.</b> The explorer's Line match ranking scored below the whole-card ranking on an earlier model's tag benchmark, and "match one line" has not been evaluated.</li>
       <li><b>Snapshot.</b> Cards printed after the data snapshot are missing, and only English rules text is used.</li>
     </ul>
   </section>
 
   <section class="built">
-    <p class="eyebrow">Built with</p>
+    <h2>Built with</h2>
     <p>Python, PyTorch and Hugging Face Transformers for training and evaluation; scikit-learn for the map (t-SNE); SvelteKit for this static site, with no tracking and no server. Every result on this page is read from the run and evaluation records in the repository by a script.</p>
     <p class="links"><a class="btn" href={REPO} rel="noopener">Code on GitHub</a> <a class="btn" href="{REPO}/blob/master/WRITE_UP.MD" rel="noopener">Full write-up</a> <a class="btn primary" href={resolve('/')}>Open the explorer</a></p>
   </section>
@@ -201,9 +195,8 @@
   .study { max-width: 1080px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px) 48px; }
   section, .hero { max-width: 760px; margin: 0 auto; padding: 56px 0 8px; }
   section.wide { max-width: none; }
-  section.wide > p:not(.eyebrow) { max-width: 760px; }
+  section.wide > p { max-width: 760px; }
   .hero { padding-top: clamp(32px, 8vh, 88px); }
-  .hero h1 em { font-style: italic; color: var(--accent); }
   .hero h1 { margin: 12px 0 18px; }
   .lede { font-size: 1.12rem; color: var(--muted); }
   .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 26px 0 8px; }
@@ -218,15 +211,15 @@
   .small { font-size: 0.84rem; }
   .pair { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
   .quote { margin: 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.9rem; }
-  .quote figcaption { font: 600 1rem var(--display); margin-bottom: 6px; }
-  .quote figcaption span { display: block; font: 400 0.74rem var(--body); color: var(--muted); }
-  .quote p { margin: 0; }
+  .quote figcaption { font: 600 1rem var(--sans); margin-bottom: 6px; }
+  .quote figcaption span { display: block; font: 400 0.74rem var(--sans); color: var(--muted); }
+  .quote p { margin: 0; font-family: var(--serif); font-size: 0.95rem; }
   .quote.good { border-color: color-mix(in srgb, var(--wubrg-g) 55%, var(--line)); }
   mark { background: var(--mark); color: inherit; padding: 0 2px; }
   .cols2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: start; }
   .splits { margin: 0; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.88rem; }
   .splits figcaption { font-weight: 600; margin-bottom: 10px; }
-  .splitbar { display: flex; height: 30px; border-radius: 6px; overflow: hidden; font: 0.72rem/30px var(--mono); color: #fff; }
+  .splitbar { display: flex; height: 30px; border-radius: 4px; overflow: hidden; font: 0.72rem/30px var(--sans); color: #fff; }
   .splitbar span { padding: 0 6px; white-space: nowrap; overflow: hidden; }
   .fit { background: color-mix(in srgb, var(--wubrg-u) 70%, #000); }
   .dev { background: color-mix(in srgb, var(--wubrg-g) 70%, #000); }
@@ -235,20 +228,21 @@
   .splits li { margin: 3px 0; }
   .flow { display: flex; align-items: stretch; gap: 10px; margin: 18px 0 24px; }
   .box { flex: 1; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.88rem; }
-  .box small, .t small { display: block; font: 600 0.68rem var(--body); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
-  .box.accent { border-color: var(--accent); }
+  .box small, .t small { display: block; font: 600 0.68rem var(--sans); color: var(--muted); margin-bottom: 4px; }
+  .box.accent { border-color: var(--ink); }
   .arrow { align-self: center; color: var(--muted); font-size: 1.3rem; }
   .triplet { margin: 0; display: grid; gap: 10px; }
-  .t { padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); font: 600 0.98rem var(--display); }
+  .t { padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); font: 600 0.98rem var(--sans); }
   .t.anchor { border-color: var(--ink); }
   .t.pos { border-left: 4px solid var(--wubrg-g); margin-left: 24px; }
   .t.neg { border-left: 4px solid var(--wubrg-r); margin-left: 24px; }
   .cards3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 32px 0 8px; }
-  .stat { padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.86rem; }
+  .stat { padding-top: 12px; border-top: 2px solid var(--ink); font-size: 0.86rem; }
+  .stat h3 { font-size: 0.95rem; }
   .stat p { margin: 0 0 6px; }
-  .big { font-size: 2rem; line-height: 1.1; color: var(--accent); margin: 6px 0 8px !important; }
+  .big { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; margin: 6px 0 8px !important; }
   .of { font-size: 1rem; color: var(--muted); }
-  .limit { padding: 4px 0 4px 16px; border-left: 3px solid var(--accent); margin: 18px 0 22px; }
+  .limit { margin: 18px 0 26px; }
   .limit h3 { margin-bottom: 6px; }
   .plain { padding-left: 1.1em; }
   .plain li { margin: 6px 0; }

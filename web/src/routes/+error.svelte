@@ -6,8 +6,8 @@
 <svelte:head><title>{page.status} · Card Atlas</title></svelte:head>
 
 <div class="error">
-  <p class="eyebrow">Error {page.status}</p>
   <h1>{page.status === 404 ? 'Page not found' : 'Something went wrong'}</h1>
+  <p class="muted">Error {page.status}</p>
   <p><a href={resolve('/')}>Back to the explorer</a></p>
 </div>
 

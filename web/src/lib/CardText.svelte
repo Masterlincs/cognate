@@ -22,11 +22,12 @@
 </div>
 
 <style>
-  .card-text { font-size: 0.9rem; line-height: 1.5; }
+  .card-text { font-size: 0.95rem; line-height: 1.45; }
+  .line { font-family: var(--serif); }
   .clamped { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--clamp); line-clamp: var(--clamp); overflow: hidden; }
-  .face + .face { margin-top: 0.6em; padding-top: 0.6em; border-top: 1px dashed var(--line); }
+  .face + .face { margin-top: 0.6em; padding-top: 0.6em; border-top: 1px solid var(--line); }
   p { margin: 0 0 0.3em; }
   .face-name { font-weight: 600; }
-  .type { color: var(--muted); font-size: 0.82rem; }
+  .type { color: var(--muted); font-size: 0.82rem; margin-bottom: 0.25em; }
   .shared { background: var(--mark); box-shadow: -4px 0 0 var(--mark), 4px 0 0 var(--mark); border-radius: 2px; }
 </style>
