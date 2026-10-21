@@ -127,7 +127,7 @@ The bundle checker directory is the release bundle to validate. Fixture content 
 
 - `src/mtgemb/`: CLI, acquisition, data preparation, text processing, pair construction and audit, lexical retrieval, encoder, training, evaluation, reporting, export and shared utilities.
 - `configs/`: registered training configurations.
-- `web/`: Svelte static app, release schema and fixture tooling.
+- `web/`: Card Atlas, the SvelteKit static site (explorer and case study), release schema and fixture tooling. Build and deploy notes are in [web/README.md](web/README.md).
 - `runs/`: git-ignored run and evaluation logs.
 - `artifacts/`: git-ignored generated model and release artifacts.
 
