@@ -9,8 +9,8 @@
   import Rules from '$lib/Rules.svelte';
   import Search from '$lib/Search.svelte';
   import { parseUrl, resolveAbilityIndex, serializeUrl } from '$lib/bundle.js';
-  import { getAbilities, getCard, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '$lib/data.js';
-  import { activeFilters, resolveSelection, visibleNeighbours } from '$lib/explorer.js';
+  import { getAbilities, getCard, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '$lib/data.js';
+  import { activeFilters, resolveSelection, savedList, visibleNeighbours } from '$lib/explorer.js';
   import { decodeMap } from '$lib/map.js';
   import metrics from '$lib/generated/metrics.json';
 
@@ -30,6 +30,8 @@
   let tagLabels = $state([]);
   let whole = $state([]);
   let ability = $state(null);
+  let rank = $state('whole');
+  let lineRows = $state(null);
   let filters = $state({ ...NO_FILTERS });
   let shown = $state(PAGE);
   let byIndex = $state({});
@@ -38,11 +40,13 @@
   let busy = $state(false);
   let token = 0;
 
-  const saved = $derived(ability === null ? whole : abilities[ability]?.neighbours ?? []);
+  const hasLines = $derived(release?.schema === 'mtgemb-release-v4');
+  const byLine = $derived(ability === null && rank === 'line');
+  const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, abilities }));
   const filtering = $derived(activeFilters(filters));
   const visible = $derived(visibleNeighbours(saved, (i) => byIndex[i], filters));
   const pageRows = $derived(visible.slice(0, shown));
-  const pending = $derived((filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
+  const pending = $derived((byLine && lineRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
   const showcase = metrics.showcase ?? [];
 
   // load the cards the list needs: the shown page, or every saved neighbour while filtering
@@ -57,7 +61,7 @@
   });
 
   function updateUrl(push) {
-    const qs = serializeUrl({ card: card?.id ?? '', ability, ...filters });
+    const qs = serializeUrl({ card: card?.id ?? '', ability, rank, ...filters });
     (push ? pushState : replaceState)(qs ? `?${qs}` : location.pathname, {});
   }
 
@@ -70,9 +74,9 @@
     shown = PAGE;
     try {
       const c = await getCard(i);
-      const [n, ab, labels] = c.has_text ? await Promise.all([getNeighbours(i), getAbilities(i), getTagLabels()]) : [[], [], await getTagLabels()];
+      const [n, ab, ln, labels] = c.has_text ? await Promise.all([getNeighbours(i), getAbilities(i), rank === 'line' ? getLines(i) : null, getTagLabels()]) : [[], [], [], await getTagLabels()];
       if (t !== token) return;
-      index = i; card = c; whole = n; abilities = ab; tagLabels = labels;
+      index = i; card = c; whole = n; abilities = ab; lineRows = ln; tagLabels = labels;
       ability = resolveAbilityIndex(abilityIndex, ab);
       updateUrl(push);
       if (push) document.getElementById('results')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
@@ -85,11 +89,12 @@
 
   function clear() {
     token += 1;
-    index = -1; card = null; whole = []; abilities = []; ability = null; compare = null;
+    index = -1; card = null; whole = []; abilities = []; lineRows = null; ability = null; compare = null;
   }
 
   function apply(state) {
     filters = { color: state.color, minMv: state.minMv, maxMv: state.maxMv, creature: state.creature, type: state.type };
+    rank = hasLines ? state.rank : 'whole';
     const r = resolveSelection(ids, state);
     if (r.unknown) { clear(); notice = 'That link points to a card that is not in this release.'; return; }
     if (r.index < 0) { clear(); return; }
@@ -98,8 +103,19 @@
 
   function setAbility(k) {
     ability = k;
+    rank = 'whole';
     shown = PAGE;
     updateUrl(true);
+  }
+
+  function setRank(value) {
+    ability = null;
+    rank = value;
+    shown = PAGE;
+    updateUrl(true);
+    if (value !== 'line' || lineRows !== null) return;
+    const t = token;
+    getLines(index).then((rows) => { if (t === token) lineRows = rows; }).catch((e) => { if (t === token) error = e.message; });
   }
 
   function setFilter(key, value) {
@@ -197,14 +213,20 @@
       {:else}
         <div class="similar-by" id="results">
           <h2>Similar cards</h2>
-          {#if abilities.length > 1}
-            <div class="by" role="group" aria-label="Match on">
-              <button type="button" class:on={ability === null} aria-pressed={ability === null} onclick={() => setAbility(null)}>Whole card</button>
-              {#each abilities as a, k (k)}
-                <button type="button" class:on={ability === k} aria-pressed={ability === k} onclick={() => setAbility(k)}><Rules text={a.text} /></button>
-              {/each}
+          {#if hasLines || abilities.length > 1}
+            <div class="by" role="group" aria-label="Rank by">
+              <button type="button" class:on={ability === null && !byLine} aria-pressed={ability === null && !byLine} onclick={() => setRank('whole')}>Whole card</button>
+              {#if hasLines}<button type="button" class:on={byLine} aria-pressed={byLine} onclick={() => setRank('line')}>Line match</button>{/if}
             </div>
-            <p class="by-note muted">{ability === null ? 'Ranked on the whole card. Pick a line to match cards that do that one thing.' : 'Matching one line: each card scores by its closest line. Exploratory: line matches were not evaluated.'}</p>
+            {#if abilities.length > 1}
+              <p class="by-label muted">Or match one line:</p>
+              <div class="by" role="group" aria-label="Match one line">
+                {#each abilities as a, k (k)}
+                  <button type="button" class:on={ability === k} aria-pressed={ability === k} onclick={() => setAbility(k)}><Rules text={a.text} /></button>
+                {/each}
+              </div>
+            {/if}
+            <p class="by-note muted">{#if ability !== null}Matching one line: each card scores by its closest line. Exploratory: line matches were not evaluated.{:else if byLine}Line match: each line of this card is paired with the closest line on the other card, and lines that many cards share count for less. Exploratory: on the earlier model it ranked below the whole-card score on the tag benchmark.{:else}Ranked on the whole card.{#if abilities.length > 1} Pick a line to match cards that do that one thing.{/if}{/if}</p>
           {/if}
         </div>
 
@@ -239,7 +261,7 @@
         </ol>
         {#if !pending && filtering && !visible.length}<p class="notice">No similar card passes these filters.</p>{/if}
         {#if visible.length > shown}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
-        <p class="model-note muted">Scores are cosine similarities from {release.model.label}. Rankings are the model's judgement; check the cards before relying on them.</p>
+        <p class="model-note muted">Scores are {byLine ? 'weighted line-match scores' : 'cosine similarities'} from {release.model.label}. Rankings are the model's judgement; check the cards before relying on them.</p>
       {/if}
     {/if}
   </section>
@@ -276,6 +298,7 @@
   .by button { max-width: 100%; padding: 6px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); font-size: 0.84rem; text-align: left; overflow-wrap: anywhere; }
   .by button.on { border-color: var(--accent); background: var(--accent-soft); }
   .by-note { font-size: 0.84rem; margin: 8px 0 0; }
+  .by-label { font-size: 0.84rem; margin: 10px 0 6px; }
   .filters { margin: 12px 0 14px; font-size: 0.9rem; }
   .filters summary { cursor: pointer; color: var(--muted); }
   .filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 10px; }

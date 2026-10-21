@@ -15,3 +15,7 @@ export function resolveSelection(ids, state) {
 export const visibleNeighbours = (saved, cardByIndex, filters) => filterNeighbours(saved, cardByIndex, filters);
 
 export const activeFilters = (f) => Boolean(f.color || f.creature || f.type || Number.isFinite(f.minMv) || Number.isFinite(f.maxMv));
+
+// the list being shown: one ability's matches, the line-match ranking (v4), or the whole card
+export const savedList = ({ ability, rank, whole, lines, abilities }) =>
+  ability !== null ? abilities[ability]?.neighbours ?? [] : rank === 'line' ? lines ?? [] : whole;

@@ -11,6 +11,4 @@ const keep = new Set(['current.json', id, `site-${id}`]);
 for (const entry of await readdir(data)) {
   if (!keep.has(entry)) await rm(path.join(data, entry), { recursive: true, force: true });
 }
-// the explorer does not use the line-match ranking, so its shards are not shipped
-await rm(path.join(data, id, 'lines'), { recursive: true, force: true });
 console.log(`build/data: kept ${[...keep].join(', ')}`);

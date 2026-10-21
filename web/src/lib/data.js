@@ -1,6 +1,6 @@
 // Release bundle and site-data loading. One promise cache per shard kind; failed loads are
 // evicted so a retry can succeed. Shapes are checked with the bundle validators (SCHEMA.md).
-import { validateAbilityShard, validateCommonShard, validateIds, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
+import { validateAbilityShard, validateCommonShard, validateIds, validateLineShard, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
 
 let root = '';
 let fetcher = (...args) => fetch(...args);
@@ -10,6 +10,7 @@ let tagsReady = null;
 const shards = new Map();
 const neighbours = new Map();
 const abilities = new Map();
+const lines = new Map();
 const pretrained = new Map();
 
 export const setRoot = (value) => { root = value.replace(/\/$/, ''); };
@@ -78,6 +79,17 @@ export async function getAbilities(index) {
   const rows = await cached(abilities, shard, async () => {
     const [cards, rows, tags] = await Promise.all([getCards(shard), get(`${release.release_id}/abilities/${pad(shard)}.json`), getTags()]);
     validateAbilityShard(cards, rows, release, shard, tags);
+    return rows;
+  });
+  return rows[index % release.shard_size];
+}
+
+// v4 "line match" ranking: one ranked list per card, like neighbours
+export async function getLines(index) {
+  const shard = shardOf(index);
+  const rows = await cached(lines, shard, async () => {
+    const [cards, rows] = await Promise.all([getCards(shard), get(`${release.release_id}/lines/${pad(shard)}.json`)]);
+    validateLineShard(cards, rows, release, shard);
     return rows;
   });
   return rows[index % release.shard_size];

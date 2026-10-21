@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSelection, visibleNeighbours } from './explorer.js';
+import { resolveSelection, savedList, visibleNeighbours } from './explorer.js';
 
 const ids = ['a1', 'b2', 'c3'];
 
@@ -29,5 +29,21 @@ describe('explorer state', () => {
     const { activeFilters } = await import('./explorer.js');
     expect(activeFilters({ color: '', minMv: null, maxMv: null, creature: '', type: '' })).toBe(false);
     expect(activeFilters({ color: 'U', minMv: null, maxMv: null, creature: '', type: '' })).toBe(true);
+  });
+});
+
+describe('savedList', () => {
+  const whole = [[1, 0.9]], lines = [[2, 0.8]], abilities = [{ neighbours: [[3, 0.7]] }, { neighbours: [[4, 0.6]] }];
+  it('shows the whole-card list by default', () => {
+    expect(savedList({ ability: null, rank: 'whole', whole, lines, abilities })).toBe(whole);
+  });
+  it('shows the line-match list when ranked by line', () => {
+    expect(savedList({ ability: null, rank: 'line', whole, lines, abilities })).toBe(lines);
+  });
+  it('an ability overrides the ranking', () => {
+    expect(savedList({ ability: 1, rank: 'line', whole, lines, abilities })).toEqual([[4, 0.6]]);
+  });
+  it('line ranking before its shard loads is empty, not the whole-card list', () => {
+    expect(savedList({ ability: null, rank: 'line', whole, lines: null, abilities })).toEqual([]);
   });
 });

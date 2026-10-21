@@ -20,7 +20,7 @@
     <CardText {card} {highlight} clamp={6} />
     <footer>
       {#if score !== null}
-        <span class="score" title="Cosine similarity to the selected card"><span class="bar" style:--s={Math.max(0, score)}></span><span class="num">{score.toFixed(2)}</span></span>
+        <span class="score" title="Similarity to the selected card"><span class="bar" style:--s={Math.max(0, score)}></span><span class="num">{score.toFixed(2)}</span></span>
       {/if}
       {#if oncompare}<button type="button" class="btn" onclick={() => oncompare(card)}>Compare</button>{/if}
     </footer>
