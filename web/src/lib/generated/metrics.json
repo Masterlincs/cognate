@@ -1,0 +1,288 @@
+{
+  "dev": {
+    "keyword baseline (character TF-IDF)": {
+      "full": [
+        0.6042245589680475
+      ],
+      "hard_lexical": [
+        0.5768565958252364
+      ],
+      "runs": [
+        "lexical-char35-tfidf"
+      ],
+      "source": [
+        "runs/eval/8bf2f48c0bba3b2c/lexical-char35-tfidf/summary.json"
+      ]
+    },
+    "pretrained BGE-small": {
+      "full": [
+        0.5402616964054373
+      ],
+      "hard_lexical": [
+        0.5132680988484585
+      ],
+      "runs": [
+        "pretrained-bge-small-en-v1.5"
+      ],
+      "source": [
+        "runs/eval/8bf2f48c0bba3b2c/pretrained-bge-small-en-v1.5/summary.json"
+      ]
+    },
+    "pretrained E5-base": {
+      "full": [
+        0.5654991221405709
+      ],
+      "hard_lexical": [
+        0.5391280239807161
+      ],
+      "runs": [
+        "pretrained-e5-base-v2"
+      ],
+      "source": [
+        "runs/eval/8bf2f48c0bba3b2c/pretrained-e5-base-v2/summary.json"
+      ]
+    },
+    "fine-tuned BGE-small": {
+      "full": [
+        0.664338782996663,
+        0.6629368276209405,
+        0.6632491097912309
+      ],
+      "hard_lexical": [
+        0.646403983724672,
+        0.6451115400011401,
+        0.6458260335960966
+      ],
+      "runs": [
+        "confirm-bge-s1",
+        "confirm-bge-s2",
+        "confirm-bge-s3"
+      ],
+      "source": [
+        "runs/eval/8bf2f48c0bba3b2c/confirm-bge-s1/summary.json",
+        "runs/eval/8bf2f48c0bba3b2c/confirm-bge-s2/summary.json",
+        "runs/eval/8bf2f48c0bba3b2c/confirm-bge-s3/summary.json"
+      ]
+    },
+    "fine-tuned E5": {
+      "full": [
+        0.705543134874474,
+        0.7066287095610543,
+        0.7070728514226714
+      ],
+      "hard_lexical": [
+        0.6903729849210949,
+        0.6904254315228368,
+        0.6918733089493988
+      ],
+      "runs": [
+        "confirm-e5-s1",
+        "confirm-e5-s2",
+        "confirm-e5-s3"
+      ],
+      "source": [
+        "runs/eval/8bf2f48c0bba3b2c/confirm-e5-s1/summary.json",
+        "runs/eval/8bf2f48c0bba3b2c/confirm-e5-s2/summary.json",
+        "runs/eval/8bf2f48c0bba3b2c/confirm-e5-s3/summary.json"
+      ]
+    }
+  },
+  "dev_benchmark": "8bf2f48c0bba3b2c",
+  "promotion": {
+    "d18": {
+      "decision": "promote",
+      "qualifier": "provisional tag-proxy promotion on selection-exposed development",
+      "m_contrasts": 4,
+      "deployment": {
+        "seed": 1,
+        "run_id": "confirm-e5-s1",
+        "full": 0.705543134874474,
+        "hard_lexical": 0.6903729849210949
+      },
+      "contrasts": {
+        "pretrained_e5": {
+          "full": {
+            "point": 0.14091577647882897,
+            "lower_adjusted": 0.13199350629373494,
+            "ci95": [
+              0.13316529817833478,
+              0.14863147928730197
+            ]
+          },
+          "hard_lexical": {
+            "point": 0.15176255115039408,
+            "lower_adjusted": 0.14246595347431465,
+            "ci95": [
+              0.1436094183215304,
+              0.15980267971486906
+            ]
+          },
+          "passes": true
+        },
+        "trained_bge": {
+          "full": {
+            "point": 0.04290665848312167,
+            "lower_adjusted": 0.03759319175797871,
+            "ci95": [
+              0.038299457155299824,
+              0.04743386970035418
+            ]
+          },
+          "hard_lexical": {
+            "point": 0.04511005602380728,
+            "lower_adjusted": 0.03979682673488753,
+            "ci95": [
+              0.04044123772114863,
+              0.04973186223237211
+            ]
+          },
+          "passes": true
+        }
+      },
+      "source": "runs/confirmation/8bf2f48c0bba3b2c/report.json"
+    },
+    "x1": null
+  },
+  "sealed": {
+    "qualifier": "registered gate re-tested once on sealed anchors (tag proxy); does not change the P7 decision",
+    "m_contrasts": 4,
+    "deployment": {
+      "seed": 1,
+      "run_id": "confirm-e5-s1",
+      "full": 0.7052350166447359,
+      "hard_lexical": 0.6833495329741789
+    },
+    "sealed_gate": "cleared",
+    "contrasts": {
+      "pretrained_e5": {
+        "full": {
+          "point": 0.13285382701980855,
+          "lower_adjusted": 0.12394579191031313,
+          "ci95": [
+            0.12505654401441643,
+            0.14050455944521822
+          ]
+        },
+        "hard_lexical": {
+          "point": 0.1435488376775974,
+          "lower_adjusted": 0.1326343320438472,
+          "ci95": [
+            0.1338514556528548,
+            0.15377449273613164
+          ]
+        },
+        "passes": true
+      },
+      "trained_bge": {
+        "full": {
+          "point": 0.04093212515771733,
+          "lower_adjusted": 0.03595237286355764,
+          "ci95": [
+            0.03661642691393031,
+            0.04536681964792749
+          ]
+        },
+        "hard_lexical": {
+          "point": 0.04514165935439416,
+          "lower_adjusted": 0.03858698024707545,
+          "ci95": [
+            0.039343253071640785,
+            0.051701673712386105
+          ]
+        },
+        "passes": true
+      }
+    },
+    "source": "runs/sealed/c98bb619ea613672/report.json"
+  },
+  "exam": {
+    "confirm-bge-s1": {
+      "passed": 46,
+      "n": 51,
+      "source": "runs/exam/confirm-bge-s1/2026-10-18T191936Z-1792351176708705100.json"
+    },
+    "confirm-e5-s1": {
+      "passed": 47,
+      "n": 51,
+      "source": "runs/exam/confirm-e5-s1/2026-10-18T191817Z-1792351097604758100.json"
+    },
+    "confirm-e5-s2": {
+      "passed": 47,
+      "n": 51,
+      "source": "runs/exam/confirm-e5-s2/2026-10-20T004316Z-1792456996569012100.json"
+    },
+    "confirm-x1-s1": {
+      "passed": 47,
+      "n": 51,
+      "source": "runs/exam/confirm-x1-s1/2026-10-21T100224Z-1792576944557835200.json"
+    },
+    "confirm-x1-s2": {
+      "passed": 49,
+      "n": 51,
+      "source": "runs/exam/confirm-x1-s2/2026-10-21T100301Z-1792576981838185700.json"
+    },
+    "ext-1-e5-linetag": {
+      "passed": 49,
+      "n": 51,
+      "source": "runs/exam/ext-1-e5-linetag/2026-10-18T231400Z-1792365240416358200.json"
+    },
+    "ext-2b-e5-synth-gc": {
+      "passed": 48,
+      "n": 51,
+      "source": "runs/exam/ext-2b-e5-synth-gc/2026-10-19T061851Z-1792390731906618800.json"
+    },
+    "ext-3-e5-selfname": {
+      "passed": 47,
+      "n": 51,
+      "source": "runs/exam/ext-3-e5-selfname/2026-10-19T012120Z-1792372880463480800.json"
+    },
+    "initial-1-e5-lr3e-05-s20": {
+      "passed": 49,
+      "n": 51,
+      "source": "runs/exam/initial-1-e5-lr3e-05-s20/2026-10-18T195818Z-1792353498562654300.json"
+    },
+    "pretrained-bge-small-en-v1.5": {
+      "passed": 37,
+      "n": 51,
+      "source": "runs/exam/pretrained-bge-small-en-v1.5/2026-10-18T191852Z-1792351132654147300.json"
+    },
+    "pretrained-e5-base-v2": {
+      "passed": 36,
+      "n": 51,
+      "source": "runs/exam/pretrained-e5-base-v2/2026-10-18T191756Z-1792351076023813400.json"
+    },
+    "smoke": {
+      "passed": 0,
+      "n": 0,
+      "source": "runs/exam/smoke/2026-10-18T165523Z-1792342523351324200.json"
+    },
+    "x-1-e5-4000": {
+      "passed": 49,
+      "n": 51,
+      "source": "runs/exam/x-1-e5-4000/2026-10-19T222336Z-1792448616024005300.json"
+    }
+  },
+  "steps": {
+    "1": {
+      "2000": 0.705543134874474,
+      "4000": 0.7141551057402165
+    },
+    "2": {
+      "2000": 0.7066287095610543,
+      "4000": 0.7165311013419494
+    }
+  },
+  "data": {
+    "n_cards": 31066,
+    "split_counts": {
+      "fit": 24817,
+      "sealed": 3200,
+      "dev": 3049
+    },
+    "tags_functional": 2709,
+    "functional_memberships": 175457,
+    "families": 28999,
+    "multi_face": 847
+  },
+  "showcase": []
+}

@@ -1,6 +1,6 @@
 // Release bundle and site-data loading. One promise cache per shard kind; failed loads are
 // evicted so a retry can succeed. Shapes are checked with the bundle validators (SCHEMA.md).
-import { validateAbilityShard, validateIds, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
+import { validateAbilityShard, validateCommonShard, validateIds, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
 
 let root = '';
 let fetcher = (...args) => fetch(...args);
@@ -8,6 +8,7 @@ let release = null;
 let ids = null;
 let tagsReady = null;
 const shards = new Map();
+const neighbours = new Map();
 const abilities = new Map();
 const pretrained = new Map();
 
@@ -45,20 +46,27 @@ const getTags = () => (tagsReady ??= get(`${release.release_id}/tags.json`)
 
 export const shardOf = (index) => Math.floor(index / release.shard_size);
 
-export function getShard(shard) {
+// cards and neighbours load separately: showing a neighbour needs only its card shard
+export function getCards(shard) {
   return cached(shards, shard, async () => {
-    const [cards, neighbours, tags] = await Promise.all([get(`${release.release_id}/cards/${pad(shard)}.json`), get(`${release.release_id}/neighbours/${pad(shard)}.json`), getTags()]);
-    validateShard(cards, neighbours, release, shard, ids, undefined, undefined, tags);
-    return { cards, neighbours, tags: tags.labels };
+    const [cards, tags] = await Promise.all([get(`${release.release_id}/cards/${pad(shard)}.json`), getTags()]);
+    validateShard(cards, cards.map(() => []), release, shard, ids, undefined, undefined, tags);
+    return cards;
   });
 }
 
 export async function getCard(index) {
-  return (await getShard(shardOf(index))).cards[index % release.shard_size];
+  return (await getCards(shardOf(index)))[index % release.shard_size];
 }
 
 export async function getNeighbours(index) {
-  return (await getShard(shardOf(index))).neighbours[index % release.shard_size];
+  const shard = shardOf(index);
+  const rows = await cached(neighbours, shard, async () => {
+    const [cards, rows] = await Promise.all([getCards(shard), get(`${release.release_id}/neighbours/${pad(shard)}.json`)]);
+    validateCommonShard(cards, rows, release, shard, ids);
+    return rows;
+  });
+  return rows[index % release.shard_size];
 }
 
 export async function getTagLabels() {
@@ -68,8 +76,8 @@ export async function getTagLabels() {
 export async function getAbilities(index) {
   const shard = shardOf(index);
   const rows = await cached(abilities, shard, async () => {
-    const [shardData, rows, tags] = await Promise.all([getShard(shard), get(`${release.release_id}/abilities/${pad(shard)}.json`), getTags()]);
-    validateAbilityShard(shardData.cards, rows, release, shard, tags);
+    const [cards, rows, tags] = await Promise.all([getCards(shard), get(`${release.release_id}/abilities/${pad(shard)}.json`), getTags()]);
+    validateAbilityShard(cards, rows, release, shard, tags);
     return rows;
   });
   return rows[index % release.shard_size];

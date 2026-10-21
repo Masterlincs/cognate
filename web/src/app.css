@@ -105,6 +105,8 @@ p { margin: 0 0 1em; }
 
 @media (max-width: 520px) {
   .site-header nav a[href^='https'] { display: none; }
+  .wordmark { font-size: 1.02rem; gap: 7px; }
+  .site-header nav { gap: 2px; font-size: 0.86rem; }
 }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
