@@ -121,7 +121,7 @@
       <div>
         <p>Each card becomes one vector, and neighbours are the cards with the most similar vectors. The pretrained model already knows English, but not which Magic effects are alike. Fine-tuning teaches it with pairs of cards that share an effect tag.</p>
         <p>Training uses a contrastive loss ({train?.objective === 'masked_infonce' ? 'InfoNCE' : train?.objective}): in each batch of {train?.batch_pairs} pairs, the model is pushed to score a card's partner above every other card in the batch. Other cards in the batch that also share a tag or a reprint family with it are masked out, so related cards are not pushed apart. Each card also gets {train?.hard_negatives} <em>hard negative</em>: a card with very similar wording but no shared tag, the Furnace-of-Rath case, chosen from its closest keyword matches.</p>
-        <p class="muted small">Deployed run: {train?.total_updates} updates, learning rate {train?.lr}, seed {train?.seed} (<code>{train?.source}</code>).</p>
+        <p class="muted small">Deployed run: {train?.total_updates} updates, learning rate {train?.lr?.toExponential()}, seed {train?.seed} (<code>{train?.source}</code>).</p>
       </div>
       <figure class="triplet" aria-label="Training example">
         <div class="t anchor"><small>card</small>Ghosts of the Innocent</div>
