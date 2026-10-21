@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSelection, savedList, visibleNeighbours } from './explorer.js';
+import { hasMore, resolveSelection, savedList, visibleNeighbours } from './explorer.js';
 
 const ids = ['a1', 'b2', 'c3'];
 
@@ -45,5 +45,18 @@ describe('savedList', () => {
   });
   it('line ranking before its shard loads is empty, not the whole-card list', () => {
     expect(savedList({ ability: null, rank: 'line', whole, lines: null, abilities })).toEqual([]);
+  });
+});
+
+describe('hasMore', () => {
+  const saved = Array.from({ length: 50 }, (_, i) => [i, 1 - i / 100]);
+  it('offers more while unfiltered neighbours remain, even before their cards load', () => {
+    expect(hasMore({ saved, visible: saved.slice(0, 12), shown: 12, filtering: false })).toBe(true);
+    expect(hasMore({ saved, visible: saved, shown: 48, filtering: false })).toBe(true);
+    expect(hasMore({ saved, visible: saved, shown: 60, filtering: false })).toBe(false);
+  });
+  it('counts only matching cards while filtering', () => {
+    expect(hasMore({ saved, visible: saved.slice(0, 10), shown: 12, filtering: true })).toBe(false);
+    expect(hasMore({ saved, visible: saved.slice(0, 20), shown: 12, filtering: true })).toBe(true);
   });
 });

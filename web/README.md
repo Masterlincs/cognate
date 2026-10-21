@@ -36,7 +36,7 @@ uv run mtgemb site-data --metrics-only
 
 `site-data` refuses to overwrite an existing `site-<release_id>/` folder; a new release gets a new folder. It writes to `site-<release_id>.partial` and renames at the end; on Windows, stop `npm run dev` first, because the dev server's file watcher blocks the rename. If the site folder is missing, the explorer still works and the map and before-and-after say they are unavailable.
 
-`npm run fixture` switches `current.json` to a small synthetic bundle for development. Fixture names and rules text are made up.
+`npm run fixture` writes a small synthetic bundle and points `current.json` at it, for development without the real data. Fixture names and rules text are made up. `git checkout public/data/current.json` switches back. `npm run build` fails if `current.json` names a release that is not in `public/data`.
 
 ## Deploy
 

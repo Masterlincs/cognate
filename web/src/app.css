@@ -13,9 +13,10 @@
   --wubrg-u: #2f78c8;
   --wubrg-b: #5d4b62;
   --wubrg-r: #d1452c;
-  --wubrg-g: #2e8a4b;
+  --wubrg-g: #2a8046;
   --wubrg-m: #d18a1c;
   --wubrg-c: #9b958a;
+  --sym-ink: #fff;
   --shadow: 0 1px 2px rgb(40 30 20 / 6%), 0 4px 16px rgb(40 30 20 / 6%);
   --radius: 10px;
   --display: 'Fraunces Variable', Georgia, serif;
@@ -42,6 +43,7 @@
   --wubrg-g: #4fb36e;
   --wubrg-m: #e9a53a;
   --wubrg-c: #8a857b;
+  --sym-ink: #1a1714;
   --shadow: 0 1px 2px rgb(0 0 0 / 30%), 0 6px 20px rgb(0 0 0 / 30%);
   color-scheme: dark;
 }

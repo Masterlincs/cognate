@@ -7,6 +7,7 @@ let fetcher = (...args) => fetch(...args);
 let release = null;
 let ids = null;
 let tagsReady = null;
+let site = null;
 const shards = new Map();
 const neighbours = new Map();
 const abilities = new Map();
@@ -31,9 +32,15 @@ export async function loadRelease(fetchFn = fetcher) {
   fetcher = fetchFn;
   const current = await get('current.json');
   if (!current.release_id || /[/\\]|\.\./.test(current.release_id)) throw new Error('Invalid release pointer.');
-  release = await get(`${current.release_id}/release.json`);
-  validateReleasePointer(current, release);
-  validateRelease(release);
+  const next = await get(`${current.release_id}/release.json`);
+  validateReleasePointer(current, next);
+  validateRelease(next);
+  // a new deployment between visits must not mix in the old release's cached shards
+  if (next.release_id !== release?.release_id) {
+    for (const cache of [shards, neighbours, abilities, lines, pretrained]) cache.clear();
+    tagsReady = null; ids = null; site = null;
+  }
+  release = next;
   const names = await get(`${release.release_id}/names.json`);
   validateRelease(release, names);
   // ids load after names so they do not share bandwidth with the search index
@@ -41,8 +48,9 @@ export async function loadRelease(fetchFn = fetcher) {
   return { release, names, idsReady };
 }
 
-const getTags = () => (tagsReady ??= get(`${release.release_id}/tags.json`)
-  .then((tags) => { validateTags(release, tags); return tags; })
+// tags exist from v4 on; older bundles have none
+const getTags = () => (tagsReady ??= (release.schema !== 'mtgemb-release-v4' ? Promise.resolve(undefined) : get(`${release.release_id}/tags.json`))
+  .then((tags) => { if (tags) validateTags(release, tags); return tags; })
   .catch((reason) => { tagsReady = null; throw reason; }));
 
 export const shardOf = (index) => Math.floor(index / release.shard_size);
@@ -71,10 +79,11 @@ export async function getNeighbours(index) {
 }
 
 export async function getTagLabels() {
-  return (await getTags()).labels;
+  return (await getTags())?.labels ?? [];
 }
 
 export async function getAbilities(index) {
+  if (release.schema === 'mtgemb-release-v2') return [];
   const shard = shardOf(index);
   const rows = await cached(abilities, shard, async () => {
     const [cards, rows, tags] = await Promise.all([getCards(shard), get(`${release.release_id}/abilities/${pad(shard)}.json`), getTags()]);
@@ -96,7 +105,6 @@ export async function getLines(index) {
 }
 
 // Site data (map + pretrained neighbours) is optional: null when this release has none.
-let site = null;
 
 export async function loadSiteData(releaseId, fetchFn = fetcher) {
   try {

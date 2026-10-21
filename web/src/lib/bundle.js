@@ -36,9 +36,11 @@ export function filterNeighbours(entries, cardByIndex, filters) {
 
 export function parseUrl(search) {
   const params = new URLSearchParams(search);
-  const num = (key) => params.has(key) && params.get(key) !== '' ? Number(params.get(key)) : null;
+  // a hand-edited link with a bad value drops that filter rather than hiding every result
+  const num = (key) => { const v = params.get(key); return v !== null && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null; };
+  const oneOf = (key, allowed) => allowed.includes(params.get(key)) ? params.get(key) : '';
   const ability = num('ability');
-  return { card: params.get('card') || '', ability: Number.isInteger(ability) && ability >= 0 ? ability : null, rank: params.get('rank') === 'line' ? 'line' : 'whole', color: params.get('color') || '', minMv: num('min'), maxMv: num('max'), creature: params.get('creature') || '', type: params.get('type') || '' };
+  return { card: params.get('card') || '', ability: Number.isInteger(ability) && ability >= 0 ? ability : null, rank: params.get('rank') === 'line' ? 'line' : 'whole', color: oneOf('color', ['W', 'U', 'B', 'R', 'G', 'C']), minMv: num('min'), maxMv: num('max'), creature: oneOf('creature', ['creature', 'noncreature']), type: params.get('type') || '' };
 }
 
 export function serializeUrl(state) {

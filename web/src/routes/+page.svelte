@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { asset, resolve } from '$app/paths';
-  import { pushState, replaceState } from '$app/navigation';
+  import { afterNavigate, pushState, replaceState } from '$app/navigation';
   import AtlasMap from '#lib/AtlasMap.svelte';
   import CardText from '#lib/CardText.svelte';
   import CardTile from '#lib/CardTile.svelte';
@@ -10,7 +10,7 @@
   import Search from '#lib/Search.svelte';
   import { parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
   import { getAbilities, getCard, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
-  import { activeFilters, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
+  import { activeFilters, hasMore, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
   import { decodeMap, regionLabel } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
 
@@ -19,6 +19,7 @@
   let release = $state(null);
   let names = $state(null);
   let ids = null;
+  let idsReady = null;
   let map = $state(null);
   let regions = $state([]);
   let siteMissing = $state(false);
@@ -57,7 +58,7 @@
     Promise.all(need.map((i) => getCard(i).then((c) => [i, c]))).then((rows) => {
       if (t !== token) return;
       byIndex = { ...byIndex, ...Object.fromEntries(rows) };
-    }).catch((e) => { error = e.message; });
+    }).catch((e) => { if (t === token) error = e.message; });
   });
 
   function updateUrl(push) {
@@ -73,13 +74,16 @@
     compare = null;
     shown = PAGE;
     try {
+      // card shards are checked against ids.json, so wait for it before the first load
+      if (!ids) await idsReady;
       const c = await getCard(i);
       const [n, ab, ln, labels] = c.has_text ? await Promise.all([getNeighbours(i), getAbilities(i), rank === 'line' ? getLines(i) : null, getTagLabels()]) : [[], [], [], await getTagLabels()];
       if (t !== token) return;
       index = i; card = c; whole = n; abilities = ab; lineRows = ln; tagLabels = labels;
       ability = resolveAbilityIndex(abilityIndex, ab);
       updateUrl(push);
-      if (push) document.getElementById('results')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (push) document.getElementById('results')?.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
     } catch (e) {
       if (t === token) error = e.message;
     } finally {
@@ -127,6 +131,11 @@
   const byId = (id) => (ids ? resolveSelection(ids, { card: id }).index : -1);
   const pick = (c) => { const i = byId(c.id); if (i >= 0) select(i); };
 
+  // a plain link to this page (header logo, Explore) keeps the component, so re-read the URL
+  afterNavigate(({ type }) => {
+    if (ids && (type === 'link' || type === 'goto')) apply(parseUrl(location.search));
+  });
+
   onMount(() => {
     setRoot(asset(''));
     const onPop = () => ids && apply(parseUrl(location.search));
@@ -134,12 +143,14 @@
     (async () => {
       try {
         const r = await loadRelease(fetch);
-        release = r.release; names = r.names;
+        release = r.release; names = r.names; idsReady = r.idsReady;
         loadSiteData(release.release_id).then((s) => {
           if (s) { map = decodeMap(s.map); regions = s.regions.map((r) => ({ ...r, label: regionLabel(r.label) })); } else siteMissing = true;
         }).catch(() => { siteMissing = true; });
-        ids = await r.idsReady;
-        apply(parseUrl(location.search));
+        const before = token;
+        ids = await idsReady;
+        // a card picked from search while ids loaded wins over the starting URL
+        if (token === before) apply(parseUrl(location.search));
       } catch (e) { error = e.message; }
     })();
     return () => removeEventListener('popstate', onPop);
@@ -260,7 +271,7 @@
           {#if pending}{#each { length: Math.max(0, Math.min(shown, saved.length) - pageRows.length) } as _, k (k)}<li class="ghost" aria-hidden="true"></li>{/each}{/if}
         </ol>
         {#if !pending && filtering && !visible.length}<p class="notice">No similar card passes these filters.</p>{/if}
-        {#if visible.length > shown}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
+        {#if hasMore({ saved, visible, shown, filtering })}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
         <p class="model-note muted">Scores are {byLine ? 'weighted line-match scores' : 'cosine similarities'} from {release.model.label}. Rankings are the model's judgement; check the cards before relying on them.</p>
       {/if}
     {/if}

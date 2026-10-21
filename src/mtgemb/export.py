@@ -231,7 +231,10 @@ def model_meta(label: str, status: str, recipe: dict, run_id: str | None,
     meta = {"label": label, "status": status, "backbone": recipe["model_id"],
             "revision": recipe["revision"], "run_id": run_id}
     if status == "promoted":
-        # the first promoted release predates this argument
+        # only the first promoted run predates this argument; its text claims a
+        # sealed run, so no other promoted model may fall back to it
+        if decision is None and run_id != "confirm-e5-s1":
+            raise ValueError("a promoted release needs an explicit decision")
         meta["decision"] = decision or ("tag-proxy promotion on selection-exposed development "
                                         "; gate also cleared on one sealed run")
     return meta
@@ -243,6 +246,8 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
            from_release: str | None = None, decision: str | None = None) -> dict:
     if decision is not None and status != "promoted":  # fail before encoding
         raise ValueError("a decision is only recorded for a promoted release")
+    if status == "promoted" and decision is None and run_id != "confirm-e5-s1":
+        raise ValueError("a promoted release needs an explicit decision")
     if status not in ("promoted", "experimental", "pretrained-fallback"):
         raise ValueError(status)
     ds = load_dataset(ds_dir)

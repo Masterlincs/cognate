@@ -79,4 +79,6 @@ await writeJson('release.json', {
   attribution: 'Invented synthetic names and rules text for software testing only; no affiliation with Wizards of the Coast or Scryfall.'
 }, null);
 await mkdir(root, { recursive: true });
-console.log(`Wrote ${count} deterministic fixture cards to public/data/${releaseId}`);
+await writeFile(path.join(root, 'current.json'), `${JSON.stringify({ release_id: releaseId })}\n`, 'utf8');
+console.log(`Wrote ${count} deterministic fixture cards to public/data/${releaseId} and pointed current.json at it`);
+console.log('To go back to the real release: git checkout public/data/current.json');

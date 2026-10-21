@@ -123,6 +123,7 @@
   // ease the view to frame the selected card and its neighbours
   function flyTo(target) {
     cancelAnimationFrame(anim);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) { v = target; draw(); return; }
     const from = { ...v }, t0 = performance.now();
     const step = (t) => {
       const k = Math.min(1, (t - t0) / 380), e = 1 - (1 - k) ** 3;

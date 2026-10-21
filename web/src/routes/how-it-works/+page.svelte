@@ -184,7 +184,7 @@
       <p>Ghosts of the Innocent still ranks Furnace of Rath above Kitsune Palliator (trap-exam margin {margin(exDep, 'T021') !== null ? fixed(margin(exDep, 'T021')) : '—'}). A run with three hard negatives per card instead of one is testing whether more contrast against lookalikes helps; its result is not in yet.</p>
     </div>
     <ul class="plain">
-      <li><b>Proxy, not people.</b> All scores measure agreement with community tags. No human relevance study has been run yet.</li>
+      <li><b>Proxy, not people.</b> The ranking scores and promotion tests measure agreement with community tags. The trap exam is a set of 51 hand-made card comparisons, accepted by the author rather than a panel. No human relevance study has been run yet.</li>
       <li><b>Line matching is exploratory.</b> The explorer's "match one line" ranking was not evaluated on the proxy.</li>
       <li><b>Snapshot.</b> Cards printed after the data snapshot are missing, and only English rules text is used.</li>
     </ul>

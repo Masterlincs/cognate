@@ -355,8 +355,11 @@ def test_model_meta_decision_text():
     import mtgemb.export as exporter
 
     recipe = {"model_id": "m", "revision": "r"}
-    old = exporter.model_meta("x", "promoted", recipe, "run")
+    old = exporter.model_meta("x", "promoted", recipe, "confirm-e5-s1")
     assert "" in old["decision"] and "" in old["decision"]
+    # the sealed-run wording belongs to that one run; any other promoted model must say its own
+    with pytest.raises(ValueError, match="decision"):
+        exporter.model_meta("x", "promoted", recipe, "confirm-x1-s1")
     new = exporter.model_meta("x", "promoted", recipe, "run", decision="no sealed run")
     assert new == {"label": "x", "status": "promoted", "backbone": "m", "revision": "r",
                    "run_id": "run", "decision": "no sealed run"}

@@ -6,7 +6,8 @@
   let query = $state('');
   let active = $state(-1);
   let open = $state(false);
-  const options = $derived(names && open ? searchNames(query, names, null, 8) : []);
+  const matches = $derived(names ? searchNames(query, names, null, 8) : []);
+  const options = $derived(open ? matches : []);
 
   function pick(option) {
     query = '';
@@ -15,7 +16,8 @@
     onpick(option.index);
   }
   function keydown(e) {
-    if (e.key === 'ArrowDown' && options.length) { e.preventDefault(); open = true; active = (active + 1) % options.length; }
+    // ArrowDown also reopens the list after Escape
+    if (e.key === 'ArrowDown' && matches.length) { e.preventDefault(); active = open ? (active + 1) % matches.length : 0; open = true; }
     else if (e.key === 'ArrowUp' && options.length) { e.preventDefault(); active = (active - 1 + options.length) % options.length; }
     else if (e.key === 'Enter' && options.length) { e.preventDefault(); pick(options[Math.max(0, active)]); }
     else if (e.key === 'Escape') { open = false; active = -1; }
@@ -26,7 +28,7 @@
   <label class="sr-only" for={id}>{label}</label>
   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
   <input {id} type="search" role="combobox" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="{id}-list" aria-expanded={options.length > 0} aria-activedescendant={active >= 0 ? `${id}-${active}` : undefined}
-    {placeholder} bind:value={query} onfocus={() => onfocus?.()} oninput={() => { open = true; active = -1; }} onkeydown={keydown} onblur={() => setTimeout(() => (open = false), 120)} />
+    {placeholder} bind:value={query} onfocus={() => { open = true; onfocus?.(); }} oninput={() => { open = true; active = -1; }} onkeydown={keydown} onblur={() => setTimeout(() => (open = false), 120)} />
   {#if options.length}
     <ul id="{id}-list" role="listbox">
       {#each options as option, i (option.index)}

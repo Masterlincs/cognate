@@ -49,7 +49,7 @@
       if (!site) { phase = 'missing'; return; }
       phase = 'ready';
       const first = showcase.map((s) => byId(s.id)).find((i) => i >= 0);
-      if (first !== undefined) show(first);
+      if (first !== undefined && token === 0) show(first);
     } catch (e) { error = e.message; phase = 'error'; }
   }
 
@@ -67,7 +67,7 @@
         <button type="button" class="chip" class:on={current?.id === s.id} disabled={phase !== 'ready'} onclick={() => show(byId(s.id))}>{s.name}</button>
       {/each}
     </div>
-    <div class="search"><Search {names} id="ba-search" label="Compare any card" placeholder="Or type any card…" onpick={(i) => show(i)} /></div>
+    <div class="search"><Search names={phase === 'ready' ? names : null} id="ba-search" label="Compare any card" placeholder="Or type any card…" onpick={(i) => show(i)} /></div>
   </div>
 
   {#if phase === 'missing'}

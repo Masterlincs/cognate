@@ -148,3 +148,13 @@ describe('bundle validation', () => {
     expect(() => validateShard(v4Cards, v4Neighbours, v4, 0, ['a', 'b'], v4Abilities, [[[0, 0.7]], []], v4Tags)).toThrow(/Line neighbour index or score/);
   });
 });
+
+describe('parseUrl drops invalid filter values', () => {
+  it('ignores unknown colours, creature modes and non-numeric mana values', () => {
+    const s = parseUrl('?card=x&color=purple&creature=maybe&min=abc&max=3');
+    expect(s).toMatchObject({ card: 'x', color: '', creature: '', minMv: null, maxMv: 3 });
+  });
+  it('keeps valid ones', () => {
+    expect(parseUrl('?color=C&creature=noncreature&min=0')).toMatchObject({ color: 'C', creature: 'noncreature', minMv: 0 });
+  });
+});
