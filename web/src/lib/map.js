@@ -49,3 +49,33 @@ export function hitTest(grid, x, y, wx, wy, radius) {
   }
   return best;
 }
+
+// Region labels are Scryfall Tagger tag names; a few are player jargon, renamed for display.
+const READABLE = {
+  anthem: 'anthems (team pump)',
+  cantrip: 'cantrips (draw a card)',
+  'copy-creature': 'copy a creature',
+  creaturefall: 'creature-enters triggers',
+  'death trigger-self': 'dies triggers (self)',
+  firebreathing: 'pump for mana (+1/+0)',
+  'force draw': 'make players draw',
+  'free-cast-another': 'cast spells for free',
+  jump: 'grant flying',
+  'pp counters matter': '+1/+1 counters matter',
+  'protects-self': 'self-protection',
+  'reanimate-creature': 'reanimation',
+  'removal-bounce': 'removal: bounce',
+  'removal-exile': 'removal: exile',
+  'removal-toughness': 'removal: −X/−X',
+  'sacrifice outlet-artifact': 'sacrifice outlets (artifacts)',
+  'shade pump': 'pump for mana (+1/+1)',
+  'single target instant/sorcery': 'single-target spells',
+  'synergy-sorcery': 'sorcery synergy',
+  'tapper-creature': 'tapper creatures',
+  thoughtseize: 'hand disruption',
+  'tutor-to-hand': 'tutors (search for a card)',
+  egg: 'sacrifice-for-value artifacts',
+  saboteur: 'combat-damage triggers',
+  'cda-power': 'power set by its own ability'
+};
+export const regionLabel = (label) => READABLE[label] ?? label;

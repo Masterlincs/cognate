@@ -11,7 +11,7 @@
   import { parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
   import { getAbilities, getCard, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
   import { activeFilters, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
-  import { decodeMap } from '#lib/map.js';
+  import { decodeMap, regionLabel } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
 
   const PAGE = 12;
@@ -136,7 +136,7 @@
         const r = await loadRelease(fetch);
         release = r.release; names = r.names;
         loadSiteData(release.release_id).then((s) => {
-          if (s) { map = decodeMap(s.map); regions = s.regions; } else siteMissing = true;
+          if (s) { map = decodeMap(s.map); regions = s.regions.map((r) => ({ ...r, label: regionLabel(r.label) })); } else siteMissing = true;
         }).catch(() => { siteMissing = true; });
         ids = await r.idsReady;
         apply(parseUrl(location.search));

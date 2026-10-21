@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGrid, decodeMap, hitTest, toScreen, toWorld, TEXTLESS } from './map.js';
+import { buildGrid, decodeMap, hitTest, toScreen, toWorld, TEXTLESS, regionLabel } from './map.js';
 
 function pack(records) {
   const buf = new ArrayBuffer(records.length * 5);
@@ -42,5 +42,15 @@ describe('map', () => {
     const [wx, wy] = toWorld(v, sx, sy);
     expect(wx).toBeCloseTo(1234, 6);
     expect(wy).toBeCloseTo(-5678, 6);
+  });
+});
+
+describe('regionLabel', () => {
+  it('renames tagger jargon for readers', () => {
+    expect(regionLabel('pp counters matter')).toBe('+1/+1 counters matter');
+    expect(regionLabel('thoughtseize')).toBe('hand disruption');
+  });
+  it('passes plain labels through', () => {
+    expect(regionLabel('spot removal')).toBe('spot removal');
   });
 });

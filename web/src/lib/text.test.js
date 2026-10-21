@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cardLines, manaTokens, maskNumbers, sharedLines } from './text.js';
+import { cardLines, manaTokens, maskNumbers, sharedLines, manaSymbol } from './text.js';
 
 const card = (name, ...texts) => ({ name, faces: texts.map((t, i) => ({ name: i ? `${name} back` : name, oracle_text: t, mana_cost: '', type_line: '' })) });
 
@@ -31,5 +31,23 @@ describe('text helpers', () => {
   it('manaTokens splits hybrid and generic', () => {
     expect(manaTokens('{2}{R}{W/U}')).toEqual(['2', 'R', 'W/U']);
     expect(manaTokens('')).toEqual([]);
+  });
+});
+
+describe('manaSymbol', () => {
+  it('colours a single mana symbol', () => {
+    expect(manaSymbol('R')).toEqual({ colours: ['r'], text: 'R' });
+    expect(manaSymbol('3')).toEqual({ colours: [], text: '3' });
+    expect(manaSymbol('T')).toEqual({ colours: [], text: '↷' });
+  });
+  it('splits hybrid symbols into two colours with no letters', () => {
+    expect(manaSymbol('W/U')).toEqual({ colours: ['w', 'u'], text: '' });
+  });
+  it('keeps the number of a two-or-colour hybrid', () => {
+    expect(manaSymbol('2/R')).toEqual({ colours: ['r'], text: '2' });
+  });
+  it('marks Phyrexian mana', () => {
+    expect(manaSymbol('B/P')).toEqual({ colours: ['b'], text: 'φ' });
+    expect(manaSymbol('G/U/P')).toEqual({ colours: ['g', 'u'], text: 'φ' });
   });
 });

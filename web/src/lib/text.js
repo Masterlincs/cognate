@@ -22,3 +22,12 @@ export function sharedLines(a, b) {
 }
 
 export const manaTokens = (cost) => [...(cost ?? '').matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
+
+// One {X} symbol: its colours (0 = neutral pill, 2 = hybrid split) and the text drawn on it.
+export function manaSymbol(sym) {
+  if (sym === 'T') return { colours: [], text: '↷' };
+  const parts = sym.split('/');
+  const colours = parts.filter((p) => /^[WUBRGC]$/.test(p)).map((p) => p.toLowerCase());
+  if (parts.length === 1) return { colours, text: sym };
+  return { colours, text: parts.includes('P') ? 'φ' : parts.find((p) => /^\d+$/.test(p)) ?? '' };
+}
