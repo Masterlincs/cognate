@@ -1,18 +1,18 @@
 <script>
   import { onMount } from 'svelte';
-  import { base, resolve } from '$app/paths';
+  import { asset, resolve } from '$app/paths';
   import { pushState, replaceState } from '$app/navigation';
-  import AtlasMap from '$lib/AtlasMap.svelte';
-  import CardText from '$lib/CardText.svelte';
-  import CardTile from '$lib/CardTile.svelte';
-  import Compare from '$lib/Compare.svelte';
-  import Rules from '$lib/Rules.svelte';
-  import Search from '$lib/Search.svelte';
-  import { parseUrl, resolveAbilityIndex, serializeUrl } from '$lib/bundle.js';
-  import { getAbilities, getCard, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '$lib/data.js';
-  import { activeFilters, resolveSelection, savedList, visibleNeighbours } from '$lib/explorer.js';
-  import { decodeMap } from '$lib/map.js';
-  import metrics from '$lib/generated/metrics.json';
+  import AtlasMap from '#lib/AtlasMap.svelte';
+  import CardText from '#lib/CardText.svelte';
+  import CardTile from '#lib/CardTile.svelte';
+  import Compare from '#lib/Compare.svelte';
+  import Rules from '#lib/Rules.svelte';
+  import Search from '#lib/Search.svelte';
+  import { parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
+  import { getAbilities, getCard, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
+  import { activeFilters, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
+  import { decodeMap } from '#lib/map.js';
+  import metrics from '#lib/generated/metrics.json';
 
   const PAGE = 12;
   const NO_FILTERS = { color: '', minMv: null, maxMv: null, creature: '', type: '' };
@@ -128,7 +128,7 @@
   const pick = (c) => { const i = byId(c.id); if (i >= 0) select(i); };
 
   onMount(() => {
-    setRoot(base);
+    setRoot(asset(''));
     const onPop = () => ids && apply(parseUrl(location.search));
     addEventListener('popstate', onPop);
     (async () => {

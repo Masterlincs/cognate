@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { base, resolve } from '$app/paths';
+  import { asset, resolve } from '$app/paths';
   import Search from './Search.svelte';
   import { getCard, getNeighbours, getPretrained, loadRelease, loadSiteData, setRoot } from './data.js';
   import { resolveSelection } from './explorer.js';
@@ -41,7 +41,7 @@
     if (phase !== 'idle') return;
     phase = 'loading';
     try {
-      setRoot(base);
+      setRoot(asset(''));
       const r = await loadRelease(fetch);
       names = r.names;
       const site = await loadSiteData(r.release.release_id);

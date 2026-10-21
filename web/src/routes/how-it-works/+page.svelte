@@ -1,13 +1,13 @@
 <script>
-  import { base, resolve } from '$app/paths';
+  import { asset, resolve } from '$app/paths';
   import { goto } from '$app/navigation';
-  import BarChart from '$lib/BarChart.svelte';
-  import BeforeAfter from '$lib/BeforeAfter.svelte';
-  import DotPlot from '$lib/DotPlot.svelte';
-  import Search from '$lib/Search.svelte';
-  import { loadRelease, setRoot } from '$lib/data.js';
-  import { delta, fixed } from '$lib/format.js';
-  import m from '$lib/generated/metrics.json';
+  import BarChart from '#lib/BarChart.svelte';
+  import BeforeAfter from '#lib/BeforeAfter.svelte';
+  import DotPlot from '#lib/DotPlot.svelte';
+  import Search from '#lib/Search.svelte';
+  import { loadRelease, setRoot } from '#lib/data.js';
+  import { delta, fixed } from '#lib/format.js';
+  import m from '#lib/generated/metrics.json';
 
   const REPO = 'https://github.com/Masterlincs/mtg-embeddings';
   const n = (x) => x.toLocaleString('en');
@@ -37,7 +37,7 @@
   let loading = null;
   function loadNames() {
     loading ??= (async () => {
-      setRoot(base);
+      setRoot(asset(''));
       const r = await loadRelease(fetch);
       names = r.names;
       ids = await r.idsReady;
