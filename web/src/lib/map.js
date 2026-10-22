@@ -14,17 +14,26 @@ export function decodeMap(buf) {
     color[i] = view.getUint8(i * 5 + 4);
   }
   // cards with identical text share a point; fan the repeats out on a small golden-angle
-  // spiral (first card stays put) so each one can be hovered and picked when zoomed in
-  const seen = new Map();
+  // spiral (first card stays put) so each one can be hovered and picked when zoomed in.
+  // Every original point is reserved first, and a step that lands on a taken point moves on.
+  const key = (px, py) => px * 65536 + py;
+  const taken = new Set();
+  for (let i = 0; i < n; i += 1) if (x[i] !== TEXTLESS) taken.add(key(x[i], y[i]));
+  const first = new Set(), step = new Map();
   for (let i = 0; i < n; i += 1) {
     if (x[i] === TEXTLESS) continue;
-    const k = x[i] * 65536 + y[i];
-    const rep = seen.get(k) ?? 0;
-    seen.set(k, rep + 1);
-    if (!rep) continue;
-    const r = 24 * Math.sqrt(rep), a = rep * 2.39996;
-    x[i] = Math.max(-32767, Math.min(32767, Math.round(x[i] + r * Math.cos(a))));
-    y[i] = Math.max(-32767, Math.min(32767, Math.round(y[i] + r * Math.sin(a))));
+    const k = key(x[i], y[i]);
+    if (!first.has(k)) { first.add(k); continue; }
+    let rep = step.get(k) ?? 1, px, py;
+    do {
+      const r = 24 * Math.sqrt(rep), a = rep * 2.39996;
+      px = Math.max(-32767, Math.min(32767, Math.round(x[i] + r * Math.cos(a))));
+      py = Math.max(-32767, Math.min(32767, Math.round(y[i] + r * Math.sin(a))));
+      rep += 1;
+    } while (taken.has(key(px, py)));
+    step.set(k, rep);
+    taken.add(key(px, py));
+    x[i] = px; y[i] = py;
   }
   return { x, y, color, n };
 }

@@ -226,28 +226,30 @@ def _dump(path: Path, obj) -> dict:
 def model_meta(label: str, status: str, recipe: dict, run_id: str | None,
                decision: str | None = None) -> dict:
     """The release's model block; `decision` names the promotion decision (promoted only)."""
-    if decision is not None and status != "promoted":
-        raise ValueError("a decision is only recorded for a promoted release")
+    check_decision(status, run_id, decision)
     meta = {"label": label, "status": status, "backbone": recipe["model_id"],
             "revision": recipe["revision"], "run_id": run_id}
     if status == "promoted":
-        # only the first promoted run predates this argument; its text claims a
-        # sealed run, so no other promoted model may fall back to it
-        if decision is None and run_id != "confirm-e5-s1":
-            raise ValueError("a promoted release needs an explicit decision")
-        meta["decision"] = decision or ("tag-proxy promotion on selection-exposed development "
-                                        "; gate also cleared on one sealed run")
+        meta["decision"] = (decision or "").strip() or (
+            "tag-proxy promotion on selection-exposed development "
+            "; gate also cleared on one sealed run")
     return meta
+
+
+def check_decision(status: str, run_id: str | None, decision: str | None) -> None:
+    if decision is not None and status != "promoted":
+        raise ValueError("a decision is only recorded for a promoted release")
+    # only the first promoted run predates the argument; its text claims a sealed
+    # run, so no other promoted model may fall back to it, including with a blank decision
+    if status == "promoted" and not (decision or "").strip() and run_id != "confirm-e5-s1":
+        raise ValueError("a promoted release needs an explicit decision")
 
 
 def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
            model_path: str | None = None, run_id: str | None = None,
            web_dir: str | Path | None = None, parity_n: int = 64, ref_n: int = 20,
            from_release: str | None = None, decision: str | None = None) -> dict:
-    if decision is not None and status != "promoted":  # fail before encoding
-        raise ValueError("a decision is only recorded for a promoted release")
-    if status == "promoted" and decision is None and run_id != "confirm-e5-s1":
-        raise ValueError("a promoted release needs an explicit decision")
+    check_decision(status, run_id, decision)  # fail before encoding
     if status not in ("promoted", "experimental", "pretrained-fallback"):
         raise ValueError(status)
     ds = load_dataset(ds_dir)

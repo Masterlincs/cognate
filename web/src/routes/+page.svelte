@@ -53,8 +53,10 @@
   const pending = $derived((byLine && lineRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
   const showcase = metrics.showcase ?? [];
 
-  // load the cards the list needs: the shown page, or every saved neighbour while filtering
+  // load the cards the list needs: the shown page, or every saved neighbour while filtering.
+  // Not while a selection loads: the list still belongs to the old card but the token is new.
   $effect(() => {
+    if (busy) return;
     const need = (filtering ? saved : saved.slice(0, shown)).map(([i]) => i).filter((i) => !byIndex[i]);
     if (!need.length) return;
     const t = token;
@@ -62,6 +64,14 @@
       if (t !== token) return;
       byIndex = { ...byIndex, ...Object.fromEntries(rows) };
     }).catch((e) => { if (t === token) error = e.message; });
+  });
+
+  // line-match rows for the shown card, once any selection has settled; this also covers
+  // switching to Line match while another card is still loading
+  $effect(() => {
+    if (busy || !byLine || !card?.has_text || lineRows !== null) return;
+    const t = token;
+    getLines(index).then((rows) => { if (t === token) lineRows = rows; }).catch((e) => { if (t === token) error = e.message; });
   });
 
   function updateUrl(push) {
@@ -123,9 +133,6 @@
     rank = value;
     shown = PAGE;
     updateUrl(true);
-    if (value !== 'line' || lineRows !== null) return;
-    const t = token;
-    getLines(index).then((rows) => { if (t === token) lineRows = rows; }).catch((e) => { if (t === token) error = e.message; });
   }
 
   function setFilter(key, value) {

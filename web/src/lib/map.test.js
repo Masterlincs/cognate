@@ -65,4 +65,10 @@ describe('decodeMap duplicate points', () => {
     expect([m.x[3], m.y[3]]).toEqual([500, 500]);
     expect([m.x[4], m.x[5]]).toEqual([TEXTLESS, TEXTLESS]);
   });
+  it('does not fan a repeat onto a point another card holds', () => {
+    // the first spiral step from (100,100) lands on (82,116), which a third card already holds
+    const m = decodeMap(pack([[100, 100, 1], [100, 100, 2], [82, 116, 4]]));
+    expect(new Set([0, 1, 2].map((i) => `${m.x[i]},${m.y[i]}`)).size).toBe(3);
+    expect([m.x[2], m.y[2]]).toEqual([82, 116]);
+  });
 });
