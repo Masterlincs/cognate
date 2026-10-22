@@ -3,7 +3,7 @@ from collections import Counter
 import pandas as pd
 import pytest
 
-from mtgemb.pairs import build_pairs, candidate_pairs, lexical_negatives
+from mtgemb.pairs import build_pairs, candidate_pairs, drop_modifier_tags, lexical_negatives
 
 
 def test_candidate_pairs_all_for_tiny_tag_and_seeded_for_larger_tag():
@@ -81,3 +81,40 @@ def test_lexical_negatives_exclude_shared_tags_family_self_and_untagged():
 
 
 
+def test_drop_modifier_tags_removes_listed_labels_and_rejects_unknown():
+    mem = pd.DataFrame([("a", "t-cost"), ("a", "t-fx"), ("b", "t-cost")],
+                       columns=["oracle_id", "tag_id"])
+    tags = pd.DataFrame({"tag_id": ["t-cost", "t-fx"],
+                         "label": ["manaless value", "change target"]})
+    kept, dropped = drop_modifier_tags(mem, tags, ["manaless value"])
+    assert kept.to_dict("records") == [{"oracle_id": "a", "tag_id": "t-fx"}]
+    assert dropped == {"t-cost"}
+    with pytest.raises(ValueError, match="no tag labelled"):
+        drop_modifier_tags(mem, tags, ["not a tag"])
+
+
+def test_effect_only_labels_turn_a_rider_twin_into_a_negative():
+    # Deflecting Swat shape: s shares only a cost rider with h and the effect with r.
+    texts = {"s": "free if you control a commander. change the target of target spell",
+             "h": "free if you control a commander. prevent all combat damage this turn",
+             "r": "you may choose new targets for target spell",
+             "x": "destroy target artifact"}
+    cards = pd.DataFrame([{"oracle_id": o, "split": "fit", "text_status": "ok",
+                           "family_id": f"f-{o}", "text": t} for o, t in texts.items()])
+    mem = pd.DataFrame([("s", "rider"), ("h", "rider"), ("s", "fx"), ("r", "fx"), ("x", "art"),
+                        ("h", "fog")], columns=["oracle_id", "tag_id"]).assign(weight="median")
+    tags = pd.DataFrame({"tag_id": ["rider", "fx", "art", "fog"],
+                         "label": ["synergy-commander", "change target", "art", "fog"],
+                         "idf_fit": 1.0})
+    cfg = {"seed": "t", "min_df": 2, "max_df": 9, "rounds": 3, "card_cap": 9,
+           "family_cap": 9, "spec_clip": [0.5, 2.0]}
+    before, _, _ = build_pairs(cards, mem, tags, cfg)
+    assert {tuple(p) for p in before[["a", "b"]].values} == {("h", "s"), ("r", "s")}
+    kept, _ = drop_modifier_tags(mem, tags, ["synergy-commander"])
+    after, elig, _ = build_pairs(cards, kept, tags, cfg)
+    assert {tuple(p) for p in after[["a", "b"]].values} == {("r", "s")}
+    assert elig == {"fx"}
+    neg_before, _ = lexical_negatives(cards, mem, k=3)
+    neg_after, _ = lexical_negatives(cards, kept, k=3)
+    assert "h" not in set(neg_before.loc[neg_before.anchor == "s", "negative"])
+    assert neg_after.loc[neg_after.anchor == "s"].iloc[0]["negative"] == "h"

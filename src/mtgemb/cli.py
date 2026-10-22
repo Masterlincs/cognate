@@ -57,6 +57,8 @@ def main(argv: list[str] | None = None) -> None:
     for name in ("pairs", "audit", "benchmark", "eval-lexical"):
         q = sub.add_parser(name)
         q.add_argument("--ds", default=DEFAULT_DS)
+        if name == "pairs":
+            q.add_argument("--version", default="pairs_v1", choices=["pairs_v1", "pairs_v2"])
     q = sub.add_parser("eval-encoder", help="evaluate a pretrained or fine-tuned encoder")
     q.add_argument("name")
     q.add_argument("backbone")
@@ -129,7 +131,7 @@ def main(argv: list[str] | None = None) -> None:
     elif a.cmd == "pairs":
         from .pairs import build_training_data
 
-        out = build_training_data(Path(a.ds))
+        out = build_training_data(Path(a.ds), a.version)
     elif a.cmd == "audit":
         from .pairs import audit_pairs
 

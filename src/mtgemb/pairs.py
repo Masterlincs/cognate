@@ -27,6 +27,44 @@ PAIR_CFG = {
     "spec_clip": [0.5, 2.0],
 }
 
+# tags about a card's own cost, casting mode or printing rather than what it does. In
+# pairs_v2 they make no positive pairs, mask no in-batch negative and do not stop a card from
+# being a lexical negative. Tags about other cards' costs (cost reducer, free-cast-another)
+# and "cares about" conditions (threshold, morbid) are effects and stay.
+MODIFIER_LABELS = (
+    # own cost: alternative, additional, reduced, paid in life, cards, counters or taps
+    "alternative cost", "additional cost", "manaless value", "potentially free",
+    "spell with no casting cost", "discount-self", "life payment", "upkeep cost",
+    "graveyard fuel", "graveyard fuel-artifact", "mm counter cost", "tap fuel-land",
+    "tap fuel-artifact", "sacrifice cost land", "offcolor additional cost", "strive",
+    "phyrexian mana cost", "phyrexian mana ability", "multicolor kicker",
+    "multiple kicker costs", "distinct echo cost", "alternate-equip-cost",
+    "alternate-cost-bounce", "alternate-cost-sacrifice", "alternate-cost-life",
+    "alternate-cost-gain-life", "emerge-from-creature", "emerge-from-artifact",
+    "convoke", "delve", "improvise", "affinity for artifacts", "affinity for spells",
+    "affinity undergrowth", "affinity for attacking", "affinity for land type",
+    "affinity for party", "affinity for domain", "affinity for equipment",
+    "affinity for creatures", "affinity for graveyard", "affinity for devotion",
+    "affinity for enchantments", "x doesn't matter", "cr 107.3f x card",
+    # casting mode or condition on casting it
+    "madness", "ninjutsu", "exhaust", "casting restriction", "synergy-commander",
+    # printing and format, not function
+    "commander set booster cards", "face-commander", "useless in singleton formats",
+    "stronger in singleton formats",
+)
+VERSIONS = {"pairs_v1": PAIR_CFG,
+            "pairs_v2": {**PAIR_CFG, "exclude_labels": list(MODIFIER_LABELS)}}
+
+
+def drop_modifier_tags(mem: pd.DataFrame, tags: pd.DataFrame, labels) -> tuple[pd.DataFrame, set]:
+    """Memberships without the tags carrying these labels; an unknown label is an error."""
+    by_label = tags.groupby("label")["tag_id"].apply(set)
+    missing = sorted(set(labels) - set(by_label.index))
+    if missing:
+        raise ValueError(f"no tag labelled {missing}")
+    drop = set().union(*(by_label[x] for x in labels))
+    return mem[~mem["tag_id"].isin(drop)].reset_index(drop=True), drop
+
 
 def _rng(*key) -> np.random.Generator:
     return np.random.default_rng(int(sha256_json([PAIR_CFG["seed"], *key])[:15], 16))
@@ -166,16 +204,36 @@ def lexical_negatives(cards: pd.DataFrame, mem: pd.DataFrame, k: int) -> tuple[p
     return neg[~bad].reset_index(drop=True), stats
 
 
-def build_training_data(ds_dir: Path) -> dict:
+def rider_twin_stats(neg: pd.DataFrame, mem: pd.DataFrame, dropped: set, band: int = 30) -> dict:
+    """How many anchors have, in lexical ranks 1..band, a negative sharing a dropped tag."""
+    rider = mem[mem["tag_id"].isin(dropped)].groupby("oracle_id")["tag_id"].apply(set)
+    top = neg[neg["rank"] <= band]
+    hit = [bool(rider.get(a, set()) & rider.get(n, set()))
+           for a, n in zip(top["anchor"], top["negative"], strict=True)]
+    hits = top.loc[hit, "anchor"]
+    return {f"rider_twin_negatives_top{band}": len(hits),
+            f"anchors_with_rider_twin_top{band}": int(hits.nunique())}
+
+
+def build_training_data(ds_dir: Path, version: str = PAIRS_VERSION) -> dict:
     ds = load_dataset(ds_dir)
-    out = Path(ds_dir) / PAIRS_VERSION
+    cfg = VERSIONS[version]
+    out = Path(ds_dir) / version
     if (out / "pairs.json").exists():
         raise FileExistsError(f"{out} already finalised")
     out.mkdir(exist_ok=True)
-    log_event("data", "STARTED", step="pairs", dataset_id=ds["ident"]["dataset_id"])
+    log_event("data", "STARTED", step="pairs", version=version,
+              dataset_id=ds["ident"]["dataset_id"])
     cards, mem, tags = ds["cards"], ds["memberships"], ds["tags"]
-    pairs, elig, pstats = build_pairs(cards, mem, tags)
-    neg, nstats = lexical_negatives(cards, mem, PAIR_CFG["neg_pool"])
+    dropped = set()
+    if cfg.get("exclude_labels"):
+        mem, dropped = drop_modifier_tags(ds["memberships"], tags, cfg["exclude_labels"])
+    pairs, elig, pstats = build_pairs(cards, mem, tags, cfg)
+    neg, nstats = lexical_negatives(cards, mem, cfg["neg_pool"])
+    if dropped:
+        fit = set(cards.loc[cards["split"] == "fit", "oracle_id"])
+        full = ds["memberships"][ds["memberships"]["oracle_id"].isin(fit)]
+        nstats.update(rider_twin_stats(neg, full, dropped), excluded_tags=len(dropped))
     # leakage checks: every id in pairs/negatives must be fit
     split = dict(zip(cards["oracle_id"], cards["split"], strict=True))
     for col, frame in (("a", pairs), ("b", pairs), ("anchor", neg), ("negative", neg)):
@@ -186,14 +244,16 @@ def build_training_data(ds_dir: Path) -> dict:
     neg.to_parquet(out / "negatives.parquet", index=False)
     pd.DataFrame({"tag_id": sorted(elig)}).to_parquet(out / "pair_tags.parquet", index=False)
     rec = {
-        "version": PAIRS_VERSION, "dataset_id": ds["ident"]["dataset_id"], "config": PAIR_CFG,
+        "version": version, "dataset_id": ds["ident"]["dataset_id"], "config": cfg,
+        "excluded_tag_ids": sorted(dropped),
         "lexical_recipe": LEXICAL_RECIPE, "pair_stats": pstats, "negative_stats": nstats,
         "files": {p.name: sha256_file(p) for p in sorted(out.glob("*.parquet"))},
         "created_utc": utcnow(),
     }
     rec["pairs_id"] = sha256_json(rec["files"])[:16]
     atomic_write_json(out / "pairs.json", rec)
-    log_event("data", "COMPLETED", step="pairs", pairs_id=rec["pairs_id"], **pstats)
+    log_event("data", "COMPLETED", step="pairs", version=version, pairs_id=rec["pairs_id"],
+              **pstats)
     return rec
 
 
