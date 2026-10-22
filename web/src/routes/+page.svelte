@@ -28,6 +28,7 @@
   let regions = $state([]);
   let siteMissing = $state(false);
   let error = $state('');
+  let rowsError = $state(''); // Line or Face match rows; only while that mode is selected
   let notice = $state('');
   let index = $state(-1);
   let card = $state(null);
@@ -76,7 +77,7 @@
   $effect(() => {
     if (busy || !byFace || !card?.has_text || faceRows !== null) return;
     const t = token;
-    getFaces(index).then((rows) => { if (t === token) faceRows = rows; }).catch((e) => { if (t === token) error = e.message; });
+    getFaces(index).then((rows) => { if (t === token) { faceRows = rows; rowsError = ''; } }).catch((e) => { if (t === token && rank === 'face') rowsError = e.message; });
   });
 
   // line-match rows for the shown card, once any selection has settled; this also covers
@@ -84,7 +85,7 @@
   $effect(() => {
     if (busy || !byLine || !card?.has_text || lineRows !== null) return;
     const t = token;
-    getLines(index).then((rows) => { if (t === token) lineRows = rows; }).catch((e) => { if (t === token) error = e.message; });
+    getLines(index).then((rows) => { if (t === token) { lineRows = rows; rowsError = ''; } }).catch((e) => { if (t === token && rank === 'line') rowsError = e.message; });
   });
 
   function updateUrl(push) {
@@ -96,7 +97,7 @@
     const t = ++token;
     busy = true;
     notice = '';
-    error = '';
+    error = ''; rowsError = '';
     compare = null;
     shown = PAGE;
     try {
@@ -146,6 +147,7 @@
   function setRank(value) {
     ability = null;
     rank = value;
+    rowsError = '';
     shown = PAGE;
     updateUrl(true);
   }
@@ -225,7 +227,7 @@
   </section>
 
   <section class="results-pane" class:hidden={tab !== 'results'}>
-    {#if error}<p class="notice" role="alert">Something went wrong loading the card data: {error}</p>{/if}
+    {#if error || rowsError}<p class="notice" role="alert">Something went wrong loading the card data: {error || rowsError}</p>{/if}
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
 
     {#if !card}

@@ -479,3 +479,26 @@ def test_display_fields_reads_only_catalogue_cards(tmp_path):
         display_fields(tmp_path, ["a", "b"], "0" * 64)
     with pytest.raises(ValueError, match="missing"):
         display_fields(tmp_path, ["a", "zz"], msha)
+
+
+@pytest.mark.parametrize("fault", [None, "int", "zero", "long", "nan", "shape", "hash"])
+def test_reuse_faces_accepts_only_unit_float_vectors(tmp_path, monkeypatch, fault):
+    import mtgemb.export as exporter
+
+    monkeypatch.setattr(exporter, "ARTIFACTS", tmp_path)
+    root = tmp_path / "releases" / "src"
+    root.mkdir(parents=True)
+    f = {None: np.array([[1, 0], [0.6, 0.8]], np.float32), "int": np.array([[1, 0], [2, 0]]),
+         "zero": np.array([[1, 0], [0, 0]], np.float32),
+         "long": np.array([[1, 0], [1.2, 1.6]], np.float32),
+         "nan": np.array([[1, 0], [np.nan, 0]], np.float32),
+         "shape": np.array([[1, 0]], np.float32)}.get(fault, np.eye(2, dtype=np.float32))
+    np.save(root / "face_vectors.npy", f)
+    meta = {"face_vectors_sha256": "0" * 64 if fault == "hash" else sha256_file(
+        root / "face_vectors.npy")}
+    if fault is None:
+        assert np.array_equal(exporter._reuse_faces("src", meta, 2, 2), f)
+        assert exporter._reuse_faces("src", {}, 2, 2) is None  # a pre-v6 source
+        return
+    with pytest.raises(ValueError, match="face"):
+        exporter._reuse_faces("src", meta, 2, 2)

@@ -19,7 +19,7 @@ from pathlib import Path
 import numpy as np
 
 from .export import SHARD, topk_neighbours
-from .util import ARTIFACTS, ROOT, RUNS, atomic_write_json
+from .util import ARTIFACTS, ROOT, RUNS, atomic_write_json, sha256_file
 
 DATASET = ROOT / "data" / "processed" / "2026-10-16_no_reminder_v1"
 WEB = ROOT / "web"
@@ -284,6 +284,12 @@ def copy_site_data(release_id: str, source_id: str) -> dict:
         raise FileExistsError(f"{out} exists; site data is never overwritten")
     metas = [_read(ARTIFACTS / "releases" / r / "release_meta.json")
              for r in (release_id, source_id)]
+    # same dataset and ids -> same text cards, i.e. the same card behind each vector row
+    if metas[0]["dataset_id"] != metas[1]["dataset_id"]:
+        raise ValueError("the releases were built from different datasets")
+    for r, m in zip((release_id, source_id), metas, strict=True):
+        if sha256_file(ARTIFACTS / "releases" / r / "vectors.npy") != m["vectors_sha256"]:
+            raise ValueError(f"{r}: vectors.npy does not match its recorded hash")
     if metas[0]["vectors_sha256"] != metas[1]["vectors_sha256"]:
         raise ValueError("the releases have different card vectors")
     if _read(data / release_id / "ids.json") != _read(data / source_id / "ids.json"):

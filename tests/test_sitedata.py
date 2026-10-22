@@ -86,37 +86,52 @@ def test_site_metrics_reads_records(tmp_path, monkeypatch):
 
 
 def test_copy_site_data_needs_identical_vectors_and_cards(tmp_path, monkeypatch):
+    from mtgemb.util import sha256_file
+
     monkeypatch.setattr(sitedata, "ARTIFACTS", tmp_path / "art")
     monkeypatch.setattr(sitedata, "WEB", tmp_path / "web")
     monkeypatch.setattr(sitedata, "write_metrics", lambda: tmp_path / "metrics.json")
     data = tmp_path / "web" / "public" / "data"
 
-    def release(rid, vec_sha, ids):
-        (tmp_path / "art" / "releases" / rid).mkdir(parents=True)
-        (tmp_path / "art" / "releases" / rid / "release_meta.json").write_text(
-            json.dumps({"vectors_sha256": vec_sha, "dataset_id": "ds"}), "utf-8")
+    def release(rid, vec, ids, ds="ds", recorded=None):
+        art = tmp_path / "art" / "releases" / rid
+        art.mkdir(parents=True)
+        np.save(art / "vectors.npy", np.array(vec, np.float32))
+        (art / "release_meta.json").write_text(json.dumps(
+            {"vectors_sha256": recorded or sha256_file(art / "vectors.npy"),
+             "dataset_id": ds}), "utf-8")
         (data / rid).mkdir(parents=True)
         (data / rid / "ids.json").write_text(json.dumps({"ids": ids}), "utf-8")
 
-    release("old", "v1", ["a", "b"])
+    release("old", [[1, 0]], ["a", "b"])
     site = data / "site-old"
     (site / "pretrained").mkdir(parents=True)
-    (site / "map.bin").write_bytes(b"\x01\x02")
+    (site / "map.bin").write_bytes(b"")
     (site / "pretrained" / "000.json").write_text("[[], []]", "utf-8")
     (site / "map.json").write_text(json.dumps({"release_id": "old", "regions": []}), "utf-8")
-    release("new", "v1", ["a", "b"])
+    release("new", [[1, 0]], ["a", "b"])
     sitedata.copy_site_data("new", "old")
     out = data / "site-new"
-    assert (out / "map.bin").read_bytes() == b"\x01\x02"
+    assert (out / "map.bin").read_bytes() == b""
     assert (out / "pretrained" / "000.json").read_text("utf-8") == "[[], []]"
     assert json.loads((out / "map.json").read_text("utf-8")) == {
         "release_id": "new", "regions": [], "copied_from": "old"}
     with pytest.raises(FileExistsError):
         sitedata.copy_site_data("new", "old")
-    release("other-vectors", "v2", ["a", "b"])
+    release("other-vectors", [[0, 1]], ["a", "b"])
     with pytest.raises(ValueError, match="vectors"):
         sitedata.copy_site_data("other-vectors", "old")
-    release("other-cards", "v1", ["b", "a"])
+    release("other-cards", [[1, 0]], ["b", "a"])
     with pytest.raises(ValueError, match="card order"):
         sitedata.copy_site_data("other-cards", "old")
-    assert not (data / "site-other-vectors").exists() and not (data / "site-other-cards").exists()
+    # same vector bytes and ids from another dataset: the text cards (vector rows) may differ
+    release("other-dataset", [[1, 0]], ["a", "b"], ds="ds2")
+    with pytest.raises(ValueError, match="dataset"):
+        sitedata.copy_site_data("other-dataset", "old")
+    # metadata claims the old hash but the file differs
+    old_sha = json.loads((tmp_path / "art" / "releases" / "old" / "release_meta.json")
+                         .read_text("utf-8"))["vectors_sha256"]
+    release("lying-meta", [[0, 1]], ["a", "b"], recorded=old_sha)
+    with pytest.raises(ValueError, match="vectors.npy"):
+        sitedata.copy_site_data("lying-meta", "old")
+    assert [p.name for p in data.glob("site-*")] == ["site-new", "site-old"]

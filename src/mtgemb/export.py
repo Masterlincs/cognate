@@ -266,8 +266,10 @@ def _reuse_faces(release_id: str, meta: dict, n: int, dim: int) -> np.ndarray | 
     if not p.is_file() or sha256_file(p) != meta["face_vectors_sha256"]:
         raise ValueError("source release face_vectors.npy hash mismatch or missing")
     f = np.load(p, allow_pickle=False)
-    if f.shape != (n, dim) or not np.isfinite(f).all():
+    if f.shape != (n, dim) or not np.issubdtype(f.dtype, np.floating) or not np.isfinite(f).all():
         raise ValueError("source release face vectors do not match the catalogue faces")
+    if not np.allclose(np.linalg.norm(f.astype(np.float64), axis=1), 1, atol=1e-3, rtol=0):
+        raise ValueError("source release face vectors are not unit-norm")
     return f
 
 
