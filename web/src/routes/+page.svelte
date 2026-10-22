@@ -158,6 +158,8 @@
   }
 
   const numberOrNull = (v) => (v === '' || v === null || !(Number(v) >= 0) || !Number.isFinite(Number(v)) ? null : Number(v));
+  // a rejected value (e.g. -1) leaves the filter unchanged, so clear it from the box too
+  const setMv = (key, el) => { const v = numberOrNull(el.value); if (v === null) el.value = ''; setFilter(key, v); };
   const byId = (id) => (ids ? resolveSelection(ids, { card: id }).index : -1);
   const pick = (c) => { const i = byId(c.id); if (i >= 0) select(i); };
 
@@ -274,7 +276,7 @@
             <input type="text" class="type" placeholder="Type line has…" aria-label="Type line contains" value={filters.type} onchange={(e) => setFilter('type', e.currentTarget.value)} />
           </div>
           <div class="f"><span class="fl">Mana value</span>
-            <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} onchange={(e) => setFilter('minMv', numberOrNull(e.currentTarget.value))} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} onchange={(e) => setFilter('maxMv', numberOrNull(e.currentTarget.value))} aria-label="Maximum mana value" />
+            <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} onchange={(e) => setMv('minMv', e.currentTarget)} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} onchange={(e) => setMv('maxMv', e.currentTarget)} aria-label="Maximum mana value" />
           </div>
           <div class="f"><span class="fl">View</span><Segmented label="View" options={[{ value: 'list', label: 'List' }, { value: 'grid', label: 'Grid' }]} value={view} onchange={setView} /></div>
           <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; notice = ''; updateUrl(false); }}>Clear filters</button>{:else}Filters narrow the {saved.length} most similar cards; they do not search the whole catalogue.{/if}</p>

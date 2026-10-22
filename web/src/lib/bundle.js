@@ -93,8 +93,10 @@ export function validateRelease(release, names) {
   const shards = Math.ceil(release.n_cards / release.shard_size);
   const v3plus = release.schema !== 'mtgemb-release-v2';
   const v4 = isV4Plus(release);
-  // v4 stores 50 per list; v5 stores k (200) whole-card and line matches
-  const lineK = release.schema === 'mtgemb-release-v5' ? release.k : 50;
+  // v4 stores 50 line matches per list; v5 stores 200 whole-card and line matches
+  const v5 = release.schema === 'mtgemb-release-v5';
+  if (!Number.isInteger(release.k) || release.k < 1 || (v5 && release.k !== 200)) throw new Error('Invalid k in release.json.');
+  const lineK = v5 ? 200 : 50;
   const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: shards }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
   if (release.schema === 'mtgemb-release-v3' && (release.ability_k !== 50 || release.abilities_status !== 'exploratory: not evaluated on the tag proxy')) throw new Error('Invalid ability metadata in release.json.');
   if (v4 && (!Number.isInteger(release.ability_k) || release.ability_k !== 50 || typeof release.abilities_status !== 'string' || !Number.isInteger(release.line_k) || release.line_k !== lineK || typeof release.line_status !== 'string' || typeof release.tags_status !== 'string')) throw new Error('Invalid v4 line or tag metadata in release.json.');

@@ -225,6 +225,11 @@ describe('v5 bundles', () => {
     expect(shard(base, { colors: '', image_back: 'https://cards.scryfall.io/normal/back/x.jpg' })).toBe(true);
   });
   it('rejects a line_k that differs from k', () => expect(() => validateRelease({ ...v5, line_k: 50 })).toThrow(/v4/));
+  it('rejects a k other than 200, even with a matching line_k', () => {
+    expect(() => validateRelease({ ...v5, k: 0, line_k: 0 })).toThrow(/k/);
+    expect(() => validateRelease({ ...v5, k: 50, line_k: 50 })).toThrow(/k/);
+    expect(() => validateRelease({ ...v5, k: undefined })).toThrow(/k/);
+  });
   it('rejects malformed colours or back images', () => {
     expect(() => shard(base, { colors: 'RW' })).toThrow(/malformed/);
     expect(() => shard(base, { colors: undefined })).toThrow(/malformed/);
