@@ -88,6 +88,8 @@ def main(argv: list[str] | None = None) -> None:
     q = sub.add_parser("site-data", help="map, pretrained neighbours and metrics for the site")
     q.add_argument("--release", metavar="ID")
     q.add_argument("--metrics-only", action="store_true")
+    q.add_argument("--copy-from", metavar="ID", help="copy the map of a release with the same "
+                   "card vectors instead of recomputing it")
     q = sub.add_parser("sealed-eval", help="authorised one-shot sealed evaluation")
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("train", help="train or resume a run from a JSON config")
@@ -177,9 +179,11 @@ def main(argv: list[str] | None = None) -> None:
         out = confirmation_report(read_json(bench_path(a.ds))["benchmark_id"],
                                   design=DESIGNS[a.design])
     elif a.cmd == "site-data":
-        from .sitedata import build_site_data, write_metrics
+        from .sitedata import build_site_data, copy_site_data, write_metrics
 
-        out = (str(write_metrics()) if a.metrics_only else build_site_data(a.release))
+        out = (str(write_metrics()) if a.metrics_only else
+               copy_site_data(a.release, a.copy_from) if a.copy_from else
+               build_site_data(a.release))
     elif a.cmd == "sealed-eval":
         from .sealed import sealed_eval
 

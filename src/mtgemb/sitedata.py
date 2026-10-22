@@ -268,3 +268,31 @@ def build_site_data(release_id: str, perplexity: float = 30.0) -> dict:
     atomic_write_json(part / "map.json", info)
     os.replace(part, out)
     return {"site_data": _rel(out), "regions": len(regions), "metrics": _rel(write_metrics())}
+
+
+def copy_site_data(release_id: str, source_id: str) -> dict:
+    """Site data for a release whose card vectors and card order equal an earlier release's
+    (e.g. a re-export with --from-release): the map and pretrained neighbours are copied."""
+    import shutil
+
+    for rid in (release_id, source_id):
+        if not rid or Path(rid).name != rid:
+            raise ValueError("releases must be release IDs")
+    data = WEB / "public" / "data"
+    out, src = data / f"site-{release_id}", data / f"site-{source_id}"
+    if out.exists():
+        raise FileExistsError(f"{out} exists; site data is never overwritten")
+    metas = [_read(ARTIFACTS / "releases" / r / "release_meta.json")
+             for r in (release_id, source_id)]
+    if metas[0]["vectors_sha256"] != metas[1]["vectors_sha256"]:
+        raise ValueError("the releases have different card vectors")
+    if _read(data / release_id / "ids.json") != _read(data / source_id / "ids.json"):
+        raise ValueError("the releases have a different card order")
+    part = out.with_name(out.name + ".partial")
+    if part.exists():
+        shutil.rmtree(part)  # leftover from a failed copy; never published
+    shutil.copytree(src, part)
+    info = {**_read(src / "map.json"), "release_id": release_id, "copied_from": source_id}
+    atomic_write_json(part / "map.json", info)
+    os.replace(part, out)
+    return {"site_data": _rel(out), "copied_from": source_id, "metrics": _rel(write_metrics())}

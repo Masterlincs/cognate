@@ -83,3 +83,40 @@ def test_site_metrics_reads_records(tmp_path, monkeypatch):
     assert m["steps"]["1"] == {"2000": 0.70, "4000": 0.71}
     assert "2" not in m["steps"]
     assert m["data"]["split_counts"]["fit"] == 8
+
+
+def test_copy_site_data_needs_identical_vectors_and_cards(tmp_path, monkeypatch):
+    monkeypatch.setattr(sitedata, "ARTIFACTS", tmp_path / "art")
+    monkeypatch.setattr(sitedata, "WEB", tmp_path / "web")
+    monkeypatch.setattr(sitedata, "write_metrics", lambda: tmp_path / "metrics.json")
+    data = tmp_path / "web" / "public" / "data"
+
+    def release(rid, vec_sha, ids):
+        (tmp_path / "art" / "releases" / rid).mkdir(parents=True)
+        (tmp_path / "art" / "releases" / rid / "release_meta.json").write_text(
+            json.dumps({"vectors_sha256": vec_sha, "dataset_id": "ds"}), "utf-8")
+        (data / rid).mkdir(parents=True)
+        (data / rid / "ids.json").write_text(json.dumps({"ids": ids}), "utf-8")
+
+    release("old", "v1", ["a", "b"])
+    site = data / "site-old"
+    (site / "pretrained").mkdir(parents=True)
+    (site / "map.bin").write_bytes(b"\x01\x02")
+    (site / "pretrained" / "000.json").write_text("[[], []]", "utf-8")
+    (site / "map.json").write_text(json.dumps({"release_id": "old", "regions": []}), "utf-8")
+    release("new", "v1", ["a", "b"])
+    sitedata.copy_site_data("new", "old")
+    out = data / "site-new"
+    assert (out / "map.bin").read_bytes() == b"\x01\x02"
+    assert (out / "pretrained" / "000.json").read_text("utf-8") == "[[], []]"
+    assert json.loads((out / "map.json").read_text("utf-8")) == {
+        "release_id": "new", "regions": [], "copied_from": "old"}
+    with pytest.raises(FileExistsError):
+        sitedata.copy_site_data("new", "old")
+    release("other-vectors", "v2", ["a", "b"])
+    with pytest.raises(ValueError, match="vectors"):
+        sitedata.copy_site_data("other-vectors", "old")
+    release("other-cards", "v1", ["b", "a"])
+    with pytest.raises(ValueError, match="card order"):
+        sitedata.copy_site_data("other-cards", "old")
+    assert not (data / "site-other-vectors").exists() and not (data / "site-other-cards").exists()

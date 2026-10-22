@@ -33,9 +33,10 @@ from .util import (
     sha256_json,
     utcnow,
 )
+from .variants import face_index, face_max
 
-SCHEMA = "mtgemb-release-v5"  # 200 neighbours, card colours, back-face images
-K = 200  # whole-card and line-match neighbours stored per card
+SCHEMA = "mtgemb-release-v6"  # v5 plus face-match neighbours
+K = 200  # whole-card, line-match and face-match neighbours stored per card
 ABILITY_K = 50
 WUBRG = "WUBRG"
 SHARD = 256
@@ -82,11 +83,15 @@ def display_fields(raw_dir: Path, ids: list[str], manifest_sha256: str) -> dict[
     return out
 
 
-def topk_neighbours(v: np.ndarray, k: int = K, block: int = 512) -> tuple[np.ndarray, np.ndarray]:
+def topk_neighbours(v: np.ndarray, k: int = K, block: int = 512,
+                    faces: tuple[np.ndarray, np.ndarray] | None = None
+                    ) -> tuple[np.ndarray, np.ndarray]:
     """Exact top-k by cosine for unit rows, excluding self; ties -> lower row index.
 
     Rows must be in Oracle ID order so the index tie-break is the Oracle ID tie-break.
-    Scores a (block, n) slab at a time; never builds the n x n matrix.
+    Scores a (block, n) slab at a time; never builds the n x n matrix. faces=(F, owner)
+    scores face match: a candidate scores its best of whole card and own faces
+    against the query's whole-card vector.
     """
     n = len(v)
     k = min(k, n - 1)
@@ -94,7 +99,8 @@ def topk_neighbours(v: np.ndarray, k: int = K, block: int = 512) -> tuple[np.nda
     sco = np.empty((n, k), dtype=np.float32)
     for s in range(0, n, block):
         e = min(n, s + block)
-        sc = v[s:e] @ v.T
+        sc = v[s:e] @ v.T if faces is None else face_max(v, *faces, np.arange(s, e),
+                                                          query_faces=False)
         sc[np.arange(e - s), np.arange(s, e)] = -np.inf
         order = np.argsort(-sc, axis=1, kind="stable")[:, :k]
         idx[s:e] = order
@@ -102,8 +108,10 @@ def topk_neighbours(v: np.ndarray, k: int = K, block: int = 512) -> tuple[np.nda
     return idx, sco
 
 
-def reference_check(v: np.ndarray, nidx: np.ndarray, rows: np.ndarray, atol: float = 1e-6):
-    """Tie-aware check of the block top-k against an independent float64 full sort.
+def reference_check(v: np.ndarray, nidx: np.ndarray, rows: np.ndarray, atol: float = 1e-6,
+                    faces: tuple[np.ndarray, np.ndarray] | None = None):
+    """Tie-aware check of the block top-k against an independent float64 full sort
+    (face match when faces=(F, owner) is given).
 
     Passes a row when the float64 scores of the block's picks equal the true top-k scores
     within atol (float32 near-ties may swap order). Returns (reference lists, failures,
@@ -114,6 +122,8 @@ def reference_check(v: np.ndarray, nidx: np.ndarray, rows: np.ndarray, atol: flo
     ref, bad, exact = {}, [], 0
     for r in rows:
         sc = v64 @ v64[r]
+        if faces is not None:
+            np.maximum.at(sc, faces[1], faces[0].astype(np.float64) @ v64[r])
         sc[r] = -np.inf
         order = np.lexsort((np.arange(len(v)), -sc))[:k]
         ref[int(r)] = order.tolist()
@@ -150,13 +160,16 @@ def ranking_parity(q: np.ndarray, v: np.ndarray, rows: np.ndarray, nidx: np.ndar
 def release_digest(dataset_id: str, ids: list[str], encoder: dict, model_hash: str,
                    vec_hash: str, schema: str = SCHEMA,
                    ability_vec_hash: str | None = None,
-                   line_hash: str | None = None, tags_hash: str | None = None) -> str:
+                   line_hash: str | None = None, tags_hash: str | None = None,
+                   face_hash: str | None = None) -> str:
     """Everything that defines a release's content and layout; same inputs -> same id."""
     content = [schema, dataset_id, sha256_json(ids), encoder, model_hash, vec_hash]
     if ability_vec_hash is not None:
         content.append(ability_vec_hash)
     if line_hash is not None or tags_hash is not None:
         content.extend([line_hash, tags_hash])
+    if face_hash is not None:
+        content.append(face_hash)
     return sha256_json(content)[:8]
 
 
@@ -243,6 +256,19 @@ def _reuse_vectors(release_id: str, dataset_id: str, model_hash: str, encoder: d
                            atol=1e-3, rtol=0):
             raise ValueError("source release vectors are not unit-norm")
     return v, lv, meta
+
+
+def _reuse_faces(release_id: str, meta: dict, n: int, dim: int) -> np.ndarray | None:
+    """A source release's face vectors, or None when it has none (pre-v6 releases)."""
+    if "face_vectors_sha256" not in meta:
+        return None
+    p = ARTIFACTS / "releases" / release_id / "face_vectors.npy"
+    if not p.is_file() or sha256_file(p) != meta["face_vectors_sha256"]:
+        raise ValueError("source release face_vectors.npy hash mismatch or missing")
+    f = np.load(p, allow_pickle=False)
+    if f.shape != (n, dim) or not np.isfinite(f).all():
+        raise ValueError("source release face vectors do not match the catalogue faces")
+    return f
 
 
 def finish_interrupted(final_out: Path, art: Path, final_art: Path) -> None:
@@ -334,7 +360,17 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
         cos = (cpu * v[probe]).sum(1)
         if cos.min() < 0.9999:
             raise ValueError(f"device/CPU parity failed: min cosine {cos.min():.6f}")
+    # face match: faces are short and few, so they are always encoded on the CPU
+    face_texts, face_owner = face_index(texts)
+    F = None if source_meta is None else _reuse_faces(from_release, source_meta,
+                                                      len(face_texts), v.shape[1])
+    if F is None:
+        if source_meta is not None:
+            tok, model = enc.load(recipe, model_path)
+        model.to(torch.device("cpu"))
+        F = enc.encode(model, tok, face_texts, recipe, max_length, dev=torch.device("cpu"))
     nidx, nsco = topk_neighbours(v)
+    fidx, fsco = topk_neighbours(v, faces=(F, face_owner))
     if source_meta is None:
         overlap = ranking_parity(cpu, v, probe, nidx)
         if overlap.mean() < 0.98:
@@ -343,6 +379,9 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     ref, bad, exact = reference_check(v, nidx, ref_rows)
     if bad:
         raise ValueError(f"block top-k disagrees with float64 reference on rows {bad[:5]}")
+    _, fbad, fexact = reference_check(v, fidx, ref_rows, faces=(F, face_owner))
+    if fbad:
+        raise ValueError(f"face top-k disagrees with float64 reference on rows {fbad[:5]}")
 
     vec_hash = hashlib.sha256(v.tobytes()).hexdigest()
     ability_vec_hash = hashlib.sha256(ability["vectors"].tobytes()).hexdigest()
@@ -355,7 +394,7 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     release_id = f"{snapshot}-{backbone}-" + release_digest(
         ds["ident"]["dataset_id"], cards["oracle_id"].tolist(), encoder_meta, model_hash,
         vec_hash, ability_vec_hash=ability_vec_hash, line_hash=line_hash,
-        tags_hash=sha256_json(tags))
+        tags_hash=sha256_json(tags), face_hash=hashlib.sha256(F.tobytes()).hexdigest())
     web = Path(web_dir or ROOT / "web" / "public")
     final_out = web / "data" / release_id
     final_art = ARTIFACTS / "releases" / release_id
@@ -376,10 +415,12 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     (out / "neighbours").mkdir(parents=True)
     (out / "abilities").mkdir(parents=True)
     (out / "lines").mkdir(parents=True)
+    (out / "faces").mkdir(parents=True)
     art.mkdir(parents=True)
 
     neigh: list[list] = [[] for _ in range(len(cards))]
     line_rows: list[list] = [[] for _ in range(len(cards))]
+    face_rows: list[list] = [[] for _ in range(len(cards))]
     card_tags: list[list] = [[] for _ in range(len(cards))]
     ability_rows: list[list] = [[] for _ in range(len(cards))]
     for r, ci in enumerate(ti):  # text-subset row r is catalogue card ci
@@ -387,6 +428,8 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
                                                                       strict=True)]
         line_rows[ci] = [[int(ti[j]), round(float(score), 4)]
                          for j, score in zip(lidx[r], lsco[r], strict=True)]
+        face_rows[ci] = [[int(ti[j]), round(float(s), 4)] for j, s in zip(fidx[r], fsco[r],
+                                                                          strict=True)]
         card_tags[ci] = tags["card"][r]
         ability_rows[ci] = [{"text": a["text"], "tags": tags["lines"][r][k], "neighbours": [
             [int(ti[j]), score] for j, score in a["neighbours"]]} for k, a in
@@ -418,12 +461,15 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
         files[f"cards/{nn}"] = _dump(out / "cards" / nn, recs[s:s + SHARD])
         files[f"neighbours/{nn}"] = _dump(out / "neighbours" / nn, neigh[s:s + SHARD])
         files[f"lines/{nn}"] = _dump(out / "lines" / nn, line_rows[s:s + SHARD])
+        files[f"faces/{nn}"] = _dump(out / "faces" / nn, face_rows[s:s + SHARD])
         files[f"abilities/{nn}"] = _dump(out / "abilities" / nn, ability_rows[s:s + SHARD])
     meta_model = model_meta(label, status, recipe, run_id, decision)
     release = {"schema": SCHEMA, "release_id": release_id, "fixture": False,
                "snapshot_date": snapshot, "created_utc": utcnow(), "model": meta_model,
                "n_cards": len(cards), "k": K, "shard_size": SHARD, "files": files,
-               "ability_k": ABILITY_K, "line_k": K,
+               "ability_k": ABILITY_K, "line_k": K, "face_k": K,
+               "face_status": "exploratory: face match; about level with the whole-card "
+                              "ranking on the dev tag proxy",
                "line_status": "exploratory: line match; below the whole-card ranking on the "
                               "dev tag proxy",
                "tags_status": "exploratory: per-line tags by nearest one-line-card centroid",
@@ -433,6 +479,7 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
 
     np.save(art / "vectors.npy", v)
     np.save(art / "ability_vectors.npy", ability["vectors"])
+    np.save(art / "face_vectors.npy", F)
     atomic_write_json(art / "ability_lines.json", [
         {"text": line, "oracle_id": cards.loc[ti[own], "oracle_id"]}
         for line, own in zip(ability["lines"], ability["owner"], strict=True)])
@@ -444,6 +491,10 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
             "n_cards": len(cards), "n_with_text": int(len(ti)),
             "ability_vectors_sha256": sha256_file(art / "ability_vectors.npy"),
             "ability_lines_sha256": sha256_file(art / "ability_lines.json"),
+            "face_vectors_sha256": sha256_file(art / "face_vectors.npy"),
+            "n_faces": len(face_texts), "face_rows": "face texts of catalogue text cards with "
+            "two or more non-empty faces, in card then face order, CPU-encoded",
+            "face_topk_reference_exact_lists": fexact,
             "n_ability_lines": len(ability["lines"]), "n_ability_queries": ability["n_queries"],
             "ability_parity": source_meta["ability_parity"] if source_meta is not None else
                               {"device": str(dev), **ability["parity"]},

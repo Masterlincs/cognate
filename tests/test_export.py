@@ -32,6 +32,24 @@ def test_topk_excludes_self_breaks_ties_by_index_and_blocks_agree():
     assert bad == [] and exact == 20
 
 
+def test_face_topk_scores_candidates_by_their_best_face():
+    # card 1 is creature // bolt; its whole vector is diluted, its bolt face is not
+    v = np.array([[1, 0], [0.6, 0.8], [0, 1], [0.8, 0.6]], dtype=np.float32)
+    F = np.array([[0, 1], [1, 0]], dtype=np.float32)  # card 1's faces
+    owner = np.array([1, 1])
+    whole, _ = topk_neighbours(v, k=3)
+    assert whole[0].tolist() == [3, 1, 2]
+    idx, sco = topk_neighbours(v, k=3, block=1, faces=(F, owner))
+    assert idx[0].tolist() == [1, 3, 2] and np.allclose(sco[0], [1.0, 0.8, 0.0])
+    # the query keeps its whole vector: card 1 ranks as [0.6, 0.8] does
+    assert idx[1].tolist() == [3, 2, 0] and np.allclose(sco[1], [0.96, 0.8, 0.6])
+    assert idx[2].tolist() == [1, 3, 0]  # card 1's creature face matches card 2 exactly
+    _, bad, exact = reference_check(v, idx, np.arange(4), faces=(F, owner))
+    assert bad == [] and exact == 4
+    _, bad, _ = reference_check(v, whole, np.arange(4), faces=(F, owner))
+    assert bad == [0]  # card 0's whole-card list is wrong under face match (card 2's is the same)
+
+
 def test_ranking_parity_counts_top10_overlap():
     v = np.random.default_rng(1).normal(size=(40, 6)).astype(np.float32)
     v /= np.linalg.norm(v, axis=1, keepdims=True)
@@ -176,8 +194,9 @@ def test_export_v5_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
 
     bundle, art = Path(result["bundle"]), Path(result["artifacts"])
     release = json.loads((bundle / "release.json").read_text("utf-8"))
-    assert release["schema"] == "mtgemb-release-v5" and release["ability_k"] == 50
-    assert release["k"] == release["line_k"] == 200
+    assert release["schema"] == "mtgemb-release-v6" and release["ability_k"] == 50
+    assert release["k"] == release["line_k"] == release["face_k"] == 200
+    assert release["face_status"].endswith("")
     assert release["abilities_status"] == "exploratory: not evaluated on the tag proxy"
     expected = [[], [{"text": "A", "tags": [1], "neighbours": [[4, 1.0], [5, 1.0], [3, 0.6]]},
                      {"text": "B", "tags": [], "neighbours": [[3, 0.8], [4, 0.0], [5, 0.0]]}],
@@ -226,6 +245,20 @@ def test_export_v5_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
     assert all(i != j for i, row in enumerate(line_rows) for j, _ in row)
     assert all(row == sorted(row, key=lambda x: -x[1]) for row in line_rows)
     assert release["files"]["tags.json"]["sha256"] == sha256_file(bundle / "tags.json")
+    face_rows, whole_rows = [], []
+    for i in range(3):
+        name = f"faces/{i:03d}.json"
+        face_rows += json.loads((bundle / name).read_text("utf-8"))
+        whole_rows += json.loads((bundle / f"neighbours/{i:03d}.json").read_text("utf-8"))
+        assert release["files"][name]["sha256"] == sha256_file(bundle / name)
+    # card 3 (C, [0.6, 0.8]) meets card 1's face B ([0, 1]) at 0.8; whole card 1 is 0.6
+    assert whole_rows[3] == [[1, 0.6], [4, 0.6], [5, 0.6]]
+    assert face_rows[3] == [[1, 0.8], [4, 0.6], [5, 0.6]]
+    assert face_rows[1] == whole_rows[1] == [[4, 1.0], [5, 1.0], [3, 0.6]]
+    assert face_rows[0] == face_rows[2] == []
+    assert np.array_equal(np.load(art / "face_vectors.npy"), np.array([[1, 0], [0, 1]], np.float32))
+    assert meta["n_faces"] == 2 and meta["face_vectors_sha256"] == sha256_file(
+        art / "face_vectors.npy")
 
     # Reuse a v3-shaped source with the exact pinned vectors; encoding must never run.
     import shutil
@@ -256,6 +289,24 @@ def test_export_v5_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="vectors.npy hash mismatch"):
         exporter.export("unused", "e5-base-v2", 94, "fake", "experimental",
                         from_release="source-v3")
+
+    # A pre-v6 source has no face vectors: only the face texts are encoded, on the CPU.
+    old = tmp_path / "reuse5-art" / "releases" / "source-v5"
+    shutil.copytree(art, old)
+    monkeypatch.setattr(exporter, "ARTIFACTS", tmp_path / "reuse5-art")
+    (old / "face_vectors.npy").unlink()
+    old_meta = json.loads((old / "release_meta.json").read_text("utf-8"))
+    del old_meta["face_vectors_sha256"]
+    (old / "release_meta.json").write_text(json.dumps(old_meta), "utf-8")
+    encoded = []
+    monkeypatch.setattr(exporter.enc, "load", lambda *a: (None, torch.nn.Identity()))
+    monkeypatch.setattr(exporter.enc, "encode", lambda model, tok, lines, *a, dev, **kw: (
+        encoded.append((lines, dev.type)) or np.array([vectors[t] for t in lines], np.float32)))
+    v5 = Path(exporter.export("unused", "e5-base-v2", 94, "fake", "experimental",
+                              web_dir=tmp_path / "reuse5", from_release="source-v5")["bundle"])
+    assert encoded == [(["A", "B"], "cpu")]
+    assert [json.loads((v5 / f"faces/{i:03d}.json").read_text("utf-8")) for i in range(3)] == [
+        face_rows[s:s + 2] for s in (0, 2, 4)]
 
 
 @pytest.mark.parametrize("fault", [None, "dataset_id", "model_hash", "recipe", "max_length",

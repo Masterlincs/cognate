@@ -14,7 +14,6 @@ import torch
 
 from . import encoder as enc
 from .evaluate import Benchmark, bench_path, cohort_summary, evaluate, load_benchmark
-from .export import K
 from .lexical import LEXICAL_RECIPE, fit_vectorizer
 from .train import DeviceLock
 from .util import (
@@ -29,6 +28,7 @@ from .util import (
     utcnow,
 )
 
+V4_K = 50  # v4 bundles store 50 line and ability matches; export.K grew to 200 in v5
 CLAIM_SCOPE = {"dev": "tag-proxy relevance on selection-exposed development anchors",
                "sealed": "tag-proxy relevance on sealed anchors (authorised final evaluation)"}
 COS_MIN = 0.9999  # sealed re-encoding must reproduce the frozen dev vectors
@@ -262,8 +262,8 @@ def _check_v4_shards(bundle: Path, man: dict, n: int) -> list[str]:
         if not isinstance(labels, list) or not all(isinstance(t, str) for t in labels):
             raise ValueError("invalid tag labels")
         ss, k = man["shard_size"], man["line_k"]
-        if (type(ss) is not int or ss <= 0 or type(k) is not int or k != K or
-                type(man.get("ability_k")) is not int or man["ability_k"] != K):
+        if (type(ss) is not int or ss <= 0 or type(k) is not int or k != V4_K or
+                type(man.get("ability_k")) is not int or man["ability_k"] != V4_K):
             raise ValueError("invalid line_k, ability_k or shard_size")
         for key in ("line_status", "tags_status", "abilities_status"):
             if not isinstance(man.get(key), str) or not man[key].startswith("exploratory"):
