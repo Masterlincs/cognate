@@ -51,7 +51,7 @@ export function parseUrl(search) {
   const dropped = [];
   const given = (key) => params.get(key) !== null && params.get(key) !== '';
   const bad = (key, fallback) => { dropped.push(key); return fallback; };
-  const num = (key) => !given(key) ? null : Number.isFinite(Number(params.get(key))) ? Number(params.get(key)) : bad(key, null);
+  const num = (key) => !given(key) ? null : Number(params.get(key)) >= 0 && Number.isFinite(Number(params.get(key))) ? Number(params.get(key)) : bad(key, null);
   const oneOf = (key, allowed, fallback = '') => !given(key) ? fallback : allowed.includes(params.get(key)) ? params.get(key) : bad(key, fallback);
   const raw = (params.get('color') ?? '').toUpperCase();
   const color = !raw ? '' : raw === 'C' ? 'C' : /^[WUBRG]+$/.test(raw) && new Set(raw).size === raw.length ? [...'WUBRG'].filter((c) => raw.includes(c)).join('') : bad('color', '');

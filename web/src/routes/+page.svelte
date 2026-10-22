@@ -121,7 +121,7 @@
     else if (r.index < 0) clear();
     else select(r.index, { push: false, abilityIndex: state.ability });
     // select() clears the notice before its first await, so these land after it
-    const dropped = state.dropped.length ? `This link has a value the explorer does not recognise for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}, so that filter is off.` : '';
+    const dropped = state.dropped.length ? `This link has a value the explorer does not recognise for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}, so ${state.dropped.length > 1 ? 'those filters are' : 'that filter is'} off.` : '';
     notice = [r.unknown ? 'That link points to a card that is not in this release.' : '', dropped].filter(Boolean).join(' ');
   }
 
@@ -139,8 +139,10 @@
     updateUrl(true);
   }
 
+  // a filter change replaces any link-repair message, which would otherwise describe the old filters
   function setFilter(key, value) {
     filters = { ...filters, [key]: value };
+    notice = '';
     updateUrl(false);
   }
 
@@ -151,10 +153,11 @@
 
   function setColour(color, colorMode, colorBy) {
     filters = { ...filters, color, colorMode, colorBy };
+    notice = '';
     updateUrl(false);
   }
 
-  const numberOrNull = (v) => (v === '' || v === null || !Number.isFinite(Number(v)) ? null : Number(v));
+  const numberOrNull = (v) => (v === '' || v === null || !(Number(v) >= 0) || !Number.isFinite(Number(v)) ? null : Number(v));
   const byId = (id) => (ids ? resolveSelection(ids, { card: id }).index : -1);
   const pick = (c) => { const i = byId(c.id); if (i >= 0) select(i); };
 
@@ -274,7 +277,7 @@
             <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} onchange={(e) => setFilter('minMv', numberOrNull(e.currentTarget.value))} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} onchange={(e) => setFilter('maxMv', numberOrNull(e.currentTarget.value))} aria-label="Maximum mana value" />
           </div>
           <div class="f"><span class="fl">View</span><Segmented label="View" options={[{ value: 'list', label: 'List' }, { value: 'grid', label: 'Grid' }]} value={view} onchange={setView} /></div>
-          <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; updateUrl(false); }}>Clear filters</button>{:else}Filters narrow the {saved.length} most similar cards; they do not search the whole catalogue.{/if}</p>
+          <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; notice = ''; updateUrl(false); }}>Clear filters</button>{:else}Filters narrow the {saved.length} most similar cards; they do not search the whole catalogue.{/if}</p>
         </div>
 
         <ol class="results" class:grid={view === 'grid'} aria-busy={busy || pending}>

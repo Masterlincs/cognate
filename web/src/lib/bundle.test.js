@@ -183,6 +183,8 @@ describe('colour URL state', () => {
     expect(parseUrl('?color=WW&cm=sideways&min=abc&creature=maybe').dropped).toEqual(['color', 'cm', 'min', 'creature']);
     expect(parseUrl('?color=CW').dropped).toEqual(['color']);
     expect(parseUrl('?min=&type=elf').dropped).toEqual([]);
+    // a negative bound hides every card, so it is rejected like any other bad value
+    expect(parseUrl('?min=0&max=-1')).toMatchObject({ minMv: 0, maxMv: null, dropped: ['max'] });
   });
 });
 

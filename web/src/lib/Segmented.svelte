@@ -16,4 +16,6 @@
   button:hover { color: var(--ink); }
   button[aria-pressed='true'] { background: var(--ink); color: var(--bg); }
   button:focus-visible { outline-offset: -2px; }
+  /* the accent ring vanishes on the pressed button's ink fill; use the page colour there */
+  button[aria-pressed='true']:focus-visible { outline-color: var(--bg); outline-offset: -4px; }
 </style>

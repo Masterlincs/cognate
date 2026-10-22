@@ -34,7 +34,7 @@
   .colour { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .pips { display: flex; gap: 2px; }
   button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%; background: none; font-size: 1.15rem; }
-  button .ms { opacity: 0.5; filter: grayscale(0.6); transition: opacity 0.12s; }
-  button:hover .ms { opacity: 0.8; }
-  button[aria-pressed='true'] .ms { opacity: 1; filter: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink); }
+  /* glyphs stay full colour for contrast; the ring alone marks a picked colour */
+  button:hover .ms { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--line); }
+  button[aria-pressed='true'] .ms { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ink); }
 </style>
