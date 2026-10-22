@@ -4,21 +4,22 @@
   import { afterNavigate, pushState, replaceState } from '$app/navigation';
   import AtlasMap from '#lib/AtlasMap.svelte';
   import CardText from '#lib/CardText.svelte';
+  import CardGridItem from '#lib/CardGridItem.svelte';
   import CardTile from '#lib/CardTile.svelte';
   import ColourFilter from '#lib/ColourFilter.svelte';
   import Compare from '#lib/Compare.svelte';
   import Rules from '#lib/Rules.svelte';
   import Search from '#lib/Search.svelte';
   import Segmented from '#lib/Segmented.svelte';
-  import { parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
+  import { isV4Plus, parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
   import { getAbilities, getCard, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
   import { activeFilters, hasMore, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
   import { decodeMap, regionLabel } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
 
   const PAGE = 12;
-  const NO_FILTERS = { color: '', colorMode: 'include', minMv: null, maxMv: null, creature: '', type: '' };
-  const PARAM_NAMES = { color: 'colour', cm: 'colour match', min: 'minimum mana value', max: 'maximum mana value', creature: 'creatures' };
+  const NO_FILTERS = { color: '', colorMode: 'include', colorBy: 'identity', minMv: null, maxMv: null, creature: '', type: '' };
+  const PARAM_NAMES = { color: 'colour', cm: 'colour match', cb: 'colour or identity', min: 'minimum mana value', max: 'maximum mana value', creature: 'creatures' };
   let release = $state(null);
   let names = $state(null);
   let ids = null;
@@ -41,10 +42,12 @@
   let byIndex = $state({});
   let compare = $state(null);
   let tab = $state('results');
+  let view = $state('list');
   let busy = $state(false);
   let token = 0;
 
-  const hasLines = $derived(release?.schema === 'mtgemb-release-v4');
+  const hasLines = $derived(isV4Plus(release));
+  const hasColours = $derived(release?.schema === 'mtgemb-release-v5');
   const byLine = $derived(ability === null && rank === 'line');
   const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, abilities }));
   const filtering = $derived(activeFilters(filters));
@@ -75,7 +78,7 @@
   });
 
   function updateUrl(push) {
-    const qs = serializeUrl({ card: card?.id ?? '', ability, rank, ...filters });
+    const qs = serializeUrl({ card: card?.id ?? '', ability, rank, view, ...filters });
     (push ? pushState : replaceState)(qs ? `?${qs}` : location.pathname, {});
   }
 
@@ -110,8 +113,9 @@
   }
 
   function apply(state) {
-    filters = { color: state.color, colorMode: state.colorMode, minMv: state.minMv, maxMv: state.maxMv, creature: state.creature, type: state.type };
+    filters = { color: state.color, colorMode: state.colorMode, colorBy: hasColours ? state.colorBy : 'identity', minMv: state.minMv, maxMv: state.maxMv, creature: state.creature, type: state.type };
     rank = hasLines ? state.rank : 'whole';
+    view = state.view;
     const r = resolveSelection(ids, state);
     if (r.unknown) clear();
     else if (r.index < 0) clear();
@@ -140,8 +144,13 @@
     updateUrl(false);
   }
 
-  function setColour(color, colorMode) {
-    filters = { ...filters, color, colorMode };
+  function setView(value) {
+    view = value;
+    updateUrl(false);
+  }
+
+  function setColour(color, colorMode, colorBy) {
+    filters = { ...filters, color, colorMode, colorBy };
     updateUrl(false);
   }
 
@@ -256,7 +265,7 @@
         </div>
 
         <div class="filters" role="group" aria-label="Filter results">
-          <div class="f"><span class="fl">Colour</span><ColourFilter color={filters.color} mode={filters.colorMode} onchange={setColour} /></div>
+          <div class="f"><span class="fl">Colour</span><ColourFilter color={filters.color} mode={filters.colorMode} basis={filters.colorBy} showBasis={hasColours} onchange={setColour} /></div>
           <div class="f"><span class="fl">Type</span>
             <Segmented label="Creatures" options={[{ value: '', label: 'Any' }, { value: 'creature', label: 'Creatures' }, { value: 'noncreature', label: 'Non-creatures' }]} value={filters.creature} onchange={(v) => setFilter('creature', v)} />
             <input type="text" class="type" placeholder="Type line has…" aria-label="Type line contains" value={filters.type} onchange={(e) => setFilter('type', e.currentTarget.value)} />
@@ -264,12 +273,14 @@
           <div class="f"><span class="fl">Mana value</span>
             <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} onchange={(e) => setFilter('minMv', numberOrNull(e.currentTarget.value))} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} onchange={(e) => setFilter('maxMv', numberOrNull(e.currentTarget.value))} aria-label="Maximum mana value" />
           </div>
+          <div class="f"><span class="fl">View</span><Segmented label="View" options={[{ value: 'list', label: 'List' }, { value: 'grid', label: 'Grid' }]} value={view} onchange={setView} /></div>
           <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; updateUrl(false); }}>Clear filters</button>{:else}Filters narrow the {saved.length} most similar cards; they do not search the whole catalogue.{/if}</p>
         </div>
 
-        <ol class="results" aria-busy={busy || pending}>
+        <ol class="results" class:grid={view === 'grid'} aria-busy={busy || pending}>
           {#each pageRows as [i, score], r (i)}
-            <li><CardTile card={byIndex[i]} {score} rank={r + 1} oncompare={(c) => (compare = { card: c, score })} onselect={() => select(i)} /></li>
+            {@const Item = view === 'grid' ? CardGridItem : CardTile}
+            <li><Item card={byIndex[i]} {score} rank={r + 1} oncompare={(c) => (compare = { card: c, score })} onselect={() => select(i)} /></li>
           {/each}
           {#if pending}{#each { length: Math.max(0, Math.min(shown, saved.length) - pageRows.length) } as _, k (k)}<li class="ghost" aria-hidden="true"></li>{/each}{/if}
         </ol>
@@ -325,6 +336,9 @@
   .linkish { padding: 0; border: 0; background: none; font-size: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 0.2em; }
   .results { margin: 0; padding: 0; list-style: none; }
   .results > li { display: grid; min-width: 0; border-bottom: 1px solid var(--line); }
+  .results.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 22px 16px; padding-top: 14px; }
+  .results.grid > li { border-bottom: 0; }
+  .results.grid .ghost { min-height: 0; aspect-ratio: 488 / 680; margin: 0; }
   .ghost { min-height: 120px; margin: 8px 0; border-radius: var(--radius); background: var(--sunken); }
   .more { margin: 18px auto 0; display: flex; }
   .model-note { font-size: 0.8rem; margin-top: 22px; }

@@ -30,7 +30,7 @@ describe('search and ranking helpers', () => {
 describe('URL state', () => {
   it('round trips card and filters', () => {
     const state = { card: 'oracle-123', color: 'G', minMv: 2, maxMv: null, creature: 'creature', type: 'human' };
-    expect(parseUrl(`?${serializeUrl(state)}`)).toEqual({ ...state, colorMode: 'include', ability: null, rank: 'whole', maxMv: null, dropped: [] });
+    expect(parseUrl(`?${serializeUrl(state)}`)).toEqual({ ...state, colorMode: 'include', colorBy: 'identity', view: 'list', ability: null, rank: 'whole', maxMv: null, dropped: [] });
   });
   it('round trips an ability index and falls back to Whole card for invalid indexes', () => {
     const state = { card: 'oracle-123', ability: 1, color: '', minMv: null, maxMv: null, creature: '', type: '' };
@@ -183,5 +183,49 @@ describe('colour URL state', () => {
     expect(parseUrl('?color=WW&cm=sideways&min=abc&creature=maybe').dropped).toEqual(['color', 'cm', 'min', 'creature']);
     expect(parseUrl('?color=CW').dropped).toEqual(['color']);
     expect(parseUrl('?min=&type=elf').dropped).toEqual([]);
+  });
+});
+
+describe('colour or colour identity', () => {
+  // a red card with a white symbol in its text, a devoid (colourless) red card, an old-bundle card without colours
+  const cards = [{ color_identity: 'WR', colors: 'R' }, { color_identity: 'R', colors: '' }, { color_identity: 'G' }].map((c) => ({ mv: 1, type_line: '', is_creature: false, ...c }));
+  const run = (f) => filterNeighbours(cards.map((_, i) => [i, 1]), (i) => cards[i], f).map(([i]) => i);
+  it('identity is the default basis', () => expect(run({ color: 'W' })).toEqual([0]));
+  it('colour uses the printed colours', () => {
+    expect(run({ color: 'W', colorBy: 'color' })).toEqual([]);
+    expect(run({ color: 'R', colorBy: 'color', colorMode: 'exact' })).toEqual([0]);
+    expect(run({ color: 'C', colorBy: 'color' })).toEqual([1]);
+  });
+  it('falls back to identity for a card without colours', () => expect(run({ color: 'G', colorBy: 'color' })).toEqual([2]));
+  it('round trips the basis and the view, omitting defaults', () => {
+    const s = parseUrl('?color=W&cb=color&view=grid');
+    expect(s).toMatchObject({ color: 'W', colorBy: 'color', view: 'grid', dropped: [] });
+    expect(serializeUrl(s)).toBe('color=W&cb=color&view=grid');
+    expect(serializeUrl({ color: 'W', colorBy: 'identity', view: 'list' })).toBe('color=W');
+    expect(serializeUrl({ colorBy: 'color' })).toBe('');
+  });
+  it('drops a bad basis and ignores a bad view', () => {
+    expect(parseUrl('?color=W&cb=paint&view=wall')).toMatchObject({ colorBy: 'identity', view: 'list', dropped: ['cb'] });
+  });
+});
+
+describe('v5 bundles', () => {
+  const files = ['names.json', 'ids.json', 'tags.json', 'cards/000.json', 'neighbours/000.json', 'abilities/000.json', 'lines/000.json'];
+  const v5 = {
+    schema: 'mtgemb-release-v5', n_cards: 2, shard_size: 2, k: 200, ability_k: 50,
+    abilities_status: 'exploratory', line_k: 200, line_status: 'exploratory', tags_status: 'proxy',
+    files: Object.fromEntries(files.map((file) => [file, { sha256: 'a'.repeat(64), bytes: 1 }]))
+  };
+  const base = { id: 'a', faces: [{ oracle_text: 'Draw a card.' }], color_identity: 'U', mv: 1, type_line: 'Instant', is_creature: false, has_text: true, tags: [], colors: 'U', image_back: null };
+  const shard = (a, b) => validateShard([a, { ...base, id: 'b', ...b }], [[], []], v5, 0, ['a', 'b'], undefined, [[], []], { labels: ['x'] });
+  it('accepts k and line_k of 200 with colours and back images', () => {
+    expect(validateRelease(v5, { names: ['A', 'B'], aliases: [] })).toBe(true);
+    expect(shard(base, { colors: '', image_back: 'https://cards.scryfall.io/normal/back/x.jpg' })).toBe(true);
+  });
+  it('rejects a line_k that differs from k', () => expect(() => validateRelease({ ...v5, line_k: 50 })).toThrow(/v4/));
+  it('rejects malformed colours or back images', () => {
+    expect(() => shard(base, { colors: 'RW' })).toThrow(/malformed/);
+    expect(() => shard(base, { colors: undefined })).toThrow(/malformed/);
+    expect(() => shard(base, { image_back: 3 })).toThrow(/malformed/);
   });
 });

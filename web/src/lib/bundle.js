@@ -33,7 +33,9 @@ export function filterNeighbours(entries, cardByIndex, filters) {
   return entries.filter(([index]) => {
     const card = cardByIndex(index);
     if (!card) return false;
-    if (filters.color && !colourMatch(card.color_identity, filters.color, filters.colorMode)) return false;
+    // colour identity by default; printed colours when asked and the bundle has them (v5)
+    const colours = filters.colorBy === 'color' && typeof card.colors === 'string' ? card.colors : card.color_identity;
+    if (filters.color && !colourMatch(colours, filters.color, filters.colorMode)) return false;
     if (Number.isFinite(filters.minMv) && card.mv < filters.minMv) return false;
     if (Number.isFinite(filters.maxMv) && card.mv > filters.maxMv) return false;
     if (query && !normalize(card.type_line).includes(query)) return false;
@@ -54,9 +56,10 @@ export function parseUrl(search) {
   const raw = (params.get('color') ?? '').toUpperCase();
   const color = !raw ? '' : raw === 'C' ? 'C' : /^[WUBRG]+$/.test(raw) && new Set(raw).size === raw.length ? [...'WUBRG'].filter((c) => raw.includes(c)).join('') : bad('color', '');
   const colorMode = oneOf('cm', ['include', 'exact', 'within'], 'include');
+  const colorBy = oneOf('cb', ['identity', 'color'], 'identity');
   const ability = Number(params.get('ability'));
   const minMv = num('min'), maxMv = num('max');
-  return { card: params.get('card') || '', ability: given('ability') && Number.isInteger(ability) && ability >= 0 ? ability : null, rank: params.get('rank') === 'line' ? 'line' : 'whole', color, colorMode, minMv, maxMv, creature: oneOf('creature', ['creature', 'noncreature']), type: params.get('type') || '', dropped };
+  return { card: params.get('card') || '', ability: given('ability') && Number.isInteger(ability) && ability >= 0 ? ability : null, rank: params.get('rank') === 'line' ? 'line' : 'whole', view: params.get('view') === 'grid' ? 'grid' : 'list', color, colorMode, colorBy, minMv, maxMv, creature: oneOf('creature', ['creature', 'noncreature']), type: params.get('type') || '', dropped };
 }
 
 export function serializeUrl(state) {
@@ -66,10 +69,12 @@ export function serializeUrl(state) {
   if (state.rank === 'line') params.set('rank', 'line');
   if (state.color) params.set('color', state.color);
   if (state.color && state.color !== 'C' && state.colorMode && state.colorMode !== 'include') params.set('cm', state.colorMode);
+  if (state.color && state.colorBy === 'color') params.set('cb', 'color');
   if (Number.isFinite(state.minMv)) params.set('min', state.minMv);
   if (Number.isFinite(state.maxMv)) params.set('max', state.maxMv);
   if (state.creature) params.set('creature', state.creature);
   if (state.type) params.set('type', state.type);
+  if (state.view === 'grid') params.set('view', 'grid');
   return params.toString();
 }
 
@@ -77,16 +82,22 @@ export function resolveAbilityIndex(index, abilities) {
   return Number.isInteger(index) && index >= 0 && index < abilities.length ? index : null;
 }
 
+const SCHEMAS = ['mtgemb-release-v2', 'mtgemb-release-v3', 'mtgemb-release-v4', 'mtgemb-release-v5'];
+export const isV4Plus = (release) => ['mtgemb-release-v4', 'mtgemb-release-v5'].includes(release?.schema);
+const COLOURS = /^W?U?B?R?G?$/;
+
 export function validateRelease(release, names) {
-  if (!['mtgemb-release-v2', 'mtgemb-release-v3', 'mtgemb-release-v4'].includes(release?.schema)) throw new Error(`Unsupported release schema: ${release?.schema ?? 'missing'}; expected mtgemb-release-v2, mtgemb-release-v3 or mtgemb-release-v4.`);
+  if (!SCHEMAS.includes(release?.schema)) throw new Error(`Unsupported release schema: ${release?.schema ?? 'missing'}; expected one of ${SCHEMAS.join(', ')}.`);
   if (!Number.isInteger(release.n_cards) || release.n_cards < 1) throw new Error('Invalid card count in release.json.');
   if (!Number.isInteger(release.shard_size) || release.shard_size < 1) throw new Error('Invalid shard_size.');
   const shards = Math.ceil(release.n_cards / release.shard_size);
-  const v3plus = ['mtgemb-release-v3', 'mtgemb-release-v4'].includes(release.schema);
-  const v4 = release.schema === 'mtgemb-release-v4';
+  const v3plus = release.schema !== 'mtgemb-release-v2';
+  const v4 = isV4Plus(release);
+  // v4 stores 50 per list; v5 stores k (200) whole-card and line matches
+  const lineK = release.schema === 'mtgemb-release-v5' ? release.k : 50;
   const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: shards }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
   if (release.schema === 'mtgemb-release-v3' && (release.ability_k !== 50 || release.abilities_status !== 'exploratory: not evaluated on the tag proxy')) throw new Error('Invalid ability metadata in release.json.');
-  if (v4 && (!Number.isInteger(release.ability_k) || release.ability_k !== 50 || typeof release.abilities_status !== 'string' || !Number.isInteger(release.line_k) || release.line_k !== 50 || typeof release.line_status !== 'string' || typeof release.tags_status !== 'string')) throw new Error('Invalid v4 line or tag metadata in release.json.');
+  if (v4 && (!Number.isInteger(release.ability_k) || release.ability_k !== 50 || typeof release.abilities_status !== 'string' || !Number.isInteger(release.line_k) || release.line_k !== lineK || typeof release.line_status !== 'string' || typeof release.tags_status !== 'string')) throw new Error('Invalid v4 line or tag metadata in release.json.');
   if (v3plus) for (const file of expectedFiles) {
     const entry = release.files?.[file];
     if (!entry || !/^[a-f0-9]{64}$/.test(entry.sha256) || !Number.isInteger(entry.bytes) || entry.bytes < 0) throw new Error(`Release manifest is missing or malformed for ${file}.`);
@@ -100,7 +111,7 @@ export function validateRelease(release, names) {
 }
 
 export function validateTags(release, tags) {
-  if (release?.schema !== 'mtgemb-release-v4') return true;
+  if (!isV4Plus(release)) return true;
   if (!Array.isArray(tags?.labels) || tags.labels.some((label) => typeof label !== 'string' || !label.trim())) throw new Error('Tag labels are missing or malformed.');
   return true;
 }
@@ -124,7 +135,7 @@ export function validateReleasePointer(current, release) {
 
 export function validateShard(cards, neighbours, release, shard, ids, abilities, lines, tags) {
   validateCommonShard(cards, neighbours, release, shard, ids);
-  if (release.schema === 'mtgemb-release-v4') {
+  if (isV4Plus(release)) {
     validateTags(release, tags);
     for (let offset = 0; offset < cards.length; offset += 1) {
       const index = shard * release.shard_size + offset;
@@ -133,7 +144,7 @@ export function validateShard(cards, neighbours, release, shard, ids, abilities,
     }
     if (lines !== undefined) validateLineShard(cards, lines, release, shard);
   }
-  if (abilities !== undefined && (release.schema === 'mtgemb-release-v3' || release.schema === 'mtgemb-release-v4')) validateAbilityShard(cards, abilities, release, shard, tags);
+  if (abilities !== undefined && release.schema !== 'mtgemb-release-v2') validateAbilityShard(cards, abilities, release, shard, tags);
   return true;
 }
 
@@ -175,6 +186,7 @@ export function validateCommonShard(cards, neighbours, release, shard, ids) {
     const card = cards[offset];
     const index = shard * release.shard_size + offset;
     if (!card || typeof card.id !== 'string' || card.id !== undefined && card.id.length === 0 || !Array.isArray(card.faces) || typeof card.color_identity !== 'string' || typeof card.mv !== 'number' || typeof card.type_line !== 'string' || typeof card.is_creature !== 'boolean' || typeof card.has_text !== 'boolean') throw new Error(`Card ${index} is malformed.`);
+    if (release.schema === 'mtgemb-release-v5' && (typeof card.colors !== 'string' || !COLOURS.test(card.colors) || !(card.image_back === null || typeof card.image_back === 'string'))) throw new Error(`Card ${index} is malformed.`);
     if (ids && card.id !== ids[index]) throw new Error(`Card ID does not match ID index at ${index}.`);
     const list = neighbours[offset];
     if (!Array.isArray(list) || list.length > release.k) throw new Error(`Neighbour list ${index} is malformed.`);
@@ -204,7 +216,7 @@ export function validateAbilityShard(cards, abilities, release, shard, tags) {
     if (entries.length === 1) throw new Error(`Ability list ${index} does not match the card's ability lines.`);
     for (const ability of entries) {
       if (!ability || typeof ability.text !== 'string' || !ability.text.trim() || !Array.isArray(ability.neighbours) || ability.neighbours.length > release.ability_k) throw new Error(`Ability entry is malformed for card ${index}.`);
-      if (release.schema === 'mtgemb-release-v4') {
+      if (isV4Plus(release)) {
         validateTagIndices(ability.tags, tags?.labels?.length ?? 0, `Ability on card ${index}`);
         if (ability.tags.some((tag) => !card.tags?.includes(tag))) throw new Error(`Ability tags are not a subset of card tags for card ${index}.`);
       }

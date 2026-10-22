@@ -7,6 +7,7 @@ vectors, ID order and parity results go to artifacts/releases/<release_id>/.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -33,12 +34,52 @@ from .util import (
     utcnow,
 )
 
-SCHEMA = "mtgemb-release-v4"  # tags and optional line-match ranking
-K = 50
+SCHEMA = "mtgemb-release-v5"  # 200 neighbours, card colours, back-face images
+K = 200  # whole-card and line-match neighbours stored per card
+ABILITY_K = 50
+WUBRG = "WUBRG"
 SHARD = 256
 ATTRIBUTION = ("Card data and images © Wizards of the Coast; data from Scryfall (scryfall.com). "
                "Not affiliated with or endorsed by Wizards of the Coast or Scryfall. "
                "Tags from Scryfall Tagger.")
+
+
+def card_display(card: dict) -> dict:
+    """Display-only fields from a raw Scryfall card: colours and the back-face image.
+
+    Colours are the card's printed colours (top level, or the union of faces for cards that
+    keep them per face). Only cards printed with two faces (transform, modal DFC) have a back
+    image; adventure, split and flip cards are one image.
+    """
+    faces = card.get("card_faces") or []
+    cols = set(card["colors"]) if "colors" in card else {c for f in faces
+                                                         for c in f.get("colors") or []}
+    back = None
+    if not card.get("image_uris") and len(faces) > 1:
+        back = (faces[1].get("image_uris") or {}).get("normal")
+    return {"colors": "".join(c for c in WUBRG if c in cols), "image_back": back}
+
+
+def display_fields(raw_dir: Path, ids: list[str], manifest_sha256: str) -> dict[str, dict]:
+    """card_display for the catalogue cards, from the dataset's own raw snapshot.
+
+    Other records (sealed cards among them) are parsed only for their oracle_id and dropped.
+    """
+    raw_dir = Path(raw_dir)
+    if sha256_file(raw_dir / "manifest.json") != manifest_sha256:
+        raise ValueError("raw manifest does not match the dataset")
+    f = json.loads((raw_dir / "manifest.json").read_text("utf-8"))["files"]["oracle_cards"]
+    if sha256_file(raw_dir / f["path"]) != f["sha256"]:
+        raise ValueError("raw card file hash mismatch")
+    want, out = set(ids), {}
+    with gzip.open(raw_dir / f["path"], "rt", encoding="utf-8") as fh:
+        for line in fh:
+            card = json.loads(line)
+            if card.get("oracle_id") in want:
+                out[card["oracle_id"]] = card_display(card)
+    if missing := want - out.keys():
+        raise ValueError(f"{len(missing)} catalogue cards missing from the raw snapshot")
+    return out
 
 
 def topk_neighbours(v: np.ndarray, k: int = K, block: int = 512) -> tuple[np.ndarray, np.ndarray]:
@@ -147,7 +188,7 @@ def rank_ability_neighbours(texts: list[str], v: np.ndarray, ref_n: int = 20) ->
     rng = np.random.default_rng(20261017)
     counts = np.diff(np.r_[starts, len(lines)])
     queries = np.flatnonzero(counts[owner] >= 2)
-    idx, sco = maxsim_topk(v[queries], owner[queries], v, starts, K)
+    idx, sco = maxsim_topk(v[queries], owner[queries], v, starts, ABILITY_K)
     ref_rows = np.sort(rng.choice(len(queries), size=min(max(20, ref_n), len(queries)),
                                  replace=False))
     exact = 0
@@ -259,6 +300,9 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     has_text = (cards["text_status"] == "ok").to_numpy()
     ti = np.flatnonzero(has_text)
     texts = cards.loc[ti, "text"].tolist()
+    snapshot = ds["ident"].get("snapshot") or Path(ds_dir).name.split("_")[0]
+    display = display_fields(ROOT / "data" / "raw" / snapshot, cards["oracle_id"].tolist(),
+                             ds["ident"].get("raw_manifest_sha256"))
 
     recipe = enc.RECIPES[backbone]
     model_hash = sha256_json(recipe) if model_path is None else sha256_file(
@@ -302,7 +346,6 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
 
     vec_hash = hashlib.sha256(v.tobytes()).hexdigest()
     ability_vec_hash = hashlib.sha256(ability["vectors"].tobytes()).hexdigest()
-    snapshot = ds["ident"].get("snapshot") or Path(ds_dir).name.split("_")[0]
     tags = tagattr.release_tags(
         texts, cards.loc[ti, "split"].tolist(), cards.loc[ti, "oracle_id"].tolist(),
         v, ability["vectors"], ds["memberships"],
@@ -362,7 +405,8 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
                      "color_identity": c["color_identity"], "mv": float(c["mv"]),
                      "type_line": c["type_line"], "is_creature": bool(c["is_creature"]),
                      "image": c["image"] or None, "scryfall_uri": c["scryfall_uri"],
-                     "has_text": bool(has_text[i]), "tags": card_tags[i]})
+                     "has_text": bool(has_text[i]), "tags": card_tags[i],
+                     **display[c["oracle_id"]]})
     # names.json is loaded at startup; the poorly compressing ids load beside it
     files["names.json"] = _dump(out / "names.json",
                                 {"names": cards["name"].tolist(), "aliases": aliases})
@@ -379,7 +423,7 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     release = {"schema": SCHEMA, "release_id": release_id, "fixture": False,
                "snapshot_date": snapshot, "created_utc": utcnow(), "model": meta_model,
                "n_cards": len(cards), "k": K, "shard_size": SHARD, "files": files,
-               "ability_k": K, "line_k": K,
+               "ability_k": ABILITY_K, "line_k": K,
                "line_status": "exploratory: line match; below the whole-card ranking on the "
                               "dev tag proxy",
                "tags_status": "exploratory: per-line tags by nearest one-line-card centroid",

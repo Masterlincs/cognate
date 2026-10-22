@@ -1,15 +1,17 @@
 <script>
   // Pick any combination of WUBRG (or colourless) and how a card's colour identity must match it.
-  // color: '' | 'C' | a WUBRG-ordered subset; mode: include | exact | within
+  // color: '' | 'C' | a WUBRG-ordered subset; mode: include | exact | within;
+  // basis: identity (every mana symbol on the card) | color (the card's printed colours, v5 bundles)
   import Segmented from './Segmented.svelte';
-  let { color, mode, onchange } = $props();
+  let { color, mode, basis = 'identity', showBasis = false, onchange } = $props();
+  const BASES = [{ value: 'identity', label: 'Colour identity' }, { value: 'color', label: 'Colour' }];
   const COLOURS = [['W', 'White'], ['U', 'Blue'], ['B', 'Black'], ['R', 'Red'], ['G', 'Green']];
   const MODES = [{ value: 'include', label: 'Including' }, { value: 'exact', label: 'Exactly' }, { value: 'within', label: 'At most' }];
 
   function toggle(c) {
-    if (c === 'C') return onchange(color === 'C' ? '' : 'C', mode);
+    if (c === 'C') return onchange(color === 'C' ? '' : 'C', mode, basis);
     const now = color === 'C' ? '' : color;
-    onchange([...'WUBRG'].filter((x) => (x === c) !== now.includes(x)).join(''), mode);
+    onchange([...'WUBRG'].filter((x) => (x === c) !== now.includes(x)).join(''), mode, basis);
   }
 </script>
 
@@ -21,7 +23,10 @@
     <button type="button" aria-pressed={color === 'C'} title="Colourless" onclick={() => toggle('C')}><i class="ms ms-cost ms-c" aria-hidden="true"></i><span class="sr-only">Colourless</span></button>
   </div>
   {#if color && color !== 'C'}
-    <Segmented label="How colours match" options={MODES} value={mode} onchange={(m) => onchange(color, m)} />
+    <Segmented label="How colours match" options={MODES} value={mode} onchange={(m) => onchange(color, m, basis)} />
+  {/if}
+  {#if color && showBasis}
+    <Segmented label="Match against" options={BASES} value={basis} onchange={(b) => onchange(color, mode, b)} />
   {/if}
 </div>
 

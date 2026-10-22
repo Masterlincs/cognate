@@ -1,4 +1,4 @@
-# Release bundle schemas `mtgemb-release-v2` and `mtgemb-release-v3`
+# Release bundle schemas `mtgemb-release-v2` to `mtgemb-release-v5`
 
 The static app reads one release directory, `<base>/data/<release_id>/`. The exporter writes release bundles. Fixture bundles set `"fixture": true`; real releases set it to `false`. All files are UTF-8 JSON. Card order is fixed by `ids.json.ids` (Oracle ID ascending), and card index `i` is its position in that list. The shard number is `floor(i / shard_size)`.
 
@@ -74,6 +74,19 @@ Each `abilities/NNN.json` is an array aligned with its card shard. An element is
 An ability is one non-empty line of the model input text (`no_reminder_v1`); face separators are not abilities. Each entry's neighbour list has up to `ability_k` pairs and excludes its card. Candidate cards are text cards and are ranked by the best matching ability line. Scores descend; because scores are rounded to four decimals, equal rounded scores need not be in index order. Indexes are in `[0, n_cards)`. Textless cards must have `[]`. Ability matches are exploratory and have not been evaluated on the tag proxy.
 
 The ability index is stored in the `ability` URL parameter beside `card`. Missing, invalid or out-of-range values select Whole card.
+
+## Additional v4 fields and shards
+
+Version 4 keeps v3 and adds `tags.json` (`{"labels": [...]}`), a `tags` array of ascending label indexes on each card and each ability entry (an ability's tags are a subset of its card's), and `lines/NNN.json`: per card, up to `line_k` (50) `[index, score]` pairs from the exploratory line-match ranking. `release.json` adds `line_k`, `line_status` and `tags_status`.
+
+## Additional v5 fields
+
+Version 5 keeps v4 and changes:
+
+- `k` and `line_k` are 200 (whole-card and line-match lists); `ability_k` stays 50.
+- Each card record adds `colors`, the card's printed colours as a WUBRG-ordered string (`""` for colourless, so devoid cards are `""` even with a coloured cost), and `image_back`, the Scryfall image of the second printed face for transform and modal double-faced cards, otherwise `null`.
+
+The explorer's colour filter matches colour identity by default; with a v5 bundle it can match printed colours instead (`cb=color` in the URL). `view=grid` shows results as card images.
 
 ## Validation
 

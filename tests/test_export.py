@@ -132,7 +132,7 @@ def test_ability_neighbours_rejects_incorrect_block_ranking(monkeypatch):
             [values[line] for line in lines], np.float32))
 
 
-def test_export_v4_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch):
+def test_export_v5_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch):
     from contextlib import nullcontext
 
     import pandas as pd
@@ -155,6 +155,9 @@ def test_export_v4_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
         "tags": pd.DataFrame({"tag_id": ["t", "a"], "label": ["test tag", "other"],
                               "functional": [True, True]})})
     monkeypatch.setattr(exporter, "DeviceLock", nullcontext)
+    monkeypatch.setattr(exporter, "display_fields", lambda _dir, ids, _sha: {
+        i: {"colors": "R" if i == "3" else "", "image_back": "b.jpg" if i == "1" else None}
+        for i in ids})
     monkeypatch.setattr(exporter, "ARTIFACTS", tmp_path / "art")
     monkeypatch.setattr(exporter, "SHARD", 2)
     monkeypatch.setattr(exporter, "log_event", lambda *a, **kw: None)
@@ -173,7 +176,8 @@ def test_export_v4_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
 
     bundle, art = Path(result["bundle"]), Path(result["artifacts"])
     release = json.loads((bundle / "release.json").read_text("utf-8"))
-    assert release["schema"] == "mtgemb-release-v4" and release["ability_k"] == 50
+    assert release["schema"] == "mtgemb-release-v5" and release["ability_k"] == 50
+    assert release["k"] == release["line_k"] == 200
     assert release["abilities_status"] == "exploratory: not evaluated on the tag proxy"
     expected = [[], [{"text": "A", "tags": [1], "neighbours": [[4, 1.0], [5, 1.0], [3, 0.6]]},
                      {"text": "B", "tags": [], "neighbours": [[3, 0.8], [4, 0.0], [5, 0.0]]}],
@@ -202,7 +206,6 @@ def test_export_v4_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
         assert meta[name + "_sha256"] == sha256_file(art / (name + suffix))
     assert meta["ability_parity"]["topk_reference_failures"] == 0
 
-    assert release["line_k"] == 50
     assert release["line_status"].endswith("dev tag proxy")
     assert release["tags_status"].endswith("")
     assert json.loads((bundle / "tags.json").read_text("utf-8")) == {
@@ -216,6 +219,8 @@ def test_export_v4_shards_alignment_mapping_and_artifacts(tmp_path, monkeypatch)
         assert release["files"][name] == {"sha256": sha256_file(path),
                                           "bytes": path.stat().st_size}
     assert [c["tags"] for c in records] == [[], [1], [], [1], [0, 1], [1]]
+    assert [c["colors"] for c in records] == ["", "", "", "R", "", ""]
+    assert [c["image_back"] for c in records] == [None, "b.jpg", None, None, None, None]
     assert line_rows[0] == line_rows[2] == []
     assert line_rows[1] == [[3, 0.7], [4, 0.5], [5, 0.5]]
     assert all(i != j for i, row in enumerate(line_rows) for j, _ in row)
@@ -382,3 +387,44 @@ def test_export_cli_forwards_decision(monkeypatch):
     cli.main(["export", "e5-base-v2", "--max-length", "94", "--label", "fake",
               "--status", "promoted", "--decision", ""])
     assert received["decision"] == ""
+
+
+def test_card_display_colours_and_back_face():
+    from mtgemb.export import card_display
+
+    # single face: top-level colours (a devoid card has none despite a coloured cost)
+    assert card_display({"colors": ["R", "W"], "image_uris": {"normal": "f"}}) == {
+        "colors": "WR", "image_back": None}
+    assert card_display({"colors": [], "mana_cost": "{1}{R}"})["colors"] == ""
+    # transform: no top-level colours or image; union of faces, back image from face 2
+    dfc = {"card_faces": [{"colors": ["U"], "image_uris": {"normal": "front.jpg"}},
+                          {"colors": ["U", "B"], "image_uris": {"normal": "back.jpg"}}]}
+    assert card_display(dfc) == {"colors": "UB", "image_back": "back.jpg"}
+    # adventure: one printed face, so no back image even though there are two faces
+    adv = {"colors": ["W", "R"], "image_uris": {"normal": "f"},
+           "card_faces": [{"colors": ["W"]}, {"colors": ["R"]}]}
+    assert card_display(adv) == {"colors": "WR", "image_back": None}
+
+
+def test_display_fields_reads_only_catalogue_cards(tmp_path):
+    import gzip
+    import hashlib
+
+    from mtgemb.export import display_fields
+
+    rows = [{"oracle_id": "a", "colors": ["G"]}, {"oracle_id": "x", "colors": ["B"]},
+            {"oracle_id": "b", "colors": []}]
+    gz = tmp_path / "cards.jsonl.gz"
+    with gzip.open(gz, "wt", encoding="utf-8") as fh:
+        fh.writelines(json.dumps(r) + "\n" for r in rows)
+    sha = hashlib.sha256(gz.read_bytes()).hexdigest()
+    (tmp_path / "manifest.json").write_text(json.dumps(
+        {"files": {"oracle_cards": {"path": gz.name, "sha256": sha}}}), "utf-8")
+    msha = sha256_file(tmp_path / "manifest.json")
+    got = display_fields(tmp_path, ["a", "b"], msha)
+    assert got == {"a": {"colors": "G", "image_back": None},
+                   "b": {"colors": "", "image_back": None}}
+    with pytest.raises(ValueError, match="manifest"):
+        display_fields(tmp_path, ["a", "b"], "0" * 64)
+    with pytest.raises(ValueError, match="missing"):
+        display_fields(tmp_path, ["a", "zz"], msha)

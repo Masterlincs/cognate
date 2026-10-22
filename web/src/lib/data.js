@@ -1,6 +1,6 @@
 // Release bundle and site-data loading. One promise cache per shard kind; failed loads are
 // evicted so a retry can succeed. Shapes are checked with the bundle validators (SCHEMA.md).
-import { validateAbilityShard, validateCommonShard, validateIds, validateLineShard, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
+import { isV4Plus, validateAbilityShard, validateCommonShard, validateIds, validateLineShard, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
 
 let root = '';
 let fetcher = (...args) => fetch(...args);
@@ -49,7 +49,7 @@ export async function loadRelease(fetchFn = fetcher) {
 }
 
 // tags exist from v4 on; older bundles have none
-const getTags = () => (tagsReady ??= (release.schema !== 'mtgemb-release-v4' ? Promise.resolve(undefined) : get(`${release.release_id}/tags.json`))
+const getTags = () => (tagsReady ??= (!isV4Plus(release) ? Promise.resolve(undefined) : get(`${release.release_id}/tags.json`))
   .then((tags) => { if (tags) validateTags(release, tags); return tags; })
   .catch((reason) => { tagsReady = null; throw reason; }));
 

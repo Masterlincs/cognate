@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { validateIds, validateRelease, validateReleasePointer, validateShard } from '../src/lib/bundle.js';
+import { isV4Plus, validateIds, validateRelease, validateReleasePointer, validateShard } from '../src/lib/bundle.js';
 
 const dir = path.resolve(process.argv[2] ?? '');
 if (!process.argv[2]) {
@@ -25,7 +25,7 @@ try {
   validateRelease(release, names);
   validateIds(release, ids);
   const v3plus = release.schema !== 'mtgemb-release-v2';
-  const v4 = release.schema === 'mtgemb-release-v4';
+  const v4 = isV4Plus(release);
   const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: Math.ceil(release.n_cards / release.shard_size) }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
   for (const file of expectedFiles) {
     const bytes = await readFile(path.join(dir, file));
