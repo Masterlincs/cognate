@@ -2,7 +2,7 @@
   "phase": "P12",
   "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "x-4-e5-tagidf training since 2026-10-22 18:06 UTC, unthrottled; pipeline then scores it (dev eval, exam, variants). Judge x-4 per dev full >= 0.7250, hard-lexical >= 0.6993, 0 exam regressions vs x-1. x-2 and x-3 did not clear their gates; x-1 stays the comparator. Site serves release v6 locally; nothing published. 23 finished-run checkpoints deleted with authorisation; C: ~30 GB free.",
+  "next_action": "round closed: x-2, x-3 and x-4 all did not clear their gates; x-1 stays the comparator; GPU free, no run queued. Site serves release v6 2026-10-16-e5-base-v2-3984a6b7 locally; nothing published. Awaiting the user's next direction. Deferred: replay has no v5/v6 bundle check; intermittent native XPU abort in eval-encoder (passes on retry).",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -11,7 +11,7 @@
   "extension_runs_used": 1,
   "confirmation_runs_used": 9,
   "updated_utc": "2026-10-22T07:39:35Z",
-  "active_run": "x-4-e5-tagidf",
+  "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
     "initial-2-e5-lr1e-05-s20",
