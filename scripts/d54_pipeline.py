@@ -8,6 +8,7 @@ logged and skipped; it never holds back the queue. Usage: uv run python scripts/
 """
 
 import json
+import re
 import subprocess
 import sys
 import time
@@ -20,7 +21,7 @@ ENC = ["e5-base-v2", "--max-length", "94"]
 
 
 def step(*args: str) -> bool:
-    name = "_".join(a for a in args if not a.startswith("-"))[:80].replace("/", "-")
+    name = re.sub(r"[^\w.-]+", "-", "_".join(a for a in args if not a.startswith("-")))[:80]
     with open(ROOT / "runs/logs" / f"d54-{name}.log", "a", encoding="utf-8") as log:
         code = subprocess.call([sys.executable, "-m", "mtgemb.cli", *args], cwd=ROOT,
                                stdout=log, stderr=subprocess.STDOUT)
