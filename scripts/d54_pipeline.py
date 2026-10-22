@@ -5,6 +5,10 @@ of x-1's selected checkpoint (the effect-only baseline), then merge d54-train (t
 in x-2's code identity, so it waits) and queue x-3. After x-3: score it, queue x-4. After
 x-4: score it. CPU-only variants run after the next run is queued. A failed step is
 logged and skipped; it never holds back the queue. Usage: uv run python scripts/d54_pipeline.py
+
+Restarted 2026-10-22 after x-3 was queued: both dev evals had died in a native XPU abort
+(exit 0xC0000005), so it resumes at x-3 and re-runs the x-2 and x-1 dev evals while the GPU
+is free between x-3 and x-4. GPU steps run with faulthandler and up to two retries.
 """
 
 import json
@@ -22,11 +26,15 @@ ENC = ["e5-base-v2", "--max-length", "94"]
 
 def step(*args: str) -> bool:
     name = re.sub(r"[^\w.-]+", "-", "_".join(a for a in args if not a.startswith("-")))[:80]
-    with open(ROOT / "runs/logs" / f"d54-{name}.log", "a", encoding="utf-8") as log:
-        code = subprocess.call([sys.executable, "-m", "mtgemb.cli", *args], cwd=ROOT,
-                               stdout=log, stderr=subprocess.STDOUT)
-    log_event("diag", "D54_STEP", args=list(args), exit_code=code)
-    return code == 0
+    for attempt in range(1 if args[0] == "variants" else 3):
+        with open(ROOT / "runs/logs" / f"d54-{name}.log", "a", encoding="utf-8") as log:
+            code = subprocess.call([sys.executable, "-X", "faulthandler", "-m", "mtgemb.cli",
+                                    *args], cwd=ROOT, stdout=log, stderr=subprocess.STDOUT)
+        log_event("diag", "D54_STEP", args=list(args), exit_code=code, attempt=attempt)
+        if code == 0:
+            return True
+        time.sleep(60)
+    return False
 
 
 def wait(run_id: str) -> str:
@@ -47,19 +55,13 @@ def queue(cfg: str) -> None:
     log_event("train", "D54_QUEUED", config=cfg)
 
 
-score("x-2-e5-hn3", wait("x-2-e5-hn3"))
+x3 = wait("x-3-e5-effect")
+step("eval-encoder", "x-2-e5-hn3", *ENC, "--model-path", wait("x-2-e5-hn3"))
 step("eval-encoder", "x-1-e5-4000", *ENC, "--model-path", "runs/x-1-e5-4000/best")
-r = subprocess.run(["git", "merge", "--no-edit", "d54-train"], cwd=ROOT, capture_output=True,
-                   text=True)
-if r.returncode:
-    log_event("train", "D54_MERGE_FAILED", error=(r.stdout + r.stderr)[-500:])
-    raise SystemExit(1)
-queue("configs/x-3-e5-effect.json")
-for name in ("x-2-e5-hn3", "x-1-e5-4000"):
-    step("variants", name)
-score("x-3-e5-effect", wait("x-3-e5-effect"))
+score("x-3-e5-effect", x3)
 queue("configs/x-4-e5-tagidf.json")
-step("variants", "x-3-e5-effect")
+for name in ("x-2-e5-hn3", "x-1-e5-4000", "x-3-e5-effect"):
+    step("variants", name)
 score("x-4-e5-tagidf", wait("x-4-e5-tagidf"))
 step("variants", "x-4-e5-tagidf")
 log_event("diag", "D54_PIPELINE_DONE")
