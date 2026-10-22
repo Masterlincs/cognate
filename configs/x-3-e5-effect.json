@@ -1,0 +1,33 @@
+{
+ "run_id": "x-3-e5-effect",
+ "slot": "x-3",
+ "hypothesis": "effect-only labels (pairs_v2: cost, casting-mode and printing tags make no positives, mask no negatives and no longer block lexical negatives) fix the rider trap T001 without losing effect retrieval",
+ "comparator": "x-1-e5-4000 (same config on pairs_v1)",
+ "backbone": "e5-base-v2",
+ "max_length": 94,
+ "lr": 3e-05,
+ "scale": 20.0,
+ "batch_pairs": 32,
+ "hard_negatives": 1,
+ "neg_band": [
+  1,
+  30
+ ],
+ "weight_decay": 0.01,
+ "total_updates": 4000,
+ "warmup_frac": 0.1,
+ "grad_clip": 1.0,
+ "eval_every": 250,
+ "seed": 0,
+ "data_seed": 0,
+ "objective": "masked_infonce",
+ "pair_weighting": "none",
+ "batch_mode": "random",
+ "precision": "fp32",
+ "max_skip_rate": 0.01,
+ "guardrail_hard_lexical": 0.5391280239807161,
+ "selection": "guarded_best",
+ "dataset_dir": "data/processed/2026-10-16_no_reminder_v1",
+ "pairs_version": "pairs_v2",
+ "grad_checkpointing": true
+}
