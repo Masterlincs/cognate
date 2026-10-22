@@ -11,6 +11,42 @@ from .util import read_json
 DEFAULT_DS = "data/processed/2026-10-16_no_reminder_v1"
 
 
+def gpu_limits(env=None, clock=None, sleep=None) -> dict:
+    """Share the laptop GPU with the desktop, from env vars; training maths is unchanged.
+
+    MTGEMB_GPU_MEM_GB caps the XPU memory the process may hold. MTGEMB_GPU_REST=r makes
+    the trainer idle r times as long as each update took after every optimizer step
+    (r=1 keeps the GPU at most about half busy). Lives here, not in train.py, so the code
+    identity of a running run does not change and it can resume under the limits.
+    """
+    import os
+    import time
+
+    import torch
+
+    env = os.environ if env is None else env
+    clock, sleep = clock or time.monotonic, sleep or time.sleep
+    mem, rest = env.get("MTGEMB_GPU_MEM_GB"), float(env.get("MTGEMB_GPU_REST") or 0)
+    if mem and torch.xpu.is_available():
+        total = torch.xpu.get_device_properties(0).total_memory / 1e9
+        torch.xpu.set_per_process_memory_fraction(min(1.0, float(mem) / total))
+    hook = None
+    if rest > 0:
+        last = [clock()]
+
+        def pause(*_):
+            if torch.xpu.is_available():
+                torch.xpu.synchronize()
+            # an update that includes an evaluation is long; cap the rest so it stays short
+            sleep(min(rest * (clock() - last[0]), 60.0))
+            last[0] = clock()
+
+        from torch.optim.optimizer import register_optimizer_step_post_hook
+
+        hook = register_optimizer_step_post_hook(pause)
+    return {"mem_gb": float(mem) if mem else None, "rest": rest, "hook": hook}
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="mtgemb")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -144,6 +180,12 @@ def main(argv: list[str] | None = None) -> None:
         from .train import TrainConfig, train
 
         cfg = TrainConfig(**read_json(a.config))
+        limits = gpu_limits()
+        if limits["mem_gb"] or limits["rest"]:
+            from .util import log_event
+
+            log_event("train", "GPU_LIMITS", run_id=cfg.run_id, mem_gb=limits["mem_gb"],
+                      rest=limits["rest"])
         bench = read_json(bench_path(cfg.dataset_dir)) if cfg.eval_every else None
         out = train(cfg, bench)
     print(json.dumps(out, indent=2, default=str))
