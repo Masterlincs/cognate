@@ -260,7 +260,7 @@
                 {/each}
               </div>
             {/if}
-            <p class="by-note muted">{#if ability !== null}Matching one line: each card scores by its closest line. Exploratory: line matches were not evaluated.{:else if byLine}Line match: each line of this card is paired with the closest line on the other card, and lines that many cards share count for less. Exploratory: on the earlier model it ranked below the whole-card score on the tag benchmark.{:else}Ranked on the whole card.{#if abilities.length > 1} Pick a line to match cards that do that one thing.{/if}{/if}</p>
+            <p class="by-note muted">{#if ability !== null}Matching one line: each card scores by its closest line. Exploratory: line matches were not evaluated.{:else if byLine}Line match: each line of this card is paired with the closest line on the other card, and lines that many cards share count for less. Exploratory: on the earlier model it ranked below the whole-card score on the tag benchmark.{:else}Ranked on the whole card.{#if abilities.length > 1}{' '}Pick a line to match cards that do that one thing.{/if}{/if}</p>
           {/if}
         </div>
 
