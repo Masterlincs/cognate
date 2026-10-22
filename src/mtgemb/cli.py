@@ -67,6 +67,9 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("replay-eval", help="re-score recorded evaluations from saved vectors")
     q.add_argument("--ds", default=DEFAULT_DS)
+    q = sub.add_parser("variants", help="face-match and effect-only scores of a dev eval")
+    q.add_argument("name")
+    q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("export", help="encode the catalogue and write a release bundle")
     q.add_argument("backbone")
     q.add_argument("--max-length", type=int, required=True)
@@ -157,6 +160,10 @@ def main(argv: list[str] | None = None) -> None:
         from .baselines import replay_evals
 
         out = replay_evals(a.ds)
+    elif a.cmd == "variants":
+        from .variants import diagnose
+
+        out = diagnose(a.ds, a.name)
     elif a.cmd == "export":
         from .export import export
 
