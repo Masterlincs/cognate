@@ -28,7 +28,7 @@
   let regions = $state([]);
   let siteMissing = $state(false);
   let error = $state('');
-  let rowsError = $state(''); // Line or Face match rows; only while that mode is selected
+  let rowsError = $state(null); // { mode, message }: a failed Line or Face match load, shown only in that mode
   let notice = $state('');
   let index = $state(-1);
   let card = $state(null);
@@ -57,6 +57,7 @@
   const filtering = $derived(activeFilters(filters));
   const visible = $derived(visibleNeighbours(saved, (i) => byIndex[i], filters));
   const pageRows = $derived(visible.slice(0, shown));
+  const shownError = $derived(error || (rowsError && ability === null && rowsError.mode === rank ? rowsError.message : ''));
   const pending = $derived((byLine && lineRows === null) || (byFace && faceRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
   const showcase = metrics.showcase ?? [];
 
@@ -77,7 +78,7 @@
   $effect(() => {
     if (busy || !byFace || !card?.has_text || faceRows !== null) return;
     const t = token;
-    getFaces(index).then((rows) => { if (t === token) { faceRows = rows; rowsError = ''; } }).catch((e) => { if (t === token && rank === 'face') rowsError = e.message; });
+    getFaces(index).then((rows) => { if (t === token) { faceRows = rows; if (rowsError?.mode === 'face') rowsError = null; } }).catch((e) => { if (t === token) rowsError = { mode: 'face', message: e.message }; });
   });
 
   // line-match rows for the shown card, once any selection has settled; this also covers
@@ -85,7 +86,7 @@
   $effect(() => {
     if (busy || !byLine || !card?.has_text || lineRows !== null) return;
     const t = token;
-    getLines(index).then((rows) => { if (t === token) { lineRows = rows; rowsError = ''; } }).catch((e) => { if (t === token && rank === 'line') rowsError = e.message; });
+    getLines(index).then((rows) => { if (t === token) { lineRows = rows; if (rowsError?.mode === 'line') rowsError = null; } }).catch((e) => { if (t === token) rowsError = { mode: 'line', message: e.message }; });
   });
 
   function updateUrl(push) {
@@ -97,16 +98,18 @@
     const t = ++token;
     busy = true;
     notice = '';
-    error = ''; rowsError = '';
+    error = ''; rowsError = null;
     compare = null;
     shown = PAGE;
     try {
       // card shards are checked against ids.json, so wait for it before the first load
       if (!ids) await idsReady;
       const c = await getCard(i);
-      const [n, ab, ln, fc, labels] = c.has_text ? await Promise.all([getNeighbours(i), getAbilities(i), rank === 'line' ? getLines(i) : null, rank === 'face' && hasFaces ? getFaces(i) : null, getTagLabels()]) : [[], [], [], [], await getTagLabels()];
+      // Line and Face match rows load in their effects, so their failures stay with their mode
+      const [n, ab, labels] = c.has_text ? await Promise.all([getNeighbours(i), getAbilities(i), getTagLabels()]) : [[], [], await getTagLabels()];
       if (t !== token) return;
-      index = i; card = c; whole = n; abilities = ab; lineRows = ln; faceRows = fc; tagLabels = labels;
+      const rows = c.has_text ? null : [];
+      index = i; card = c; whole = n; abilities = ab; lineRows = rows; faceRows = rows; tagLabels = labels;
       ability = resolveAbilityIndex(abilityIndex, ab);
       updateUrl(push);
       const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -120,7 +123,7 @@
 
   function clear() {
     token += 1;
-    index = -1; card = null; whole = []; abilities = []; lineRows = null; faceRows = null; ability = null; compare = null;
+    index = -1; card = null; whole = []; abilities = []; lineRows = null; faceRows = null; ability = null; compare = null; rowsError = null;
   }
 
   function apply(state) {
@@ -147,7 +150,7 @@
   function setRank(value) {
     ability = null;
     rank = value;
-    rowsError = '';
+    if (rowsError?.mode === value) rowsError = null; // its effect retries
     shown = PAGE;
     updateUrl(true);
   }
@@ -227,7 +230,7 @@
   </section>
 
   <section class="results-pane" class:hidden={tab !== 'results'}>
-    {#if error || rowsError}<p class="notice" role="alert">Something went wrong loading the card data: {error || rowsError}</p>{/if}
+    {#if shownError}<p class="notice" role="alert">Something went wrong loading the card data: {shownError}</p>{/if}
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
 
     {#if !card}
