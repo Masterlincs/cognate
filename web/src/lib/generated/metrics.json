@@ -733,7 +733,7 @@
     "multi_face": 847
   },
   "deployed": {
-    "release_id": "2026-10-16-e5-base-v2-841ee2af",
+    "release_id": "2026-10-16-e5-base-v2-3984a6b7",
     "label": "e5-base-v2 fine-tuned, 4000 updates (confirm-x1-s1)",
     "run_id": "confirm-x1-s1",
     "encoder": {
