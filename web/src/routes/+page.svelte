@@ -11,8 +11,8 @@
   import Rules from '#lib/Rules.svelte';
   import Search from '#lib/Search.svelte';
   import Segmented from '#lib/Segmented.svelte';
-  import { isV4Plus, parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
-  import { getAbilities, getCard, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
+  import { isV4Plus, isV5Plus, isV6, parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
+  import { getAbilities, getCard, getFaces, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
   import { activeFilters, hasMore, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
   import { decodeMap, regionLabel } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
@@ -37,6 +37,7 @@
   let ability = $state(null);
   let rank = $state('whole');
   let lineRows = $state(null);
+  let faceRows = $state(null);
   let filters = $state({ ...NO_FILTERS });
   let shown = $state(PAGE);
   let byIndex = $state({});
@@ -47,13 +48,15 @@
   let token = 0;
 
   const hasLines = $derived(isV4Plus(release));
-  const hasColours = $derived(release?.schema === 'mtgemb-release-v5');
+  const hasFaces = $derived(isV6(release));
+  const hasColours = $derived(isV5Plus(release));
   const byLine = $derived(ability === null && rank === 'line');
-  const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, abilities }));
+  const byFace = $derived(ability === null && rank === 'face');
+  const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, faces: faceRows, abilities }));
   const filtering = $derived(activeFilters(filters));
   const visible = $derived(visibleNeighbours(saved, (i) => byIndex[i], filters));
   const pageRows = $derived(visible.slice(0, shown));
-  const pending = $derived((byLine && lineRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
+  const pending = $derived((byLine && lineRows === null) || (byFace && faceRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
   const showcase = metrics.showcase ?? [];
 
   // load the cards the list needs: the shown page, or every saved neighbour while filtering.
@@ -67,6 +70,13 @@
       if (t !== token) return;
       byIndex = { ...byIndex, ...Object.fromEntries(rows) };
     }).catch((e) => { if (t === token) error = e.message; });
+  });
+
+  // fetch candidate-side face matches only while Face match is selected
+  $effect(() => {
+    if (busy || !byFace || !card?.has_text || faceRows !== null) return;
+    const t = token;
+    getFaces(index).then((rows) => { if (t === token) faceRows = rows; }).catch((e) => { if (t === token) error = e.message; });
   });
 
   // line-match rows for the shown card, once any selection has settled; this also covers
@@ -93,9 +103,9 @@
       // card shards are checked against ids.json, so wait for it before the first load
       if (!ids) await idsReady;
       const c = await getCard(i);
-      const [n, ab, ln, labels] = c.has_text ? await Promise.all([getNeighbours(i), getAbilities(i), rank === 'line' ? getLines(i) : null, getTagLabels()]) : [[], [], [], await getTagLabels()];
+      const [n, ab, ln, fc, labels] = c.has_text ? await Promise.all([getNeighbours(i), getAbilities(i), rank === 'line' ? getLines(i) : null, rank === 'face' && hasFaces ? getFaces(i) : null, getTagLabels()]) : [[], [], [], [], await getTagLabels()];
       if (t !== token) return;
-      index = i; card = c; whole = n; abilities = ab; lineRows = ln; tagLabels = labels;
+      index = i; card = c; whole = n; abilities = ab; lineRows = ln; faceRows = fc; tagLabels = labels;
       ability = resolveAbilityIndex(abilityIndex, ab);
       updateUrl(push);
       const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -109,12 +119,12 @@
 
   function clear() {
     token += 1;
-    index = -1; card = null; whole = []; abilities = []; lineRows = null; ability = null; compare = null;
+    index = -1; card = null; whole = []; abilities = []; lineRows = null; faceRows = null; ability = null; compare = null;
   }
 
   function apply(state) {
     filters = { color: state.color, colorMode: state.colorMode, colorBy: hasColours ? state.colorBy : 'identity', minMv: state.minMv, maxMv: state.maxMv, creature: state.creature, type: state.type };
-    rank = hasLines ? state.rank : 'whole';
+    rank = hasFaces ? state.rank : hasLines ? (state.rank === 'face' ? 'whole' : state.rank) : 'whole';
     view = state.view;
     const r = resolveSelection(ids, state);
     if (r.unknown) clear();
@@ -122,7 +132,8 @@
     else select(r.index, { push: false, abilityIndex: state.ability });
     // select() clears the notice before its first await, so these land after it
     const dropped = state.dropped.length ? `This link has a value the explorer does not recognise for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}, so ${state.dropped.length > 1 ? 'those filters are' : 'that filter is'} off.` : '';
-    notice = [r.unknown ? 'That link points to a card that is not in this release.' : '', dropped].filter(Boolean).join(' ');
+    const unavailableFace = state.rank === 'face' && !hasFaces ? 'Face match is unavailable in this release, so Whole card is selected.' : '';
+    notice = [r.unknown ? 'That link points to a card that is not in this release.' : '', dropped, unavailableFace].filter(Boolean).join(' ');
   }
 
   function setAbility(k) {
@@ -255,7 +266,7 @@
         <div class="similar-by" id="results">
           <h2>Similar cards</h2>
           {#if hasLines || abilities.length > 1}
-            {#if hasLines}<Segmented label="Rank by" options={[{ value: 'whole', label: 'Whole card' }, { value: 'line', label: 'Line match' }]} value={ability === null ? rank : null} onchange={setRank} />{/if}
+            {#if hasLines}<Segmented label="Rank by" options={[{ value: 'whole', label: 'Whole card' }, { value: 'line', label: 'Line match' }, ...(hasFaces ? [{ value: 'face', label: 'Face match' }] : [])]} value={ability === null ? rank : null} onchange={setRank} />{/if}
             {#if !hasLines}<button type="button" class="btn" class:on={ability === null} aria-pressed={ability === null} onclick={() => setRank('whole')}>Whole card</button>{/if}
             {#if abilities.length > 1}
               <p class="by-label muted">Or match one line:</p>
@@ -265,7 +276,7 @@
                 {/each}
               </div>
             {/if}
-            <p class="by-note muted">{#if ability !== null}Matching one line: each card scores by its closest line. Exploratory: line matches were not evaluated.{:else if byLine}Line match: each line of this card is paired with the closest line on the other card, and lines that many cards share count for less. Exploratory: on the earlier model it ranked below the whole-card score on the tag benchmark.{:else}Ranked on the whole card.{#if abilities.length > 1}{' '}Pick a line to match cards that do that one thing.{/if}{/if}</p>
+            <p class="by-note muted">{#if ability !== null}Matching one line: each card scores by its closest line. Exploratory: line matches were not evaluated.{:else if byFace}Face match: a card with two faces also counts as each face on its own, so a card whose back face does what this card does can rank as high as a one-faced card. Exploratory: on the development benchmark it scored about the same as the whole-card ranking.{:else if byLine}Line match: each line of this card is paired with the closest line on the other card, and lines that many cards share count for less. Exploratory: on the earlier model it ranked below the whole-card score on the tag benchmark.{:else}Ranked on the whole card.{#if abilities.length > 1}{' '}Pick a line to match cards that do that one thing.{/if}{/if}</p>
           {/if}
         </div>
 

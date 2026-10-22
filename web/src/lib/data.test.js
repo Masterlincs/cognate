@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getCard, getTagLabels, loadRelease, loadSiteData } from './data.js';
+import { getCard, getFaces, getTagLabels, loadRelease, loadSiteData } from './data.js';
 
 const ok = (body) => ({ ok: true, status: 200, json: async () => body, arrayBuffer: async () => body });
 
@@ -64,5 +64,21 @@ describe('release loading', () => {
     current.id = 'rb';
     await (await loadRelease(fetchFn)).idsReady;
     expect((await getCard(0)).name).toBe('B0');
+  });
+
+  it('loads and caches validated v6 face-match shards', async () => {
+    const base = { id: 'r6-0', name: 'A', faces: [{ oracle_text: 'A' }], color_identity: '', mv: 1, type_line: '', is_creature: false, has_text: true, tags: [], colors: '', image_back: null };
+    const entry = { sha256: 'a'.repeat(64), bytes: 1 };
+    const files = ['names.json', 'ids.json', 'tags.json', 'cards/000.json', 'neighbours/000.json', 'abilities/000.json', 'lines/000.json', 'faces/000.json'];
+    const rel = { 'release.json': { schema: 'mtgemb-release-v6', release_id: 'r6', n_cards: 2, shard_size: 256, k: 200, ability_k: 50, abilities_status: 'exploratory', line_k: 200, line_status: 'exploratory', face_k: 200, face_status: 'exploratory face matches', tags_status: 'proxy', files: Object.fromEntries(files.map((f) => [f, entry])) },
+      'names.json': { names: ['A', 'B'], aliases: [] }, 'ids.json': { ids: ['r6-0', 'r6-1'] }, 'tags.json': { labels: [] }, 'cards/000.json': [base, { ...base, id: 'r6-1', has_text: false }], 'faces/000.json': [[[1, 0.8]], []] };
+    let faceRequests = 0;
+    const route = server({ r6: rel }, { id: 'r6' });
+    const fetchFn = async (url) => { if (url.endsWith('/faces/000.json')) faceRequests += 1; return route(url); };
+    await (await loadRelease(fetchFn)).idsReady;
+    expect(await getFaces(0)).toEqual([[1, 0.8]]);
+    expect(await getFaces(1)).toEqual([]);
+    expect(await getFaces(0)).toEqual([[1, 0.8]]);
+    expect(faceRequests).toBe(1);
   });
 });

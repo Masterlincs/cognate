@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { isV4Plus, validateIds, validateRelease, validateReleasePointer, validateShard } from '../src/lib/bundle.js';
+import { isV4Plus, isV6, validateIds, validateRelease, validateReleasePointer, validateShard } from '../src/lib/bundle.js';
 
 const dir = path.resolve(process.argv[2] ?? '');
 if (!process.argv[2]) {
@@ -26,7 +26,8 @@ try {
   validateIds(release, ids);
   const v3plus = release.schema !== 'mtgemb-release-v2';
   const v4 = isV4Plus(release);
-  const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: Math.ceil(release.n_cards / release.shard_size) }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
+  const v6 = isV6(release);
+  const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: Math.ceil(release.n_cards / release.shard_size) }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : []), ...(v6 ? [`faces/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
   for (const file of expectedFiles) {
     const bytes = await readFile(path.join(dir, file));
     const entry = release.files?.[file];
@@ -35,7 +36,7 @@ try {
   const tags = v4 ? await readJson('tags.json') : undefined;
   for (let shard = 0; shard < Math.ceil(release.n_cards / release.shard_size); shard += 1) {
     const number = String(shard).padStart(3, '0');
-    validateShard(await readJson(`cards/${number}.json`), await readJson(`neighbours/${number}.json`), release, shard, ids.ids, v3plus ? await readJson(`abilities/${number}.json`) : null, v4 ? await readJson(`lines/${number}.json`) : undefined, tags);
+    validateShard(await readJson(`cards/${number}.json`), await readJson(`neighbours/${number}.json`), release, shard, ids.ids, v3plus ? await readJson(`abilities/${number}.json`) : null, v4 ? await readJson(`lines/${number}.json`) : undefined, tags, v6 ? await readJson(`faces/${number}.json`) : undefined);
   }
   console.log(`Bundle valid: ${release.release_id} (${release.n_cards} cards)`);
 } catch (error) {

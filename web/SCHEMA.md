@@ -1,10 +1,10 @@
-# Release bundle schemas `mtgemb-release-v2` to `mtgemb-release-v5`
+# Release bundle schemas `mtgemb-release-v2` to `mtgemb-release-v6`
 
 The static app reads one release directory, `<base>/data/<release_id>/`. The exporter writes release bundles. Fixture bundles set `"fixture": true`; real releases set it to `false`. All files are UTF-8 JSON. Card order is fixed by `ids.json.ids` (Oracle ID ascending), and card index `i` is its position in that list. The shard number is `floor(i / shard_size)`.
 
-The app accepts v2 and v3. A v2 bundle loads with the whole-card neighbour feature and no ability control. Version 1 and other schemas are unsupported. A failed bundle shows an error; the app never substitutes fixture data.
+The app accepts v2 through v6. A v2 bundle loads with the whole-card neighbour feature and no ability control. Version 1 and other schemas are unsupported. A failed bundle shows an error; the app never substitutes fixture data.
 
-## Loading order (v2 and v3)
+## Loading order (v2 through v6)
 
 The app loads `current.json`, then `release.json`, then `names.json`. Lookup becomes available as soon as `names.json` passes validation. The larger `ids.json` is fetched after names; card selection, share-link resolution and shard ID checks wait for it. Card and neighbour shards, plus the selected card's v3 ability shard, load on demand and are cached by shard.
 
@@ -88,14 +88,21 @@ Version 5 keeps v4 and changes:
 
 The explorer's colour filter matches colour identity by default; with a v5 bundle it can match printed colours instead (`cb=color` in the URL). `view=grid` shows results as card images.
 
+## Additional v6 fields and shards
+
+Version 6 keeps all v5 fields and adds `face_k: 200`, a required string `face_status`, and one `faces/NNN.json` file per card shard, listed in `release.json.files` with its SHA-256 and byte count. Each file is an array aligned with `cards/NNN.json`; every element is a list of up to `face_k` `[candidate_index, score]` pairs. The list excludes its own card, indexes stay in `[0, n_cards)`, scores are finite and non-increasing (ties are allowed), and textless cards have `[]`.
+
+Face match is candidate-side: the selected card keeps its whole-card query vector, and each candidate is scored by the best of its whole-card vector and its face vectors. It is an exploratory view. The `rank=face` URL value selects it in v6; other schemas fall back to Whole card.
+
 ## Validation
 
-- v2 and v3 require positive `n_cards` and `shard_size`; v1 is unsupported.
+- v2 through v6 require positive `n_cards` and `shard_size`; v1 is unsupported.
 - `names.names.length == n_cards`, aliases contain valid indexes, and `names.json` has no `ids` key.
 - `ids.ids.length == n_cards`; IDs are non-empty, unique and strictly ascending.
 - Shard lengths match the expected length (the final shard may be short), and each card ID matches its indexed ID.
 - Neighbour and ability indexes are in `[0, n_cards)` and never refer to the source card. Neighbour scores are finite and descending.
 - For v3, `ability_k` and `abilities_status` have the values above; the manifest includes every common shard and every ability shard with SHA-256 and byte count. Ability shard lengths align with card shards, entries have non-empty text and valid neighbour lists, and non-empty ability lists have at least two entries.
+- For v6, `face_k` is exactly 200 and `face_status` is a string; every face shard is listed in the manifest and validates with the line-list index, score, ordering, length and textless-card rules.
 - Textless cards have no neighbours and, in v3, no ability entries.
 - The bundle checker verifies hashes and byte counts for every manifest file required by the schema.
 

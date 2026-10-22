@@ -46,6 +46,12 @@ describe('savedList', () => {
   it('line ranking before its shard loads is empty, not the whole-card list', () => {
     expect(savedList({ ability: null, rank: 'line', whole, lines: null, abilities })).toEqual([]);
   });
+  it('uses face matches only when no ability is selected', () => {
+    const faces = [[5, 0.5]];
+    expect(savedList({ ability: null, rank: 'face', whole, lines, faces, abilities })).toBe(faces);
+    expect(savedList({ ability: 0, rank: 'face', whole, lines, faces, abilities })).toEqual([[3, 0.7]]);
+    expect(savedList({ ability: null, rank: 'face', whole, lines, faces: null, abilities })).toEqual([]);
+  });
 });
 
 describe('hasMore', () => {

@@ -17,8 +17,8 @@ export const visibleNeighbours = (saved, cardByIndex, filters) => filterNeighbou
 export const activeFilters = (f) => Boolean(f.color || f.creature || f.type || Number.isFinite(f.minMv) || Number.isFinite(f.maxMv));
 
 // the list being shown: one ability's matches, the line-match ranking (v4), or the whole card
-export const savedList = ({ ability, rank, whole, lines, abilities }) =>
-  ability !== null ? abilities[ability]?.neighbours ?? [] : rank === 'line' ? lines ?? [] : whole;
+export const savedList = ({ ability, rank, whole, lines, faces, abilities }) =>
+  ability !== null ? abilities[ability]?.neighbours ?? [] : rank === 'line' ? lines ?? [] : rank === 'face' ? faces ?? [] : whole;
 
 // unfiltered, every saved neighbour can be shown (its card loads on demand); filtered, only matches
 export const hasMore = ({ saved, visible, shown, filtering }) => (filtering ? visible.length : saved.length) > shown;

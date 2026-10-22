@@ -59,7 +59,7 @@ export function parseUrl(search) {
   const colorBy = oneOf('cb', ['identity', 'color'], 'identity');
   const ability = Number(params.get('ability'));
   const minMv = num('min'), maxMv = num('max');
-  return { card: params.get('card') || '', ability: given('ability') && Number.isInteger(ability) && ability >= 0 ? ability : null, rank: params.get('rank') === 'line' ? 'line' : 'whole', view: params.get('view') === 'grid' ? 'grid' : 'list', color, colorMode, colorBy, minMv, maxMv, creature: oneOf('creature', ['creature', 'noncreature']), type: params.get('type') || '', dropped };
+  return { card: params.get('card') || '', ability: given('ability') && Number.isInteger(ability) && ability >= 0 ? ability : null, rank: ['line', 'face'].includes(params.get('rank')) ? params.get('rank') : 'whole', view: params.get('view') === 'grid' ? 'grid' : 'list', color, colorMode, colorBy, minMv, maxMv, creature: oneOf('creature', ['creature', 'noncreature']), type: params.get('type') || '', dropped };
 }
 
 export function serializeUrl(state) {
@@ -67,6 +67,7 @@ export function serializeUrl(state) {
   if (state.card) params.set('card', state.card);
   if (Number.isInteger(state.ability) && state.ability >= 0) params.set('ability', state.ability);
   if (state.rank === 'line') params.set('rank', 'line');
+  if (state.rank === 'face') params.set('rank', 'face');
   if (state.color) params.set('color', state.color);
   if (state.color && state.color !== 'C' && state.colorMode && state.colorMode !== 'include') params.set('cm', state.colorMode);
   if (state.color && state.colorBy === 'color') params.set('cb', 'color');
@@ -82,8 +83,10 @@ export function resolveAbilityIndex(index, abilities) {
   return Number.isInteger(index) && index >= 0 && index < abilities.length ? index : null;
 }
 
-const SCHEMAS = ['mtgemb-release-v2', 'mtgemb-release-v3', 'mtgemb-release-v4', 'mtgemb-release-v5'];
-export const isV4Plus = (release) => ['mtgemb-release-v4', 'mtgemb-release-v5'].includes(release?.schema);
+const SCHEMAS = ['mtgemb-release-v2', 'mtgemb-release-v3', 'mtgemb-release-v4', 'mtgemb-release-v5', 'mtgemb-release-v6'];
+export const isV4Plus = (release) => ['mtgemb-release-v4', 'mtgemb-release-v5', 'mtgemb-release-v6'].includes(release?.schema);
+export const isV5Plus = (release) => ['mtgemb-release-v5', 'mtgemb-release-v6'].includes(release?.schema);
+export const isV6 = (release) => release?.schema === 'mtgemb-release-v6';
 const COLOURS = /^W?U?B?R?G?$/;
 
 export function validateRelease(release, names) {
@@ -93,13 +96,15 @@ export function validateRelease(release, names) {
   const shards = Math.ceil(release.n_cards / release.shard_size);
   const v3plus = release.schema !== 'mtgemb-release-v2';
   const v4 = isV4Plus(release);
-  // v4 stores 50 line matches per list; v5 stores 200 whole-card and line matches
-  const v5 = release.schema === 'mtgemb-release-v5';
+  // v4 stores 50 line matches; v5/v6 store 200 whole-card and line matches.
+  const v5 = isV5Plus(release);
+  const v6 = isV6(release);
   if (!Number.isInteger(release.k) || release.k < 1 || (v5 && release.k !== 200)) throw new Error('Invalid k in release.json.');
   const lineK = v5 ? 200 : 50;
-  const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: shards }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
+  const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: shards }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : []), ...(v6 ? [`faces/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
   if (release.schema === 'mtgemb-release-v3' && (release.ability_k !== 50 || release.abilities_status !== 'exploratory: not evaluated on the tag proxy')) throw new Error('Invalid ability metadata in release.json.');
   if (v4 && (!Number.isInteger(release.ability_k) || release.ability_k !== 50 || typeof release.abilities_status !== 'string' || !Number.isInteger(release.line_k) || release.line_k !== lineK || typeof release.line_status !== 'string' || typeof release.tags_status !== 'string')) throw new Error('Invalid v4 line or tag metadata in release.json.');
+  if (v6 && (!Number.isInteger(release.face_k) || release.face_k !== 200 || typeof release.face_status !== 'string')) throw new Error('Invalid v6 face metadata in release.json.');
   if (v3plus) for (const file of expectedFiles) {
     const entry = release.files?.[file];
     if (!entry || !/^[a-f0-9]{64}$/.test(entry.sha256) || !Number.isInteger(entry.bytes) || entry.bytes < 0) throw new Error(`Release manifest is missing or malformed for ${file}.`);
@@ -135,7 +140,7 @@ export function validateReleasePointer(current, release) {
   return true;
 }
 
-export function validateShard(cards, neighbours, release, shard, ids, abilities, lines, tags) {
+export function validateShard(cards, neighbours, release, shard, ids, abilities, lines, tags, faces) {
   validateCommonShard(cards, neighbours, release, shard, ids);
   if (isV4Plus(release)) {
     validateTags(release, tags);
@@ -145,6 +150,7 @@ export function validateShard(cards, neighbours, release, shard, ids, abilities,
       if (!cards[offset].has_text && cards[offset].tags.length) throw new Error(`Textless card ${index} must have no tags.`);
     }
     if (lines !== undefined) validateLineShard(cards, lines, release, shard);
+    if (faces !== undefined) validateFaceShard(cards, faces, release, shard);
   }
   if (abilities !== undefined && release.schema !== 'mtgemb-release-v2') validateAbilityShard(cards, abilities, release, shard, tags);
   return true;
@@ -161,21 +167,29 @@ function validateTagIndices(indices, count, label) {
 }
 
 export function validateLineShard(cards, lines, release, shard) {
+  return validateRankedShard(cards, lines, release, shard, release.line_k, 'Line');
+}
+
+export function validateFaceShard(cards, faces, release, shard) {
+  return validateRankedShard(cards, faces, release, shard, release.face_k, 'Face');
+}
+
+function validateRankedShard(cards, rows, release, shard, limit, label) {
   const expected = Math.min(release.shard_size, release.n_cards - shard * release.shard_size);
-  if (!Array.isArray(lines) || lines.length !== expected) throw new Error(`Line shard ${shard} has the wrong length.`);
+  if (!Array.isArray(rows) || rows.length !== expected) throw new Error(`${label} shard ${shard} has the wrong length.`);
   for (let offset = 0; offset < expected; offset += 1) {
     const index = shard * release.shard_size + offset;
-    const list = lines[offset];
-    if (!Array.isArray(list) || list.length > release.line_k) throw new Error(`Line list ${index} is malformed.`);
+    const list = rows[offset];
+    if (!Array.isArray(list) || list.length > limit) throw new Error(`${label} list ${index} is malformed.`);
     let previous = Infinity;
     for (const pair of list) {
-      if (!Array.isArray(pair) || pair.length !== 2) throw new Error(`Line neighbour index or score is invalid for card ${index}.`);
+      if (!Array.isArray(pair) || pair.length !== 2) throw new Error(`${label} neighbour index or score is invalid for card ${index}.`);
       const [target, score] = pair;
-      if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score)) throw new Error(`Line neighbour index or score is invalid for card ${index}.`);
-      if (score > previous) throw new Error(`Line neighbour scores are not descending for card ${index}.`);
+      if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score)) throw new Error(`${label} neighbour index or score is invalid for card ${index}.`);
+      if (score > previous) throw new Error(`${label} neighbour scores are not descending for card ${index}.`);
       previous = score;
     }
-    if (!cards[offset].has_text && list.length) throw new Error(`Textless card ${index} must have no line neighbours.`);
+    if (!cards[offset].has_text && list.length) throw new Error(`Textless card ${index} must have no ${label.toLowerCase()} neighbours.`);
   }
   return true;
 }
@@ -188,7 +202,7 @@ export function validateCommonShard(cards, neighbours, release, shard, ids) {
     const card = cards[offset];
     const index = shard * release.shard_size + offset;
     if (!card || typeof card.id !== 'string' || card.id !== undefined && card.id.length === 0 || !Array.isArray(card.faces) || typeof card.color_identity !== 'string' || typeof card.mv !== 'number' || typeof card.type_line !== 'string' || typeof card.is_creature !== 'boolean' || typeof card.has_text !== 'boolean') throw new Error(`Card ${index} is malformed.`);
-    if (release.schema === 'mtgemb-release-v5' && (typeof card.colors !== 'string' || !COLOURS.test(card.colors) || !(card.image_back === null || typeof card.image_back === 'string'))) throw new Error(`Card ${index} is malformed.`);
+    if (isV5Plus(release) && (typeof card.colors !== 'string' || !COLOURS.test(card.colors) || !(card.image_back === null || typeof card.image_back === 'string'))) throw new Error(`Card ${index} is malformed.`);
     if (ids && card.id !== ids[index]) throw new Error(`Card ID does not match ID index at ${index}.`);
     const list = neighbours[offset];
     if (!Array.isArray(list) || list.length > release.k) throw new Error(`Neighbour list ${index} is malformed.`);

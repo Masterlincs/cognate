@@ -45,6 +45,10 @@ describe('URL state', () => {
     expect(parseUrl(`?${serializeUrl(state)}`).rank).toBe('line');
     expect(parseUrl('?card=oracle-123').rank).toBe('whole');
   });
+  it('round trips face ranking and drops it for bundles without face matches', () => {
+    expect(parseUrl(`?${serializeUrl({ card: 'oracle-123', rank: 'face' })}`).rank).toBe('face');
+    expect(parseUrl('?rank=unknown')).toMatchObject({ rank: 'whole', dropped: [] });
+  });
 });
 
 describe('bundle validation', () => {
@@ -234,5 +238,31 @@ describe('v5 bundles', () => {
     expect(() => shard(base, { colors: 'RW' })).toThrow(/malformed/);
     expect(() => shard(base, { colors: undefined })).toThrow(/malformed/);
     expect(() => shard(base, { image_back: 3 })).toThrow(/malformed/);
+  });
+});
+
+describe('v6 face match bundles', () => {
+  const files = ['names.json', 'ids.json', 'tags.json', 'cards/000.json', 'neighbours/000.json', 'abilities/000.json', 'lines/000.json', 'faces/000.json'];
+  const v6 = { schema: 'mtgemb-release-v6', n_cards: 2, shard_size: 2, k: 200, ability_k: 50, line_k: 200, face_k: 200,
+    abilities_status: 'exploratory', line_status: 'exploratory', face_status: 'exploratory face matches', tags_status: 'proxy',
+    files: Object.fromEntries(files.map((file) => [file, { sha256: 'a'.repeat(64), bytes: 1 }])) };
+  const base = { id: 'a', faces: [{ oracle_text: 'Draw a card.' }], color_identity: 'U', mv: 1, type_line: 'Instant', is_creature: false, has_text: true, tags: [], colors: 'U', image_back: null };
+  it('requires v6 face metadata and a manifest entry for each face shard', () => {
+    expect(validateRelease(v6)).toBe(true);
+    expect(() => validateRelease({ ...v6, face_k: 50 })).toThrow(/face/);
+    expect(() => validateRelease({ ...v6, face_status: undefined })).toThrow(/face/);
+    const missing = { ...v6, files: { ...v6.files } };
+    delete missing.files['faces/000.json'];
+    expect(() => validateRelease(missing)).toThrow(/faces\/000.json/);
+  });
+  it('validates face match lists with v5 line-list rules', () => {
+    const cards = [base, { ...base, id: 'b', has_text: false }];
+    const schema = { ...v6, n_cards: 3 };
+    const check = (faces) => validateShard(cards, [[], []], schema, 0, ['a', 'b'], undefined, [[], []], { labels: ['x'] }, faces);
+    expect(check([[[1, 0.9], [2, 0.9]], []])).toBe(true); // tied scores are valid
+    const tooMany = Array.from({ length: 201 }, () => [1, 0.1]);
+    for (const bad of [[[[0, 0.9]], []], [[[3, 0.9]], []], [[[1, Infinity]], []], [[[1, 0.8], [2, 0.9]], []], [[[1, 0.8]], [[0, 0.1]]], [tooMany, []]]) {
+      expect(() => check(bad)).toThrow();
+    }
   });
 });

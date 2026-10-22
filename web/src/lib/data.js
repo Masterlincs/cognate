@@ -1,6 +1,6 @@
 // Release bundle and site-data loading. One promise cache per shard kind; failed loads are
 // evicted so a retry can succeed. Shapes are checked with the bundle validators (SCHEMA.md).
-import { isV4Plus, validateAbilityShard, validateCommonShard, validateIds, validateLineShard, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
+import { isV4Plus, isV6, validateAbilityShard, validateCommonShard, validateFaceShard, validateIds, validateLineShard, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
 
 let root = '';
 let fetcher = (...args) => fetch(...args);
@@ -12,6 +12,7 @@ const shards = new Map();
 const neighbours = new Map();
 const abilities = new Map();
 const lines = new Map();
+const faces = new Map();
 const pretrained = new Map();
 
 export const setRoot = (value) => { root = value.replace(/\/$/, ''); };
@@ -37,7 +38,7 @@ export async function loadRelease(fetchFn = fetcher) {
   validateRelease(next);
   // a new deployment between visits must not mix in the old release's cached shards
   if (next.release_id !== release?.release_id) {
-    for (const cache of [shards, neighbours, abilities, lines, pretrained]) cache.clear();
+    for (const cache of [shards, neighbours, abilities, lines, faces, pretrained]) cache.clear();
     tagsReady = null; ids = null; site = null;
   }
   release = next;
@@ -99,6 +100,18 @@ export async function getLines(index) {
   const rows = await cached(lines, shard, async () => {
     const [cards, rows] = await Promise.all([getCards(shard), get(`${release.release_id}/lines/${pad(shard)}.json`)]);
     validateLineShard(cards, rows, release, shard);
+    return rows;
+  });
+  return rows[index % release.shard_size];
+}
+
+// v6 candidate-side face matches are stored once per card, like line-match rows.
+export async function getFaces(index) {
+  if (!isV6(release)) return [];
+  const shard = shardOf(index);
+  const rows = await cached(faces, shard, async () => {
+    const [cards, rows] = await Promise.all([getCards(shard), get(`${release.release_id}/faces/${pad(shard)}.json`)]);
+    validateFaceShard(cards, rows, release, shard);
     return rows;
   });
   return rows[index % release.shard_size];
