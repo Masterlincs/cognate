@@ -28,7 +28,7 @@
   let regions = $state([]);
   let siteMissing = $state(false);
   let error = $state('');
-  let rowsError = $state(null); // { mode, message }: a failed Line or Face match load, shown only in that mode
+  let rowsError = $state({}); // mode -> message: a failed Line or Face match load, shown only in that mode; clearing it retries
   let notice = $state('');
   let index = $state(-1);
   let card = $state(null);
@@ -57,7 +57,7 @@
   const filtering = $derived(activeFilters(filters));
   const visible = $derived(visibleNeighbours(saved, (i) => byIndex[i], filters));
   const pageRows = $derived(visible.slice(0, shown));
-  const shownError = $derived(error || (rowsError && ability === null && rowsError.mode === rank ? rowsError.message : ''));
+  const shownError = $derived(error || (ability === null && rowsError[rank]) || '');
   const pending = $derived((byLine && lineRows === null) || (byFace && faceRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
   const showcase = metrics.showcase ?? [];
 
@@ -76,17 +76,17 @@
 
   // fetch candidate-side face matches only while Face match is selected
   $effect(() => {
-    if (busy || !byFace || !card?.has_text || faceRows !== null) return;
+    if (busy || !byFace || !card?.has_text || faceRows !== null || rowsError.face) return;
     const t = token;
-    getFaces(index).then((rows) => { if (t === token) { faceRows = rows; if (rowsError?.mode === 'face') rowsError = null; } }).catch((e) => { if (t === token) rowsError = { mode: 'face', message: e.message }; });
+    getFaces(index).then((rows) => { if (t === token) { faceRows = rows; } }).catch((e) => { if (t === token) rowsError.face = e.message; });
   });
 
   // line-match rows for the shown card, once any selection has settled; this also covers
   // switching to Line match while another card is still loading
   $effect(() => {
-    if (busy || !byLine || !card?.has_text || lineRows !== null) return;
+    if (busy || !byLine || !card?.has_text || lineRows !== null || rowsError.line) return;
     const t = token;
-    getLines(index).then((rows) => { if (t === token) { lineRows = rows; if (rowsError?.mode === 'line') rowsError = null; } }).catch((e) => { if (t === token) rowsError = { mode: 'line', message: e.message }; });
+    getLines(index).then((rows) => { if (t === token) { lineRows = rows; } }).catch((e) => { if (t === token) rowsError.line = e.message; });
   });
 
   function updateUrl(push) {
@@ -98,7 +98,7 @@
     const t = ++token;
     busy = true;
     notice = '';
-    error = ''; rowsError = null;
+    error = ''; rowsError = {};
     compare = null;
     shown = PAGE;
     try {
@@ -123,7 +123,7 @@
 
   function clear() {
     token += 1;
-    index = -1; card = null; whole = []; abilities = []; lineRows = null; faceRows = null; ability = null; compare = null; rowsError = null;
+    index = -1; card = null; whole = []; abilities = []; lineRows = null; faceRows = null; ability = null; compare = null; rowsError = {};
   }
 
   function apply(state) {
@@ -150,7 +150,7 @@
   function setRank(value) {
     ability = null;
     rank = value;
-    if (rowsError?.mode === value) rowsError = null; // its effect retries
+    rowsError[value] = ''; // its effect retries
     shown = PAGE;
     updateUrl(true);
   }

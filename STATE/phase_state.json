@@ -2,7 +2,7 @@
   "phase": "P12",
   "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "x-3-e5-effect training since 2026-10-22 07:35 UTC under GPU limits; pipeline (fb68af0, restarted) then re-runs x-2 and x-1 dev evals, scores x-3, queues x-4. Judge x-3 and x-4 per . x-2 did not clear . Site serves release v6 2026-10-16-e5-base-v2-3984a6b7 locally; nothing published. Sol r3 review of 5392680/fb68af0 running. Disk 6.6 GB free; 23 old checkpoints (~23 GB) await the user's deletion decision.",
+  "next_action": "x-3-e5-effect training since 2026-10-22 07:35 UTC under GPU limits; pipeline (fb68af0, restarted) then re-runs x-2 and x-1 dev evals, scores x-3, queues x-4. Judge x-3 and x-4 per . x-2 did not clear . Site serves release v6 2026-10-16-e5-base-v2-3984a6b7 locally; nothing published. Site row-error fixes closed: Sol r3 Minor fixed in 77fc878, Sol r4 passed. Disk 6.6 GB free; 23 old checkpoints (~23 GB) await the user's deletion decision.",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
