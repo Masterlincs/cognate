@@ -61,7 +61,8 @@ class TrainConfig(BaseModel):
     seed: int = 0  # model-side randomness (dropout)
     data_seed: int = 0  # batch schedule
     objective: Literal["masked_infonce", "multi_positive"] = "masked_infonce"
-    pair_weighting: Literal["none", "specificity"] = "none"
+    pair_weighting: Literal["none", "specificity", "tag_idf"] = "none"
+    pairs_version: Literal["pairs_v1", "pairs_v2"] = "pairs_v1"  # v2 is effect-only
     batch_mode: Literal["random", "tag_grouped"] = "random"
     text_version: Literal["no_reminder_v1", "no_reminder_v2"] = "no_reminder_v1"
     # ideas 1-2 (Delvefall): a line<->tag stream beside the unchanged card schedule
@@ -93,7 +94,8 @@ class TrainConfig(BaseModel):
 class TrainData:
     """Fit cards with text, positive pairs, eligible-tag incidence and negative pools."""
 
-    def __init__(self, ds_dir: str | Path, text_version: str = "no_reminder_v1"):
+    def __init__(self, ds_dir: str | Path, text_version: str = "no_reminder_v1",
+                 pairs_version: str = "pairs_v1"):
         ds = load_dataset(ds_dir)
         cards = selfname.apply_text_version(ds["cards"], text_version)
         fit_ok = (cards["split"] == "fit") & (cards["text_status"] == "ok")
@@ -101,7 +103,8 @@ class TrainData:
                                      ds["cards"].loc[fit_ok, "text"]).sum())
         self.text_version = text_version
         ds["cards"] = cards
-        pdir = Path(ds_dir) / "pairs_v1"
+        self.pairs_version = pairs_version
+        pdir = Path(ds_dir) / pairs_version
         self.pairs_rec = read_json(pdir / "pairs.json")
         for name, h in self.pairs_rec["files"].items():
             if sha256_file(pdir / name) != h:
@@ -118,6 +121,7 @@ class TrainData:
         self.b = pairs["b"].map(pos).to_numpy()
         self.pair_tag = pd.factorize(pairs["tag_id"])[0]
         self.spec_weight = pairs["spec_weight"].to_numpy(dtype=np.float32)
+        self.pair_tag_id = pairs["tag_id"].to_numpy()
         elig = pd.read_parquet(pdir / "pair_tags.parquet")["tag_id"]
         mem = ds["memberships"]
         m = mem[mem["oracle_id"].isin(pos) & mem["tag_id"].isin(set(elig))]
@@ -139,6 +143,11 @@ class TrainData:
                          "pairs_id": self.pairs_rec["pairs_id"]}
         self._ds, self._elig = ds, set(elig)
 
+    def tag_weights(self) -> np.ndarray:
+        """option 3: each pair weighted by the fit IDF of the tag that made it (not the
+        mean over all shared tags, as slot 7 did), mean-one, clipped like spec_weight."""
+        return tag_idf_weights(self.pair_tag_id, self._ds["tags"])
+
     def line_tag_rows(self) -> dict:
         """aux rows; every trap-exam card's family is kept out (exam.exam_cards)."""
         return linetag.build(self._ds, self._elig, exam.exam_cards())
@@ -153,6 +162,13 @@ class TrainData:
     def known_pos(self, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
         """Shares at least one pair-eligible tag."""
         return (self.E[rows] @ self.E[cols].T).toarray() > 0
+
+
+def tag_idf_weights(pair_tag_id, tags: pd.DataFrame, clip=(0.5, 2.0)) -> np.ndarray:
+    idf = tags.set_index("tag_id")["idf_fit"].reindex(pair_tag_id).to_numpy(dtype=np.float64)
+    if not np.isfinite(idf).all():
+        raise ValueError("a pair's tag has no fit IDF")
+    return np.clip(idf / idf.mean(), *clip).astype(np.float32)
 
 
 # ---------------------------------------------------------------- schedule
@@ -499,9 +515,11 @@ def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | No
     dev = dev or enc.device()
     out = run_dir(cfg.run_id)
     out.mkdir(parents=True, exist_ok=True)
-    data = data or TrainData(cfg.dataset_dir, cfg.text_version)
+    data = data or TrainData(cfg.dataset_dir, cfg.text_version, cfg.pairs_version)
     if getattr(data, "text_version", "no_reminder_v1") != cfg.text_version:
         raise ValueError("training data text_version does not match config")
+    if getattr(data, "pairs_version", "pairs_v1") != cfg.pairs_version:
+        raise ValueError("training data pairs_version does not match config")
     recipe = enc.RECIPES[cfg.backbone]
     if bench and cfg.selection == "guarded_best" and cfg.guardrail_hard_lexical is None:
         raise ValueError("guarded_best selection needs guardrail_hard_lexical "
@@ -593,6 +611,7 @@ def synth_loss(model, tok, recipe, max_length, synth_rows: dict, rows: np.ndarra
 
 def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_hash,
                   aux=None, card_hash=None, synth_rows=None):
+    tag_w = data.tag_weights() if cfg.pair_weighting == "tag_idf" else None
     torch.manual_seed(cfg.seed)
     random.seed(cfg.seed)
     np.random.seed(cfg.seed)
@@ -658,6 +677,8 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
             w = None
             if cfg.pair_weighting == "specificity":
                 w = torch.from_numpy(data.spec_weight[b["pairs"]]).to(dev)
+            elif tag_w is not None:
+                w = torch.from_numpy(tag_w[b["pairs"]]).to(dev)
             l1, s1 = contrastive_loss(q, c, k1.to(dev), x1.to(dev), cfg.scale, cfg.objective, w)
             l2, s2 = contrastive_loss(c[: len(anc)], q, k2.to(dev), x2.to(dev), cfg.scale,
                                       cfg.objective, w)

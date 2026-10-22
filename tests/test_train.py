@@ -562,3 +562,22 @@ def test_training_eval_text_version(tiny, monkeypatch, selfname_cards, version):
     started = next(kw for a, kw in events if a == ("train", "STARTED"))
     assert started["text_version"] == version
     assert started["fit_texts_changed"] == data.fit_texts_changed
+
+
+def test_tag_idf_weights_follow_the_pair_tag_mean_one_and_clipped():
+    import pandas as pd
+
+    tags = pd.DataFrame({"tag_id": ["rare", "mid", "broad", "extreme"],
+                         "idf_fit": [4.0, 2.0, 1.0, 40.0]})
+    w = tr.tag_idf_weights(np.array(["rare", "mid", "broad", "mid"]), tags)
+    np.testing.assert_allclose(w, [4 / 2.25, 2 / 2.25, 0.5, 2 / 2.25], rtol=1e-6)  # 0.44 -> 0.5
+    assert tr.tag_idf_weights(np.array(["extreme", "broad", "broad"]), tags).max() == 2.0
+    with pytest.raises(ValueError, match="no fit IDF"):
+        tr.tag_idf_weights(np.array(["missing"]), tags)
+
+
+def test_pairs_version_must_match_the_data(tiny):
+    data = FakeData()
+    data.pairs_version = "pairs_v1"
+    with pytest.raises(ValueError, match="pairs_version"):
+        tr.train(_cfg(pairs_version="pairs_v2"), None, dev=torch.device("cpu"), data=data)
