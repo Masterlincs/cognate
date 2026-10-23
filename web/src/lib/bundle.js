@@ -1,5 +1,18 @@
+// accents dropped, case folded; most card names are ASCII, which skips the slow NFD step
 export function normalize(value) {
-  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase().trim();
+  const folded = /[^\x00-\x7f]/.test(value) ? value.normalize('NFD').replace(/[\u0300-\u036f]/g, '') : value;
+  return folded.toLowerCase().trim();
+}
+
+// normalised name and aliases per card, computed once per names list (the first search was slow)
+const keyCache = new WeakMap();
+export function searchKeys(names) {
+  if (!keyCache.has(names)) {
+    const keys = names.names.map((name) => [normalize(name)]);
+    for (const [name, index] of names.aliases) keys[index].push(normalize(name));
+    keyCache.set(names, keys);
+  }
+  return keyCache.get(names);
 }
 
 export function searchNames(query, names, ids = null, limit = 12) {
@@ -8,10 +21,9 @@ export function searchNames(query, names, ids = null, limit = 12) {
   const exacts = [];
   const prefixes = [];
   const substrings = [];
-  const aliases = Array.from({ length: names.names.length }, () => []);
-  for (const [name, index] of names.aliases) aliases[index].push(name);
-  for (let i = 0; i < names.names.length; i += 1) {
-    const strings = [names.names[i], ...aliases[i]].map(normalize);
+  const keys = searchKeys(names);
+  for (let i = 0; i < keys.length; i += 1) {
+    const strings = keys[i];
     if (strings.some((s) => s === q)) exacts.push(i);
     else if (strings.some((s) => s.startsWith(q))) prefixes.push(i);
     else if (strings.some((s) => s.includes(q))) substrings.push(i);

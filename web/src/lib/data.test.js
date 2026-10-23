@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { getCard, getFaces, getTagLabels, loadRelease, loadSiteData } from './data.js';
 
 const ok = (body) => ({ ok: true, status: 200, json: async () => body, arrayBuffer: async () => body });
@@ -80,5 +80,41 @@ describe('release loading', () => {
     expect(await getFaces(1)).toEqual([]);
     expect(await getFaces(0)).toEqual([[1, 0.8]]);
     expect(faceRequests).toBe(1);
+  });
+});
+
+// the explorer page's inline script (hooks.server.js) starts these requests before the app boots
+describe('early start-up requests', () => {
+  afterEach(() => { delete globalThis.__atlasPrefetch; });
+
+  it('uses the responses the page prefetched instead of fetching again', async () => {
+    const rel = v3Release('r3', 'A');
+    globalThis.__atlasPrefetch = { 'current.json': Promise.resolve(ok({ release_id: 'r3' })), 'r3/release.json': Promise.resolve(ok(rel['release.json'])), 'r3/names.json': Promise.resolve(ok(rel['names.json'])) };
+    const seen = [];
+    const route = server({ r3: rel }, { id: 'r3' });
+    const r = await loadRelease(async (url) => { seen.push(url); return route(url); });
+    await r.idsReady;
+    expect(r.names.names).toEqual(['A0', 'A1']);
+    expect(seen).toEqual(['/data/r3/ids.json']);
+  });
+
+  it('fetches normally when a prefetched request failed', async () => {
+    const failed = Promise.reject(new Error('offline'));
+    failed.catch(() => {});
+    globalThis.__atlasPrefetch = { 'current.json': failed };
+    const r = await loadRelease(server({ r3: v3Release('r3', 'A') }, { id: 'r3' }));
+    expect(r.release.release_id).toBe('r3');
+  });
+
+  it('requests names.json without waiting for release.json', async () => {
+    const log = [];
+    const route = server({ r3: v3Release('r3', 'A') }, { id: 'r3' });
+    const fetchFn = async (url) => {
+      if (url.endsWith('names.json')) log.push('names requested');
+      if (url.endsWith('release.json')) await new Promise((done) => setTimeout(done, 20)).then(() => log.push('release arrived'));
+      return route(url);
+    };
+    await loadRelease(fetchFn);
+    expect(log).toEqual(['names requested', 'release arrived']);
   });
 });

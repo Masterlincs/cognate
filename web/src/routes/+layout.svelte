@@ -1,7 +1,4 @@
 <script>
-  import '@fontsource-variable/schibsted-grotesk';
-  import '@fontsource-variable/source-serif-4';
-  import '#lib/vendor/mana.css';
   import '../app.css';
   import { page } from '$app/state';
   import { resolve } from '$app/paths';

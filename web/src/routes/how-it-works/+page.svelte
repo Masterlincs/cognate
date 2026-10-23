@@ -1,4 +1,5 @@
 <script>
+  import '#lib/fonts.js';
   import { asset, resolve } from '$app/paths';
   import { goto } from '$app/navigation';
   import BarChart from '#lib/BarChart.svelte';
@@ -33,7 +34,7 @@
   const split = m.data.split_counts;
 
   // hero search: card names load only when the reader focuses the box
-  let names = $state(null);
+  let names = $state.raw(null);
   let ids = null;
   let loading = null;
   function loadNames() {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchNames, serializeUrl, validateIds, validateRelease, validateTags, withIds, validateReleasePointer, validateShard } from './bundle.js';
+import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchKeys, searchNames, serializeUrl, validateIds, validateRelease, validateTags, withIds, validateReleasePointer, validateShard } from './bundle.js';
 
 const names = { names: ['Café Lantern', 'Blue Door', 'Green Thread // Thread Unbound'], aliases: [['Thread Unbound', 2]] };
 const ids = { ids: ['a', 'b', 'c'] };
@@ -19,6 +19,24 @@ describe('search and ranking helpers', () => {
     const order = { names: ['The Silver Lamp', 'Silver Lamp Keeper'], aliases: [] };
     expect(searchNames('silver lamp', order).map((entry) => entry.index)).toEqual([1, 0]);
     expect(searchNames('silver lamp', order).map((entry) => entry.id)).toEqual(['', '']);
+  });
+
+  it('matches accented names, case and aliases, exact before prefix before substring', () => {
+    const list = { names: ['Lim-Dûl the Necromancer', 'Jötun Grunt', 'Æther Vial', 'Grunt Totem', 'Dust Grunt'], aliases: [['Lim-Dul', 0], ['Grunt', 3]] };
+    expect(searchNames('LIM-DUL', list).map((entry) => entry.index)).toEqual([0]);
+    expect(searchNames('jotun', list).map((entry) => entry.index)).toEqual([1]);
+    expect(searchNames('æther', list).map((entry) => entry.index)).toEqual([2]);
+    expect(searchNames('grunt', list).map((entry) => entry.index)).toEqual([3, 1, 4]);
+    expect(searchNames('   ', list)).toEqual([]);
+  });
+
+  // the first search normalises every name once (it took about 0.6 s on the throttled mobile profile)
+  it('normalises a names list once and reuses it', () => {
+    const list = { names: ['Café Lantern', 'Blue Door'], aliases: [['Lantern', 0]] };
+    const keys = searchKeys(list);
+    expect(keys).toEqual([['cafe lantern', 'lantern'], ['blue door']]);
+    expect(searchKeys(list)).toBe(keys);
+    expect(searchKeys({ ...list })).not.toBe(keys);
   });
 
   it('filters only saved neighbours using the selected constraints', () => {

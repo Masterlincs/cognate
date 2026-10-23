@@ -18,8 +18,16 @@ const pretrained = new Map();
 export const setRoot = (value) => { root = value.replace(/\/$/, ''); };
 const pad = (n) => String(n).padStart(3, '0');
 
+// a response the page's inline script already requested (prefetch.js, added by scripts/prune-build.mjs), taken once
+function early(path) {
+  const request = globalThis.__atlasPrefetch?.[path];
+  if (request) delete globalThis.__atlasPrefetch[path];
+  return request;
+}
+
 async function get(path, kind = 'json', fetchFn = fetcher) {
-  const response = await fetchFn(`${root}/data/${path}`);
+  const url = `${root}/data/${path}`;
+  const response = await (early(path)?.catch(() => fetchFn(url)) ?? fetchFn(url));
   if (!response.ok) throw Object.assign(new Error(`Could not load ${path} (${response.status}).`), { status: response.status });
   return kind === 'json' ? response.json() : response.arrayBuffer();
 }
@@ -33,6 +41,9 @@ export async function loadRelease(fetchFn = fetcher) {
   fetcher = fetchFn;
   const current = await get('current.json');
   if (!current.release_id || /[/\\]|\.\./.test(current.release_id)) throw new Error('Invalid release pointer.');
+  // names.json is requested alongside release.json; it is used only after release.json validates
+  const namesReady = get(`${current.release_id}/names.json`);
+  namesReady.catch(() => {});
   const next = await get(`${current.release_id}/release.json`);
   validateReleasePointer(current, next);
   validateRelease(next);
@@ -42,7 +53,7 @@ export async function loadRelease(fetchFn = fetcher) {
     tagsReady = null; ids = null; site = null;
   }
   release = next;
-  const names = await get(`${release.release_id}/names.json`);
+  const names = await namesReady;
   validateRelease(release, names);
   // ids load after names so they do not share bandwidth with the search index
   const idsReady = get(`${release.release_id}/ids.json`).then((data) => { validateIds(release, data); ids = data.ids; return ids; });

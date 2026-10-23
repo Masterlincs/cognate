@@ -20,8 +20,8 @@
   const PAGE = 12;
   const NO_FILTERS = { color: '', colorMode: 'include', colorBy: 'identity', minMv: null, maxMv: null, creature: '', type: '' };
   const PARAM_NAMES = { color: 'colour', cm: 'colour match', cb: 'colour or identity', min: 'minimum mana value', max: 'maximum mana value', creature: 'creatures' };
-  let release = $state(null);
-  let names = $state(null);
+  let release = $state.raw(null);
+  let names = $state.raw(null); // raw, not a deep proxy: proxied, the first search took about 0.5 s on the throttled mobile profile
   let ids = null;
   let idsReady = null;
   let map = $state(null);
@@ -188,9 +188,12 @@
     setRoot(asset(''));
     const onPop = () => ids && apply(parseUrl(location.search));
     addEventListener('popstate', onPop);
+    // web fonts wait for the search index (or its failure) so they do not slow it down
+    const starting = loadRelease(fetch);
+    starting.finally(() => import('#lib/fonts.js')).catch(() => {});
     (async () => {
       try {
-        const r = await loadRelease(fetch);
+        const r = await starting;
         release = r.release; names = r.names; idsReady = r.idsReady;
         loadSiteData(release.release_id).then((s) => {
           if (s) { map = decodeMap(s.map); regions = s.regions.map((r) => ({ ...r, label: regionLabel(r.label) })); } else siteMissing = true;
