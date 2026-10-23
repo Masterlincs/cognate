@@ -14,7 +14,7 @@ Every vector, in training, evaluation and the release, uses the same contract.
 
 | Setting | Value |
 | --- | --- |
-| Input text | `no_reminder_v1` rules text: reminder text removed, faces joined with `\n//\n` |
+| Input text | `no_reminder_v1` rules text: every balanced parenthetical removed (reminder text, and also any parenthetical that matters to the rules), faces joined with `\n//\n` |
 | Prefix | `query: ` |
 | Pooling | mean over tokens, then L2 normalisation |
 | Max length | 94 tokens |
@@ -24,7 +24,7 @@ Every vector, in training, evaluation and the release, uses the same contract.
 ## Training
 
 - **Data:** pairs of fit-split cards that share a functional Scryfall Tagger tag (`pairs_v1`, pairs id `795ebb1ae7ce8251`). Development and sealed cards never enter training. See `DATA_CARD.md`.
-- **Objective:** masked InfoNCE. In-batch negatives that share a tag with the anchor are masked, and one hard negative is drawn from lexical ranks 1–30.
+- **Objective:** masked InfoNCE. In-batch negatives that share a pair-eligible tag with the anchor (a functional tag held by 2 to 500 fit cards) or come from its own family are masked, and one hard negative is drawn from lexical ranks 1–30.
 - **Settings:** 32 pairs per batch, learning rate 3e-5, scale 20, weight decay 0.01, 10% warmup, gradient clip 1.0, fp32, 4000 updates, seed 1, final checkpoint (`configs/confirm-x1-s1.json`).
 - **Hardware:** an Intel Arc laptop iGPU (torch XPU). The run took 3.8 h of training time at 8.5 GB peak memory.
 
@@ -51,13 +51,13 @@ The registered promotion test (3 seeds, family-cluster bootstrap, M = 6, `runs/c
 
 **Sealed evaluation:** none for this model. The one authorised sealed run evaluated the previous 2000-update model, which cleared the gate on sealed anchors (seed 1: 0.7052 / 0.6833). The sealed split has now been used and will not be used again.
 
-**Trap exam** (, `exam/traps.md`; a diagnostic, not part of promotion): 47/51. It fails T001 and T021 (rider traps) and T022 and T029 (mechanism traps), the same four as the previous model. Three later runs aimed at the rider traps did not clear their gates.
+**Trap exam** (, `exam/traps.md`; a diagnostic, not part of promotion): 47/51. It fails T001 and T021 (rider traps) and T022 and T029 (mechanism traps), the same four as the previous model. The exam is exposed: no item has all three cards in dev, and its fit cards are in the training pairs (, dev-only n = 0). Three later runs aimed at the rider traps did not clear their gates.
 
 **Human evaluation:** not performed. A blinded labelling pool exists but has no labels.
 
 ## Limitations
 
-- The tag proxy weights every shared tag equally. On multi-ability cards, a rider clause with several tags can outrank the main effect, and the model partly learned this. For example, for Deflecting Swat, commander and alternative-cost cards score higher on the proxy than redirect cards, and the model ranks them first.
+- The tag proxy sums the fit-IDF weights of shared tags and does not tell main effects from riders. On multi-ability cards, a rider clause with several tags can outrank the main effect, and the model partly learned this. For example, for Deflecting Swat, commander and alternative-cost cards score higher on the proxy than redirect cards, and the model ranks them first.
 - Scores are cosines for ranking, not probabilities or similarity percentages.
 - Three seeds give only weak information about training variability. The released seed was fixed in advance (seed 1), not chosen as the best.
 - No full retraining replay has been done. The evaluation replay re-scores saved vectors and checks that the release vectors equal the evaluated ones (`mtgemb replay-eval`).

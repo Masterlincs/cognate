@@ -5,7 +5,7 @@ __pycache__/
 data/
 models/
 artifacts/
-runs/*.jsonl
+runs/
 web/node_modules/
 web/build/
 *.pt

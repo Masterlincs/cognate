@@ -33,7 +33,7 @@ Registered contrasts for the 4000-update recipe, 3 seeds, cluster bootstrap over
 
 The gain over the 2000-update model is about 0.01 nDCG@10 on the selection-exposed development tag proxy only.
 
-**Trap exam** (51 hand-written items, mostly rider and mechanism traps, `exam/traps.md`, a diagnostic, not a promotion criterion): the deployed model passes 47/51 and fails T001, T021, T022 and T029, the same four as the 2000-update model.
+**Trap exam** (51 hand-written items, mostly rider and mechanism traps, `exam/traps.md`, a diagnostic, not a promotion criterion): the deployed model passes 47/51 and fails T001, T021, T022 and T029, the same four as the 2000-update model. No item has all three cards in dev, so the exam is exposed: its fit cards are in the training pairs (, dev-only n = 0).
 
 **Later experiments**: three single-change runs against the 4000-update recipe at seed 0 aimed at the rider traps: three hard negatives (x-2), effect-only labels (x-3) and rare-tag weighting (x-4). None cleared its registered gate; each lost at least one exam item that the comparator passes. The deployed model is unchanged.
 
@@ -149,7 +149,7 @@ The sealed test split is excluded by default and is never loaded for routine tra
 ## Limitations
 
 - Relevance labels are Scryfall Tagger tag proxies, not human judgements.
-- The proxy sums every shared tag equally, so on multi-ability cards a rider clause with several co-occurring tags can outrank the main effect. Example: for Deflecting Swat, commander/alternative-cost cards score higher than redirect cards, and the fine-tuned model ranks them first. Proxy gains therefore partly reward this behaviour (WRITE_UP, "User review of the app").
+- The proxy sums the fit-IDF weights of shared tags without telling main effects from riders, so on multi-ability cards a rider clause with several co-occurring tags can outrank the main effect. Example: for Deflecting Swat, commander/alternative-cost cards score higher than redirect cards, and the fine-tuned model ranks them first. Proxy gains therefore partly reward this behaviour (WRITE_UP, "User review of the app").
 - Development results are selection-exposed because they inform model and checkpoint choices. The sealed results come from one run and are not selection-exposed, but they use the same tag proxy.
 - App filters apply only to the **200 saved neighbours**; they do not search the full catalogue.
 - Cosine scores are ranking scores, not probabilities.

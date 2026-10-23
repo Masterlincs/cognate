@@ -25,7 +25,7 @@ One row per Oracle ID. A card is included if it exists in paper, its vintage leg
 | Functional tag memberships | 175,457 |
 | Card families | 28,999 (cards linked by identical text, self-name templates or meld) |
 
-**Text representation** (`no_reminder_v1`): the Oracle rules text with reminder text removed, and faces joined by `\n//\n`.
+**Text representation** (`no_reminder_v1`): the Oracle rules text with every balanced parenthetical span removed (this removes reminder text, but also any parenthetical that matters to the rules), and faces joined by `\n//\n`.
 
 ## Splits and leakage controls
 
