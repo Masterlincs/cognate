@@ -6,9 +6,9 @@ All relevance results are **tag-proxy results** based on Scryfall Tagger oracle 
 
 ## Status
 
-P0-P10 are complete. Dataset `cbd5c12011c94e68`, benchmark `8bf2f48c0bba3b2c` (3016 development anchors in 2853 families).
+P0-P10 are complete; later extensions are recorded in the decision log (onwards). Dataset `cbd5c12011c94e68`, benchmark `8bf2f48c0bba3b2c` (3016 development anchors in 2853 families).
 
-**Promotion decision: promote** - a *provisional tag-proxy promotion on selection-exposed development*. The released model is `confirm-e5-s1`: fine-tuned `intfloat/e5-base-v2`, lr 3e-5, scale 20, 2000 updates, seed 1. Release `2026-10-16-e5-base-v2-fc4d438d`, bundle schema v2.
+**Deployed model: `confirm-x1-s1`** - fine-tuned `intfloat/e5-base-v2`, lr 3e-5, scale 20, **4000 updates**, seed 1, final checkpoint. Release `2026-10-16-e5-base-v2-3984a6b7`, bundle schema v6. Promotion decision: **promote**, a *provisional tag-proxy promotion on selection-exposed development*. **This model has no sealed evaluation**; the sealed results below belong to the earlier 2000-update model (`confirm-e5-s1`), which it replaced.
 
 Development nDCG@10, tag proxy (higher is better):
 
@@ -18,19 +18,30 @@ Development nDCG@10, tag proxy (higher is better):
 | Pretrained E5-base-v2 | 0.5655 | 0.5391 |
 | Pretrained BGE-small | 0.5403 | 0.5133 |
 | Trained BGE-small, 3 seeds (mean) | 0.6635 | 0.6458 |
-| **Fine-tuned E5, 3 seeds (mean)** | **0.7064** | **0.6909** |
-| Fine-tuned E5, seed 1 (released) | 0.7055 | 0.6904 |
+| Fine-tuned E5, 2000 updates, 3 seeds (mean) | 0.7064 | 0.6909 |
+| Fine-tuned E5, 2000 updates, seed 1 (previously deployed) | 0.7055 | 0.6904 |
+| **Fine-tuned E5, 4000 updates, 3 seeds (mean)** | **0.7162** | **0.7011** |
+| Fine-tuned E5, 4000 updates, seed 1 (deployed) | 0.7142 | 0.6987 |
 
-Registered contrasts for the fine-tuned E5, 3 seeds, cluster bootstrap over families. Each cell is the point estimate, with the one-sided lower bound adjusted for M = 4 in brackets:
+Registered contrasts for the 4000-update recipe, 3 seeds, cluster bootstrap over families (`runs/confirmation/8bf2f48c0bba3b2c/x1/report.json`). Each cell is the point estimate, with the one-sided lower bound adjusted for M = 6 in brackets:
 
 | Contrast | Full | Hard-lexical |
 | --- | --- | --- |
-| vs pretrained E5 | +0.1409 (+0.1320) | +0.1518 (+0.1425) |
-| vs trained BGE | +0.0429 (+0.0376) | +0.0451 (+0.0398) |
+| vs pretrained E5 | +0.1507 (+0.1406) | +0.1619 (+0.1513) |
+| vs trained BGE | +0.0527 (+0.0457) | +0.0553 (+0.0481) |
+| vs the 2000-update E5 recipe | +0.0098 (+0.0063) | +0.0102 (+0.0063) |
 
-### Sealed held-out evaluation (one authorised run)
+The gain over the 2000-update model is about 0.01 nDCG@10 on the selection-exposed development tag proxy only.
 
-The frozen systems were evaluated **once** on the sealed split, after promotion and with the user's authorisation. Sealed benchmark `c98bb619ea613672`: 3170 sealed anchors in 2954 families, candidate universe of 30,745 fit + development + sealed cards. Sealed cards played no part in training, selection or the release. Results are still tag-proxy results.
+**Trap exam** (51 hand-written items, mostly rider and mechanism traps, `exam/traps.md`, a diagnostic, not a promotion criterion): the deployed model passes 47/51 and fails T001, T021, T022 and T029, the same four as the 2000-update model.
+
+**Later experiments**: three single-change runs against the 4000-update recipe at seed 0 aimed at the rider traps: three hard negatives (x-2), effect-only labels (x-3) and rare-tag weighting (x-4). None cleared its registered gate; each lost at least one exam item that the comparator passes. The deployed model is unchanged.
+
+**Exploratory site features**, not evaluated as improvements: per-ability neighbours, line match, per-line tags and face match (about level with whole-card ranking on the development tag proxy).
+
+### Sealed held-out evaluation of the earlier model (one authorised run)
+
+The frozen 2000-update systems were evaluated **once** on the sealed split, after promotion and with the user's authorisation. Sealed benchmark `c98bb619ea613672`: 3170 sealed anchors in 2954 families, candidate universe of 30,745 fit + development + sealed cards. Sealed cards played no part in training, selection or any release. Results are still tag-proxy results. The sealed split has now been used and is not evaluated again, so the deployed 4000-update model cannot be checked on it.
 
 Sealed nDCG@10, tag proxy:
 
@@ -40,8 +51,8 @@ Sealed nDCG@10, tag proxy:
 | Pretrained E5-base-v2 | 0.5721 | 0.5394 |
 | Pretrained BGE-small | 0.5427 | 0.5082 |
 | Trained BGE-small, 3 seeds (mean) | 0.6640 | 0.6378 |
-| **Fine-tuned E5, 3 seeds (mean)** | **0.7050** | **0.6830** |
-| Fine-tuned E5, seed 1 (released) | 0.7052 | 0.6833 |
+| **Fine-tuned E5, 2000 updates, 3 seeds (mean)** | **0.7050** | **0.6830** |
+| Fine-tuned E5, 2000 updates, seed 1 | 0.7052 | 0.6833 |
 
 The same registered contrasts on sealed anchors (point estimate, with the M = 4 adjusted lower bound in brackets):
 
@@ -50,7 +61,7 @@ The same registered contrasts on sealed anchors (point estimate, with the M = 4 
 | vs pretrained E5 | +0.1329 (+0.1239) | +0.1435 (+0.1326) |
 | vs trained BGE | +0.0409 (+0.0360) | +0.0451 (+0.0386) |
 
-The fine-tuned E5 **cleared the registered promotion gate on sealed anchors** against both comparators (`runs/sealed/c98bb619ea613672/report.json`). The development results remain selection-exposed; this one sealed run shows the gate also holds on unseen cards under the tag proxy. It does not change the P7 decision and is not a human-relevance result. `mtgemb sealed-eval` refuses to run again.
+The 2000-update fine-tuned E5 **cleared the registered promotion gate on sealed anchors** against both comparators (`runs/sealed/c98bb619ea613672/report.json`). This one sealed run shows the gate held on unseen cards under the tag proxy for that model. It is not a human-relevance result. `mtgemb sealed-eval` refuses to run again.
 
 Nothing has been published.
 
@@ -140,10 +151,11 @@ The sealed test split is excluded by default and is never loaded for routine tra
 - Relevance labels are Scryfall Tagger tag proxies, not human judgements.
 - The proxy sums every shared tag equally, so on multi-ability cards a rider clause with several co-occurring tags can outrank the main effect. Example: for Deflecting Swat, commander/alternative-cost cards score higher than redirect cards, and the fine-tuned model ranks them first. Proxy gains therefore partly reward this behaviour (WRITE_UP, "User review of the app").
 - Development results are selection-exposed because they inform model and checkpoint choices. The sealed results come from one run and are not selection-exposed, but they use the same tag proxy.
-- App filters apply only to the **50 saved neighbours**; they do not search the full catalogue.
+- App filters apply only to the **200 saved neighbours**; they do not search the full catalogue.
 - Cosine scores are ranking scores, not probabilities.
 - Three training seeds give only weak information about training variability.
-- Every training curve was still rising at 2000 updates, so the released model is probably under-trained for this recipe. Longer training was not tested.
+- The deployed model fails 4 of the 51 trap-exam items (T001 and T021 are rider traps, T022 and T029 mechanism traps); three runs aimed at the rider traps did not fix them.
+- Training to 4000 updates beat 2000 updates on the development proxy. Longer training was not tested, and the deployed model has no sealed evaluation.
 - No full retraining replay has been performed. The evaluation replay re-scores saved vectors only.
 - On the test laptop's Intel Arc iGPU (torch XPU), training and encoding sometimes abort with a native error (`AssertHandler::printMessage`). Training resumes exactly from the last checkpoint.
 

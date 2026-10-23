@@ -8,7 +8,7 @@
   "pairs_id": "795ebb1ae7ce8251",
   "smokes_used": 3,
   "initial_runs_used": 9,
-  "extension_runs_used": 1,
+  "extension_runs_used": 3,
   "confirmation_runs_used": 9,
   "updated_utc": "2026-10-22T07:39:35Z",
   "active_run": null,
@@ -30,9 +30,16 @@
     "confirm-bge-s3",
     "confirm-x1-s1",
     "confirm-x1-s2",
-    "confirm-x1-s3"
+    "confirm-x1-s3",
+    "ext-1-e5-linetag",
+    "ext-2b-e5-synth-gc",
+    "ext-3-e5-selfname",
+    "x-1-e5-4000",
+    "x-2-e5-hn3",
+    "x-3-e5-effect",
+    "x-4-e5-tagidf"
   ],
-  "best_e5_recipe": "initial-1-e5-lr3e-05-s20",
+  "best_e5_recipe": "x-1 recipe: initial-1 at 4000 updates, final checkpoint; before: initial-1-e5-lr3e-05-s20",
   "frozen": {
     "e5_candidates": [
       "initial-1 recipe"
@@ -52,10 +59,20 @@
   "promotion": {
     "decision": "promote",
     "qualifier": "provisional tag-proxy promotion on selection-exposed development",
-    "deployment_run": "confirm-e5-s1",
-    "report": "runs/confirmation/8bf2f48c0bba3b2c/report.json"
+    "deployment_run": "confirm-x1-s1",
+    "decisions": [
+      "",
+      ""
+    ],
+    "report": "runs/confirmation/8bf2f48c0bba3b2c/x1/report.json",
+    "sealed": "none for this model (the sealed run, , was of confirm-e5-s1)",
+    "previous": {
+      "deployment_run": "confirm-e5-s1",
+      "decision": "",
+      "report": "runs/confirmation/8bf2f48c0bba3b2c/report.json"
+    }
   },
-  "release_id": "2026-10-16-e5-base-v2-f52a3aef",
+  "release_id": "2026-10-16-e5-base-v2-3984a6b7",
   "superseded_releases": [
     {
       "release_id": "2026-10-16-e5-base-v2-d4c393ee",
@@ -67,7 +84,19 @@
     },
     {
       "release_id": "2026-10-16-e5-base-v2-841ee2af",
-      "reason": "schema v4 (50 neighbours); superseded by v5, same model and vectors; kept for rollback"
+      "reason": "schema v4, first export of confirm-x1-s1 (parity recorded here); superseded by v5, same model and vectors; kept for rollback"
+    },
+    {
+      "release_id": "2026-10-16-e5-base-v2-e6fef183",
+      "reason": "schema v3, confirm-e5-s1; superseded by v4 68086be1, same card vectors"
+    },
+    {
+      "release_id": "2026-10-16-e5-base-v2-68086be1",
+      "reason": "schema v4, confirm-e5-s1; superseded when confirm-x1-s1 was promoted"
+    },
+    {
+      "release_id": "2026-10-16-e5-base-v2-f52a3aef",
+      "reason": "schema v5, confirm-x1-s1; superseded by v6 3984a6b7, same vectors"
     }
   ],
   "p9": {
@@ -261,5 +290,11 @@
       "build": "web/ npm run build -> web/build"
     }
   },
-  "comparator": "x-1-e5-4000"
+  "comparator": "x-1-e5-4000",
+  "post_cap_runs": [
+    "x-1-e5-4000",
+    "x-2-e5-hn3",
+    "x-3-e5-effect",
+    "x-4-e5-tagidf"
+  ]
 }
