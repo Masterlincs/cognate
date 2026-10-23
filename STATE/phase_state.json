@@ -2,7 +2,7 @@
   "phase": "P12",
   "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "round closed: x-2, x-3 and x-4 all did not clear their gates; x-1 stays the comparator; GPU free, no run queued. Site serves release v6 2026-10-16-e5-base-v2-3984a6b7 locally; nothing published. Awaiting the user's next direction. P10 re-check of release v6 (2026-10-23): replay v5/v6 bundle check added (0b9d37a, bba0d43). Deferred: intermittent native XPU abort in eval-encoder (passes on retry).",
+  "next_action": "round closed: x-2, x-3 and x-4 all did not clear their gates; x-1 stays the comparator; GPU free, no run queued. Site serves release v6 2026-10-16-e5-base-v2-3984a6b7 locally; nothing published. Awaiting the user's next direction. P10 re-check of release v6 (2026-10-23): replay v5/v6 bundle check added (0b9d37a, bba0d43). P9 load-time fix (, dc663cc, 2961da6): usable lookup 2.36-2.67 s on the throttled mobile profile, under the 3 s target. Deferred: intermittent native XPU abort in eval-encoder (passes on retry).",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
