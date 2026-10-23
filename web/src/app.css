@@ -68,6 +68,9 @@ p { margin: 0 0 1em; }
 code { font: 0.9em ui-monospace, Consolas, monospace; }
 .muted { color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+/* the mana symbol font failed to load (load-fonts.js): show each symbol's text instead */
+.no-mana .ms { display: none; }
+.no-mana .ms + .sr-only { position: static; width: auto; height: auto; overflow: visible; clip: auto; white-space: normal; }
 
 .skip { position: absolute; left: -999px; top: 8px; z-index: 50; background: var(--surface); padding: 8px 12px; border-radius: 6px; }
 .skip:focus { left: 8px; }

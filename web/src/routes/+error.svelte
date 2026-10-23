@@ -2,9 +2,10 @@
   import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { resolve } from '$app/paths';
+  import { loadFonts } from '#lib/load-fonts.js';
 
   // the app loads this page's code at start-up, so its fonts load only when it is shown
-  onMount(() => { import('#lib/fonts.js'); });
+  onMount(() => { loadFonts(); });
 </script>
 
 <svelte:head><title>{page.status} · Card Atlas</title></svelte:head>

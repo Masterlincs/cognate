@@ -18,16 +18,16 @@ const pretrained = new Map();
 export const setRoot = (value) => { root = value.replace(/\/$/, ''); };
 const pad = (n) => String(n).padStart(3, '0');
 
-// a response the page's inline script already requested (prefetch.js, added by scripts/prune-build.mjs), taken once
-function early(path) {
-  const request = globalThis.__atlasPrefetch?.[path];
-  if (request) delete globalThis.__atlasPrefetch[path];
-  return request;
-}
+// requests the page's inline script already made (prefetch.js, added by scripts/prune-build.mjs),
+// offered to the first loadRelease only; each is taken once and replaced if it failed
+let early = null;
 
 async function get(path, kind = 'json', fetchFn = fetcher) {
   const url = `${root}/data/${path}`;
-  const response = await (early(path)?.catch(() => fetchFn(url)) ?? fetchFn(url));
+  const request = early?.[path];
+  if (request) delete early[path];
+  const prefetched = request && (await request.catch(() => null));
+  const response = prefetched?.ok ? prefetched : await fetchFn(url);
   if (!response.ok) throw Object.assign(new Error(`Could not load ${path} (${response.status}).`), { status: response.status });
   return kind === 'json' ? response.json() : response.arrayBuffer();
 }
@@ -39,6 +39,16 @@ function cached(cache, key, make) {
 
 export async function loadRelease(fetchFn = fetcher) {
   fetcher = fetchFn;
+  early = globalThis.__atlasPrefetch ?? null;
+  delete globalThis.__atlasPrefetch;
+  try {
+    return await openRelease();
+  } finally {
+    early = null;
+  }
+}
+
+async function openRelease() {
   const current = await get('current.json');
   if (!current.release_id || /[/\\]|\.\./.test(current.release_id)) throw new Error('Invalid release pointer.');
   // names.json is requested alongside release.json; it is used only after release.json validates

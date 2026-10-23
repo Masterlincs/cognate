@@ -14,6 +14,7 @@
   import { isV4Plus, isV5Plus, isV6, parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
   import { getAbilities, getCard, getFaces, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
   import { activeFilters, hasMore, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
+  import { loadFonts } from '#lib/load-fonts.js';
   import { decodeMap, regionLabel } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
 
@@ -188,13 +189,14 @@
     setRoot(asset(''));
     const onPop = () => ids && apply(parseUrl(location.search));
     addEventListener('popstate', onPop);
-    // web fonts wait for the search index (or its failure) so they do not slow it down
+    // web fonts wait for the search index (or its failure) so they do not slow it down, and cards
+    // wait for the fonts, so a card never shows blank mana symbols while they load
     const starting = loadRelease(fetch);
-    starting.finally(() => import('#lib/fonts.js')).catch(() => {});
+    const fontsReady = starting.then(() => loadFonts(), () => loadFonts());
     (async () => {
       try {
         const r = await starting;
-        release = r.release; names = r.names; idsReady = r.idsReady;
+        release = r.release; names = r.names; idsReady = Promise.all([r.idsReady, fontsReady]).then(([v]) => v);
         loadSiteData(release.release_id).then((s) => {
           if (s) { map = decodeMap(s.map); regions = s.regions.map((r) => ({ ...r, label: regionLabel(r.label) })); } else siteMissing = true;
         }).catch(() => { siteMissing = true; });

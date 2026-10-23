@@ -106,6 +106,29 @@ describe('early start-up requests', () => {
     expect(r.release.release_id).toBe('r3');
   });
 
+  it('fetches normally when a prefetched response is an HTTP error', async () => {
+    const rel = v3Release('r3', 'A');
+    for (const path of ['current.json', 'r3/release.json', 'r3/names.json']) {
+      globalThis.__atlasPrefetch = { 'current.json': Promise.resolve(ok({ release_id: 'r3' })), 'r3/release.json': Promise.resolve(ok(rel['release.json'])), 'r3/names.json': Promise.resolve(ok(rel['names.json'])) };
+      globalThis.__atlasPrefetch[path] = Promise.resolve({ ok: false, status: path === 'r3/names.json' ? 500 : 404 });
+      const seen = [];
+      const route = server({ r3: rel }, { id: 'r3' });
+      const r = await loadRelease(async (url) => { seen.push(url); return route(url); });
+      expect(r.names.names).toEqual(['A0', 'A1']);
+      expect(seen).toContain(`/data/${path}`);
+    }
+  });
+
+  it('drops prefetched responses for a release current.json did not name', async () => {
+    const a = v3Release('ra', 'A');
+    const b = v3Release('rb', 'B');
+    // the page was built for ra, but current.json now names rb; ra's prefetched files are broken
+    globalThis.__atlasPrefetch = { 'current.json': Promise.resolve(ok({ release_id: 'rb' })), 'ra/release.json': Promise.resolve(ok({ broken: true })), 'ra/names.json': Promise.resolve(ok({ broken: true })) };
+    expect((await loadRelease(server({ ra: a, rb: b }, { id: 'rb' }))).release.release_id).toBe('rb');
+    // a later load that goes back to ra must fetch it again
+    expect((await loadRelease(server({ ra: a, rb: b }, { id: 'ra' }))).names.names).toEqual(['A0', 'A1']);
+  });
+
   it('requests names.json without waiting for release.json', async () => {
     const log = [];
     const route = server({ r3: v3Release('r3', 'A') }, { id: 'r3' });
