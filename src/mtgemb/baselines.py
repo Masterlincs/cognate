@@ -31,6 +31,7 @@ from .util import (
 V4_K = 50  # v4 bundles store 50 line and ability matches; export.K grew to 200 in v5
 V5_K = 200  # v5+ store 200 whole-card, line and (v6) face matches; ability matches stay 50
 WUBRG = "WUBRG"
+TOPK_ATOL = 1e-5  # float32 export vs float64 replay; export's own reference check uses 1e-6
 CLAIM_SCOPE = {"dev": "tag-proxy relevance on selection-exposed development anchors",
                "sealed": "tag-proxy relevance on sealed anchors (authorised final evaluation)"}
 COS_MIN = 0.9999  # sealed re-encoding must reproduce the frozen dev vectors
@@ -356,10 +357,11 @@ def _check_scores(bundle: Path, man: dict, v: np.ndarray, art: Path, meta: dict,
                   ) -> list[str]:
     """Stored rankings against the release vectors (v5+), for seeded sample cards.
 
-    Every stored score must equal the recomputed score of its card, and the scores must be
-    the true top-k (tie-aware, so near-ties may swap). Whole-card lists are cosine; v6
-    face-match lists score a candidate by the best of its whole card and its own faces
-    against the query's whole card. tol covers the 4-decimal rounding of the bundle.
+    Every stored score must equal the recomputed score of its card within tol (the bundle
+    rounds to 4 decimals), and the recomputed scores of the stored cards must be the true
+    top-k within TOPK_ATOL (tie-aware: only float32 near-ties may swap). Whole-card lists
+    are cosine; v6 face-match lists score a candidate by the best of its whole card and its
+    own faces against the query's whole card.
     """
     try:
         return _scores_problems(bundle, man, v, art, meta, cards.reset_index(drop=True), ver,
@@ -405,7 +407,7 @@ def _scores_problems(bundle, man, v, art, meta, cards, ver, n_rows, tol) -> list
             top = np.sort(s)[::-1][:k]
             got = [(row_of.get(j), score) for j, score in stored]
             if (len(stored) != k or any(j is None or abs(s[j] - score) > tol for j, score in got)
-                    or np.abs(np.array([score for _, score in got]) - top).max() > tol):
+                    or np.abs(s[[j for j, _ in got]] - top).max(initial=0.0) > TOPK_ATOL):
                 probs.append(f"{what} scores of card {cards['oracle_id'].iloc[c]} differ from "
                              "the release vectors")
     return probs

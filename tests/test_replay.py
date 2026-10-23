@@ -612,3 +612,38 @@ def test_replay_v5_v6_checks_rankings_against_release_vectors(tmp_path, monkeypa
     assert result["passed"] == (fault is None), probs
     if fault is not None:
         assert any(problem in p for p in probs), probs
+
+
+def _scores_case(tmp_path, cos, stored_fn=None):
+    """Text cards in 2-D: card 0 = [1, 0], card i has cosine cos[i-1] with card 0. Stores the
+    brute-force top-2 per card, then lets stored_fn tamper with the lists."""
+    W = np.array([[1.0, 0.0]] + [[c, np.sqrt(1 - c * c)] for c in cos])
+    n = len(W)
+    k = min(2, n - 1)
+    lists = []
+    for r in range(n):
+        s = {j: float(W[r] @ W[j]) for j in range(n) if j != r}
+        lists.append([[j, round(s[j], 4)] for j in sorted(s, key=lambda j: (-s[j], j))[:k]])
+    if stored_fn:
+        stored_fn(lists)
+    (tmp_path / "neighbours").mkdir(parents=True)
+    (tmp_path / "neighbours" / "000.json").write_text(json.dumps(lists), "utf-8")
+    cards = pd.DataFrame({"oracle_id": [f"o{i}" for i in range(n)], "text_status": ["ok"] * n,
+                          "text": ["x"] * n})
+    return baselines._check_scores(tmp_path, {"shard_size": 10, "k": 2}, W, tmp_path, {},
+                                   cards, 5)
+
+
+def test_scores_check_uses_true_scores_not_rounded_ones(tmp_path):
+    cos = [0.9, 0.80008, 0.79991]
+    assert _scores_case(tmp_path / "ok", cos) == []
+
+    def swap(lists):  # 0.79991 in place of the true second, stored as 0.8000: both within 1e-4
+        lists[0][1] = [3, 0.8]
+
+    assert any("neighbours scores of card o0" in p for p in _scores_case(tmp_path / "bad", cos,
+                                                                          swap))
+
+
+def test_scores_check_accepts_a_single_text_card(tmp_path):
+    assert _scores_case(tmp_path, []) == []
