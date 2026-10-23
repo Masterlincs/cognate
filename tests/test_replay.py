@@ -489,3 +489,126 @@ def test_same_weights_refuses_a_changed_encoder(tmp_path, monkeypatch):
     np.save(d / "vectors.npy", np.zeros((2, 2), dtype=np.float32))
     with pytest.raises(ValueError, match="changed"):
         baselines.same_weights(v, ["a", "b", "c"], ds, "enc")
+
+
+def _v6_release(tmp_path, v, ver=6, fault=None):
+    """A v5/v6 bundle whose stored rankings are computed here, independently, by brute force:
+    whole-card neighbours by cosine, face match as the best of a candidate's whole card and
+    its own faces against the query's whole card."""
+    from mtgemb.text import FACE_BOUNDARY
+
+    art = _v3_release(tmp_path, v)
+    bundle = tmp_path / "bundle-r1"
+    ds = baselines.load_benchmark("ds")[1]
+    two = f"draw a card{FACE_BOUNDARY}scry 1"  # c2 gets two faces
+    ds["cards"] = ds["cards"].assign(text=ds["cards"]["text"].where(
+        ds["cards"]["oracle_id"] != "c2", two))
+    cards = ds["cards"].sort_values("oracle_id").reset_index(drop=True)
+    n = len(cards)
+    c2 = int(cards.index[cards["oracle_id"] == "c2"][0])
+    F = np.random.default_rng(1).normal(size=(2, 4))
+    F = (F / np.linalg.norm(F, axis=1, keepdims=True)).astype(np.float32)
+    W = v.astype(np.float64)
+
+    def ranked(r, faces):
+        score = {j: float(W[r] @ W[j]) for j in range(n) if j != r}
+        if faces and r != c2:
+            score[c2] = max(score[c2], *(float(W[r] @ f) for f in F.astype(np.float64)))
+        order = sorted(score, key=lambda j: (-score[j], j))
+        return [[j, round(score[j], 4)] for j in order]
+
+    man = json.loads((bundle / "release.json").read_text("utf-8"))
+    man.update(schema=f"mtgemb-release-v{ver}", k=200, line_k=200, ability_k=50,
+               line_status="exploratory: line match", tags_status="exploratory: tags",
+               abilities_status="exploratory: abilities")
+    if ver == 6:
+        man.update(face_k=200, face_status="exploratory: face match")
+    payloads = {"tags.json": {"labels": ["first"]}}
+    ss = man["shard_size"]
+    for start in range(0, n, ss):
+        name, rows = f"{start // ss:03d}.json", range(start, min(n, start + ss))
+        payloads[f"cards/{name}"] = [{"tags": [0], "has_text": True, "colors": "WU",
+                                      "image_back": None} for _ in rows]
+        payloads[f"abilities/{name}"] = [[{"tags": [0]}] for _ in rows]
+        payloads[f"lines/{name}"] = [[] for _ in rows]
+        payloads[f"neighbours/{name}"] = [ranked(r, False) for r in rows]
+        if ver == 6:
+            payloads[f"faces/{name}"] = [ranked(r, True) for r in rows]
+    payloads["cards/000.json"][0]["image_back"] = "https://example.org/back.jpg"
+    whole, face = payloads["neighbours/000.json"][0], payloads.get("faces/000.json", [[]])[0]
+    if fault == "neighbour_score":
+        whole[-1][1] = round(whole[-1][1] - 0.01, 4)
+    elif fault == "neighbour_swap":
+        whole[0][0], whole[1][0] = whole[1][0], whole[0][0]
+    elif fault == "neighbour_self":
+        whole[0][0] = 0
+    elif fault == "neighbour_short":
+        whole.pop()
+    elif fault == "face_score":
+        face[-1][1] = round(face[-1][1] - 0.01, 4)
+    elif fault == "face_as_whole":
+        payloads["faces/000.json"][0] = [list(p) for p in whole]
+    elif fault == "face_order":
+        face[0], face[1] = face[1], face[0]
+    elif fault == "colors_order":
+        payloads["cards/000.json"][0]["colors"] = "UW"
+    elif fault == "colors_letter":
+        payloads["cards/000.json"][0]["colors"] = "X"
+    elif fault == "image_back_type":
+        payloads["cards/000.json"][0]["image_back"] = 1
+    elif fault == "k_wrong":
+        man["k"] = 50
+    elif fault == "face_k_wrong":
+        man["face_k"] = 50
+    elif fault == "face_status_missing":
+        man.pop("face_status")
+    for name, value in payloads.items():
+        if fault == "missing_face_shard" and name == "faces/001.json":
+            continue
+        path = bundle / name
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(value), "utf-8")
+        man["files"][name] = {"sha256": sha256_file(path), "bytes": path.stat().st_size}
+    (bundle / "release.json").write_text(json.dumps(man), "utf-8")
+    meta = {"release_json_sha256": sha256_file(bundle / "release.json")}
+    if ver == 6:
+        np.save(art / "face_vectors.npy", 2 * F if fault == "face_vectors_norm" else F)
+        meta.update(face_vectors_sha256=sha256_file(art / "face_vectors.npy"), n_faces=2)
+        if fault == "face_vectors_tampered":
+            np.save(art / "face_vectors.npy", F[::-1].copy())
+        elif fault == "n_faces_wrong":
+            meta["n_faces"] = 3
+    _edit_json(art / "release_meta.json", lambda m: m.update(meta))
+
+
+@pytest.mark.parametrize("ver,fault,problem", [
+    (6, None, None),
+    (5, None, None),
+    (5, "neighbour_score", "neighbours scores of card"),
+    (6, "neighbour_score", "neighbours scores of card"),
+    (6, "neighbour_swap", "neighbours scores of card"),
+    (6, "neighbour_self", "invalid neighbours index"),
+    (6, "neighbour_short", "neighbours scores of card"),
+    (6, "face_score", "faces scores of card"),
+    (6, "face_as_whole", "faces scores of card"),
+    (6, "face_order", "invalid faces index"),
+    (6, "colors_order", "invalid colors"),
+    (6, "colors_letter", "invalid colors"),
+    (6, "image_back_type", "invalid image_back"),
+    (5, "k_wrong", "invalid line_k"),
+    (6, "face_k_wrong", "invalid line_k"),
+    (6, "face_status_missing", "invalid face_status"),
+    (6, "missing_face_shard", "bundle manifest incomplete"),
+    (6, "face_vectors_tampered", "face_vectors.npy hash mismatch or missing"),
+    (6, "face_vectors_norm", "face vectors"),
+    (6, "n_faces_wrong", "face vectors"),
+])
+def test_replay_v5_v6_checks_rankings_against_release_vectors(tmp_path, monkeypatch, ver,
+                                                              fault, problem):
+    v, _ = _setup(tmp_path, monkeypatch)
+    _v6_release(tmp_path, v, ver, fault)
+    result = baselines.replay_evals("ds")
+    probs = result["releases"]["r1"]["problems"]
+    assert result["passed"] == (fault is None), probs
+    if fault is not None:
+        assert any(problem in p for p in probs), probs

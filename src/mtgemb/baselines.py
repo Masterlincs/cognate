@@ -29,6 +29,8 @@ from .util import (
 )
 
 V4_K = 50  # v4 bundles store 50 line and ability matches; export.K grew to 200 in v5
+V5_K = 200  # v5+ store 200 whole-card, line and (v6) face matches; ability matches stay 50
+WUBRG = "WUBRG"
 CLAIM_SCOPE = {"dev": "tag-proxy relevance on selection-exposed development anchors",
                "sealed": "tag-proxy relevance on sealed anchors (authorised final evaluation)"}
 COS_MIN = 0.9999  # sealed re-encoding must reproduce the frozen dev vectors
@@ -118,10 +120,15 @@ def eval_encoder(ds_dir, name: str, backbone: str, max_length: int,
 
 METRICS = ["ndcg", "ap", "mrr", "recall"]
 COUNTS = ["n_rel", "n_candidates"]
-# files every release bundle must list besides its card and neighbour shards
-BUNDLE_FILES = {"mtgemb-release-v1": ["names.json"],
-                "mtgemb-release-v2": ["names.json", "ids.json"],
-                "mtgemb-release-v3": ["names.json", "ids.json"]}
+SCHEMAS = [f"mtgemb-release-v{i}" for i in range(1, 7)]
+
+
+def _bundle_needs(ver: int, shards: int) -> list[str]:
+    """Files a bundle of schema version ver must list."""
+    files = ["names.json"] + ["ids.json"] * (ver >= 2) + ["tags.json"] * (ver >= 4)
+    dirs = ["cards", "neighbours"] + ["abilities"] * (ver >= 3) + ["lines"] * (ver >= 4) + [
+        "faces"] * (ver >= 6)
+    return files + [f"{d}/{i:03d}.json" for d in dirs for i in range(shards)]
 
 
 def _num_diff(a, b) -> float:
@@ -255,17 +262,41 @@ def _replay_one(d: Path, bm: Benchmark, ds: dict, bid: str, tol: float) -> tuple
     return {"ok": not probs, "problems": probs, **out}, v
 
 
-def _check_v4_shards(bundle: Path, man: dict, n: int) -> list[str]:
-    """Validate tag attribution and optional line rankings, beyond file integrity."""
+def _check_ranked(pairs, k: int, n: int, has_text: list, self_index: int, what: str) -> None:
+    """A stored ranking: at most k [card, score] pairs of other text cards, no repeats,
+    finite scores in non-increasing order."""
+    if not isinstance(pairs, list) or len(pairs) > k:
+        raise ValueError(f"invalid {what} list length")
+    seen, previous = set(), float("inf")
+    for pair in pairs:
+        if not isinstance(pair, list) or len(pair) != 2:
+            raise ValueError(f"invalid {what} pair")
+        j, score = pair
+        if (type(j) is not int or not 0 <= j < n or has_text[j] is not True or
+                j == self_index or j in seen or
+                type(score) not in (int, float) or not np.isfinite(score) or
+                score > previous):
+            raise ValueError(f"invalid {what} index, self, duplicate or order")
+        seen.add(j)
+        previous = score
+
+
+def _check_v4_shards(bundle: Path, man: dict, n: int, ver: int = 4) -> list[str]:
+    """Validate tag attribution and the stored rankings (v4+), beyond file integrity; v5+
+    also the display fields and the 200 whole-card neighbours, v6 the face-match lists."""
     try:
         labels = read_json(bundle / "tags.json")["labels"]
         if not isinstance(labels, list) or not all(isinstance(t, str) for t in labels):
             raise ValueError("invalid tag labels")
         ss, k = man["shard_size"], man["line_k"]
-        if (type(ss) is not int or ss <= 0 or type(k) is not int or k != V4_K or
-                type(man.get("ability_k")) is not int or man["ability_k"] != V4_K):
-            raise ValueError("invalid line_k, ability_k or shard_size")
-        for key in ("line_status", "tags_status", "abilities_status"):
+        want = V4_K if ver == 4 else V5_K
+        counts = [("line_k", want), ("ability_k", V4_K)] + [("k", V5_K)] * (ver >= 5) + [
+            ("face_k", V5_K)] * (ver >= 6)
+        if type(ss) is not int or ss <= 0 or any(
+                type(man.get(key)) is not int or man[key] != value for key, value in counts):
+            raise ValueError("invalid line_k, ability_k, k, face_k or shard_size")
+        for key in ("line_status", "tags_status", "abilities_status") + (
+                ("face_status",) if ver >= 6 else ()):
             if not isinstance(man.get(key), str) or not man[key].startswith("exploratory"):
                 raise ValueError(f"invalid {key}: must start with exploratory")
         card_shards = [read_json(bundle / "cards" / f"{start // ss:03d}.json")
@@ -286,36 +317,98 @@ def _check_v4_shards(bundle: Path, man: dict, n: int) -> list[str]:
             cards = card_shards[start // ss]
             abilities = read_json(bundle / "abilities" / name)
             lines = read_json(bundle / "lines" / name)
+            ranked = {"neighbours": read_json(bundle / "neighbours" / name)} if ver >= 5 else {}
+            if ver >= 6:
+                ranked["faces"] = read_json(bundle / "faces" / name)
             size = min(ss, n - start)
-            if any(not isinstance(x, list) or len(x) != size for x in (cards, abilities, lines)):
+            if any(not isinstance(x, list) or len(x) != size
+                   for x in (cards, abilities, lines, *ranked.values())):
                 raise ValueError("v4 shard length mismatch")
             triples = zip(cards, abilities, lines, strict=True)
             for offset, (card, ability, line) in enumerate(triples):
+                for what, rows in ranked.items():
+                    _check_ranked(rows[offset], V5_K, n, has_text, start + offset, what)
+                    if not card["has_text"] and rows[offset]:
+                        raise ValueError(f"textless card has {what}")
+                if ver >= 5:
+                    c = card["colors"]
+                    if not isinstance(c, str) or c != "".join(x for x in WUBRG if x in c):
+                        raise ValueError("invalid colors")
+                    b = card["image_back"]
+                    if b is not None and not (isinstance(b, str) and b.strip()):
+                        raise ValueError("invalid image_back")
                 ct = tags(card["tags"])
                 if not isinstance(ability, list):
                     raise ValueError("invalid ability list")
                 for a in ability:
                     if not tags(a["tags"]).issubset(ct):
                         raise ValueError("ability tags are not a subset of card tags")
-                if not isinstance(line, list) or len(line) > k:
-                    raise ValueError("invalid line neighbour list length")
-                seen, previous = set(), float("inf")
-                for pair in line:
-                    if not isinstance(pair, list) or len(pair) != 2:
-                        raise ValueError("invalid line neighbour pair")
-                    j, score = pair
-                    if (type(j) is not int or not 0 <= j < n or has_text[j] is not True or
-                            j == start + offset or j in seen or
-                            type(score) not in (int, float) or not np.isfinite(score) or
-                            score > previous):
-                        raise ValueError("invalid line neighbour index, self, duplicate or order")
-                    seen.add(j)
-                    previous = score
+                _check_ranked(line, k, n, has_text, start + offset, "line neighbour")
                 if not card["has_text"] and (ct or ability or line):
                     raise ValueError("textless card has tags or line neighbours")
         return []
     except (OSError, ValueError, KeyError, TypeError) as e:
-        return [f"invalid v4 bundle: {e}"]
+        return [f"invalid v{ver} bundle: {e}"]
+
+
+def _check_scores(bundle: Path, man: dict, v: np.ndarray, art: Path, meta: dict,
+                  cards: pd.DataFrame, ver: int, n_rows: int = 20, tol: float = 1e-4
+                  ) -> list[str]:
+    """Stored rankings against the release vectors (v5+), for seeded sample cards.
+
+    Every stored score must equal the recomputed score of its card, and the scores must be
+    the true top-k (tie-aware, so near-ties may swap). Whole-card lists are cosine; v6
+    face-match lists score a candidate by the best of its whole card and its own faces
+    against the query's whole card. tol covers the 4-decimal rounding of the bundle.
+    """
+    try:
+        return _scores_problems(bundle, man, v, art, meta, cards.reset_index(drop=True), ver,
+                                n_rows, tol)
+    except (OSError, ValueError, KeyError, TypeError, IndexError) as e:
+        return [f"stored rankings unreadable: {type(e).__name__}: {e}"]
+
+
+def _scores_problems(bundle, man, v, art, meta, cards, ver, n_rows, tol) -> list[str]:
+    from .variants import face_index, face_max
+
+    has_text = (cards["text_status"] == "ok").to_numpy()
+    ti = np.flatnonzero(has_text)
+    row_of = {int(c): r for r, c in enumerate(ti)}
+    if v.shape[0] != len(ti):
+        return ["release vectors do not have one row per text card"]
+    W = v.astype(np.float64)
+    rows = np.sort(np.random.default_rng(20261023).choice(
+        len(ti), size=min(n_rows, len(ti)), replace=False))
+    kinds = {"neighbours": W[rows] @ W.T}
+    probs = []
+    if ver >= 6:
+        texts, owner = face_index(cards.loc[has_text, "text"].tolist())
+        p = art / "face_vectors.npy"
+        F = np.load(p, allow_pickle=False) if p.is_file() else None
+        if (F is None or meta.get("n_faces") != len(texts) or F.shape != (len(texts), v.shape[1])
+                or not np.issubdtype(F.dtype, np.floating) or not np.isfinite(F).all()
+                or not np.allclose(np.linalg.norm(F.astype(np.float64), axis=1), 1, atol=1e-3,
+                                   rtol=0)):
+            return probs + ["face vectors are not unit-norm floats, one row per catalogue face"]
+        kinds["faces"] = face_max(W, F.astype(np.float64), owner, rows, query_faces=False)
+    ss, shards = man["shard_size"], {}
+    for what, S in kinds.items():
+        k = min(man["face_k" if what == "faces" else "k"], len(ti) - 1)
+        for i, r in enumerate(rows.tolist()):
+            c = int(ti[r])
+            key = (what, c // ss)
+            if key not in shards:
+                shards[key] = read_json(bundle / what / f"{c // ss:03d}.json")
+            stored = shards[key][c % ss]
+            s = S[i].copy()
+            s[r] = -np.inf
+            top = np.sort(s)[::-1][:k]
+            got = [(row_of.get(j), score) for j, score in stored]
+            if (len(stored) != k or any(j is None or abs(s[j] - score) > tol for j, score in got)
+                    or np.abs(np.array([score for _, score in got]) - top).max() > tol):
+                probs.append(f"{what} scores of card {cards['oracle_id'].iloc[c]} differ from "
+                             "the release vectors")
+    return probs
 
 
 def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dict,
@@ -324,7 +417,7 @@ def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dic
     if not meta_p.is_file():
         return {"ok": False, "problems": ["no readable release_meta.json"]}
     meta = read_json(meta_p)
-    probs = []
+    probs, ver = [], 0  # ver: bundle schema version, 0 when unreadable or unknown
     if meta.get("dataset_id") != ds["ident"]["dataset_id"]:
         probs.append(f"dataset_id {meta.get('dataset_id')} != {ds['ident']['dataset_id']}")
     vp = meta_p.parent / "vectors.npy"
@@ -351,30 +444,24 @@ def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dic
         if man.get("n_cards") != n_cat:
             probs.append(f"bundle n_cards {man.get('n_cards')} != {n_cat}")
         ss = man.get("shard_size")
-        schemas = {**BUNDLE_FILES, "mtgemb-release-v4": ["names.json", "ids.json", "tags.json"]}
-        if man.get("schema") not in schemas:
+        if man.get("schema") not in SCHEMAS:
             probs.append(f"unknown bundle schema {man.get('schema')}")
         elif type(ss) is not int or ss <= 0:
             probs.append(f"bundle shard_size {ss!r} is not a positive integer")
         else:
-            shards = -(-n_cat // ss)
-            dirs = ("cards", "neighbours")
-            if man["schema"] in ("mtgemb-release-v3", "mtgemb-release-v4"):
-                dirs += ("abilities",)
-            if man["schema"] == "mtgemb-release-v4":
-                dirs += ("lines",)
-            need = schemas[man["schema"]] + [f"{d}/{i:03d}.json" for d in
-                                                  dirs for i in range(shards)]
+            ver = SCHEMAS.index(man["schema"]) + 1
+            need = _bundle_needs(ver, -(-n_cat // ss))
             if absent := sorted(set(need) - set(man["files"])):
                 probs.append(f"bundle manifest incomplete: {absent[:5]}")
-        if man.get("schema") in ("mtgemb-release-v3", "mtgemb-release-v4"):
-            for f, k in (("ability_vectors.npy", "ability_vectors_sha256"),
-                         ("ability_lines.json", "ability_lines_sha256")):
-                p = meta_p.parent / f
-                if not meta.get(k) or not p.exists() or sha256_file(p) != meta[k]:
-                    probs.append(f"{f} hash mismatch or missing")
-        if man.get("schema") == "mtgemb-release-v4":
-            probs.extend(_check_v4_shards(bundle, man, n_cat))
+        arts = [("ability_vectors.npy", "ability_vectors_sha256"),
+                ("ability_lines.json", "ability_lines_sha256")] * (ver >= 3) + [
+                ("face_vectors.npy", "face_vectors_sha256")] * (ver >= 6)
+        for f, k in arts:
+            p = meta_p.parent / f
+            if not meta.get(k) or not p.exists() or sha256_file(p) != meta[k]:
+                probs.append(f"{f} hash mismatch or missing")
+        if ver >= 4:
+            probs.extend(_check_v4_shards(bundle, man, n_cat, ver))
     enc_meta = meta["encoder"]
     enc_meta = dict(enc_meta) if isinstance(enc_meta, dict) else None  # never coerce a list
     ml = enc_meta.pop("max_length", None) if enc_meta is not None else None
@@ -398,6 +485,9 @@ def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dic
     v = np.load(vp, allow_pickle=False)
     if bad := _bad_vectors(v):
         return {"ok": False, "problems": probs + [f"release {bad}"], **out}
+    if ver >= 5:
+        probs.extend(_check_scores(bundle, read_json(bundle / "release.json"), v,
+                                   meta_p.parent, meta, rows, ver))
     for n in match:
         a, b = v.astype(np.float64), vecs[n].astype(np.float64)
         diff = float(np.abs(a - b).max()) if a.shape == b.shape else float("inf")
