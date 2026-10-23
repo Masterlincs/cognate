@@ -225,7 +225,7 @@
         "exam": "49/51"
       }
     },
-    "blocked_on": "overnight queue running",
+    "blocked_on": "nothing running; publication is a user gate",
     "line_scoring": {
       "decision": "",
       "adopted": false,
@@ -253,9 +253,7 @@
       "chance": 0.449,
       "n": 12919
     },
-    "queue": [
-      "x-2-e5-hn3 RUNNING"
-    ],
+    "queue": [],
     "ext3_selfname": {
       "decision": "",
       "status": "DONE: did not clear",
@@ -288,7 +286,12 @@
       "spec": "docs/superpowers/specs/2026-10-21-card-atlas-redesign-design.md",
       "status": "built locally; not published",
       "build": "web/ npm run build -> web/build"
-    }
+    },
+    "queue_history": [
+      "x-2-e5-hn3 done, did not clear",
+      "x-3-e5-effect done, did not clear",
+      "x-4-e5-tagidf done, did not clear"
+    ]
   },
   "comparator": "x-1-e5-4000",
   "post_cap_runs": [
@@ -296,12 +299,5 @@
     "x-2-e5-hn3",
     "x-3-e5-effect",
     "x-4-e5-tagidf"
-  ],
-  "blocked_on": "nothing running; publication is a user gate",
-  "queue": [],
-  "queue_history": [
-    "x-2-e5-hn3 done, did not clear",
-    "x-3-e5-effect done, did not clear",
-    "x-4-e5-tagidf done, did not clear"
   ]
 }
