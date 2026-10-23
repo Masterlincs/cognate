@@ -149,6 +149,7 @@ The sealed test split is excluded by default and is never loaded for routine tra
 ## Limitations
 
 - Relevance labels are Scryfall Tagger tag proxies, not human judgements.
+- The current site misses the plan's mobile load target: on the throttled Lighthouse mobile profile the search becomes usable after 3.6–5.5 s (target 3 s; the earlier, simpler app took 2.5 s). Unthrottled it takes about 0.25 s.
 - The proxy sums the fit-IDF weights of shared tags without telling main effects from riders, so on multi-ability cards a rider clause with several co-occurring tags can outrank the main effect. Example: for Deflecting Swat, commander/alternative-cost cards score higher than redirect cards, and the fine-tuned model ranks them first. Proxy gains therefore partly reward this behaviour (WRITE_UP, "User review of the app").
 - Development results are selection-exposed because they inform model and checkpoint choices. The sealed results come from one run and are not selection-exposed, but they use the same tag proxy.
 - App filters apply only to the **200 saved neighbours**; they do not search the full catalogue.
