@@ -83,7 +83,7 @@ describe('release loading', () => {
   });
 });
 
-// the explorer page's inline script (hooks.server.js) starts these requests before the app boots
+// the inline script that prune-build.mjs adds to the explorer page (prefetch.js) starts these requests before the app boots
 describe('early start-up requests', () => {
   afterEach(() => { delete globalThis.__atlasPrefetch; });
 
