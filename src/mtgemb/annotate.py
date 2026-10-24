@@ -23,6 +23,8 @@ def make_server(pool_dir: str | Path, port: int = 8765) -> ThreadingHTTPServer:
     session = uuid.uuid4().hex
 
     class Handler(BaseHTTPRequestHandler):
+        timeout = 10  # seconds: a client that stalls mid-body is dropped, not left holding a thread
+
         def reply(self, status: int, body: bytes, content_type: str) -> None:
             self.send_response(status)
             self.send_header("Content-Type", content_type)

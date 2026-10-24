@@ -1,6 +1,7 @@
 """HTTP contract checks using only synthetic, blinded pool data."""
 
 import json
+import socket
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -125,6 +126,18 @@ def test_invalid_label_preserves_file(pilot, changes):
 @pytest.mark.parametrize("raw", [b"{", b"null", b"[]", b"{}", b"\xff", b"x" * 16385])
 def test_malformed_body_does_not_create_labels(pilot, raw):
     assert request(pilot, "/api/label", raw=raw)[0] == 400
+    assert not (pilot[1] / "labels.jsonl").exists()
+
+
+@pytest.mark.parametrize("length", [100, 16385])
+def test_stalled_body_is_dropped(pilot, length):
+    server = pilot[0]
+    assert 0 < server.RequestHandlerClass.timeout <= 30  # a stalled client cannot hold a thread
+    server.RequestHandlerClass.timeout = 0.5  # keep the test fast
+    with socket.create_connection(server.server_address, timeout=5) as s:
+        s.sendall(b"POST /api/label HTTP/1.1\r\nContent-Type: application/json\r\n"
+                  b"Content-Length: %d\r\n\r\n{" % length)
+        assert s.recv(1024) == b""  # closed after the timeout, not held open
     assert not (pilot[1] / "labels.jsonl").exists()
 
 
