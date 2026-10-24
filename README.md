@@ -142,6 +142,10 @@ npm run build
 - On the throttled Lighthouse mobile profile the search became usable after 2.36–2.67 s over 6 runs on one machine (target 3 s). Fonts and mana symbols load after the search index, so they can appear a moment late on a slow connection.
 - On the Intel Arc iGPU used here, training and encoding sometimes abort with a native XPU error; training resumes exactly from the last checkpoint.
 
-## Attribution
+## Licence and attribution
 
-Card data and images © Wizards of the Coast; data from [Scryfall](https://scryfall.com), tags from Scryfall Tagger. Not affiliated with or endorsed by Wizards of the Coast or Scryfall. The pinned `intfloat/e5-base-v2` and `BAAI/bge-small-en-v1.5` revisions are recorded in the decision log; both are MIT licensed ([E5-base-v2](https://huggingface.co/intfloat/e5-base-v2), [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)).
+The code and documentation are MIT licensed ([LICENSE](LICENSE)). That licence does not cover Magic: The Gathering card names, rules text, symbols or images.
+
+Card Atlas is unofficial Fan Content permitted under the [Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy). Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
+
+Card data and images come from [Scryfall](https://scryfall.com) and tags from Scryfall Tagger, used under Scryfall's API terms: the site is free with no sign-up, card images are shown whole (artist and copyright line intact) and linked from Scryfall's servers, and the project adds a new similarity search rather than republishing Scryfall's data. Not affiliated with Scryfall. The pinned `intfloat/e5-base-v2` and `BAAI/bge-small-en-v1.5` revisions are recorded in the decision log; both are MIT licensed ([E5-base-v2](https://huggingface.co/intfloat/e5-base-v2), [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)).
