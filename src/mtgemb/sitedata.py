@@ -11,7 +11,6 @@ Only fit and dev cards are read (load_dataset drops sealed rows).
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import struct
@@ -25,7 +24,7 @@ from sklearn.manifold import TSNE
 
 from .data import load_dataset
 from .export import SHARD, topk_neighbours
-from .util import ARTIFACTS, ROOT, RUNS, atomic_write_json, sha256_file
+from .util import ARTIFACTS, ROOT, RUNS, atomic_write_json, read_json, sha256_file
 
 DATASET = ROOT / "data" / "processed" / "2026-10-16_no_reminder_v1"
 WEB = ROOT / "web"
@@ -117,7 +116,7 @@ def pretrained_neighbours(texts: list[str], ti: np.ndarray, n_cards: int, k: int
 def _read(path: Path) -> dict:
     if not path.is_file():
         raise FileNotFoundError(f"missing record: {path}")
-    return json.loads(path.read_text("utf-8"))
+    return read_json(path)
 
 
 def _rel(path: Path) -> str:

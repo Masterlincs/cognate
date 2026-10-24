@@ -19,8 +19,6 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-from .evaluate import cohort_summary, evaluate, load_benchmark
-from .pairs import MODIFIER_LABELS
 from .text import FACE_BOUNDARY
 from .util import RUNS, atomic_write_json, log_event, read_json, sha256_file, utcnow
 
@@ -89,6 +87,8 @@ def diagnose(ds_dir, name: str, batch_size: int = 32) -> dict:
     import torch
 
     from . import encoder as enc
+    from .evaluate import cohort_summary, evaluate, load_benchmark
+    from .pairs import MODIFIER_LABELS
 
     bm, ds = load_benchmark(ds_dir)
     bid = bm.spec["benchmark_id"]
