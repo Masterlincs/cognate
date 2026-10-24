@@ -14,7 +14,6 @@ import pandas as pd
 
 from .abilities import split_abilities
 from .data import self_names
-from .evaluate import cohort_summary, evaluate, load_benchmark
 from .text import VERSION, VERSION_V2, no_reminder_v2
 from .util import RUNS, atomic_write_json, git_identity, log_event, utcnow
 
@@ -53,6 +52,7 @@ def diagnose(ds_dir, name: str, backbone: str, max_length: int,
     import torch
 
     from . import encoder as enc
+    from .evaluate import cohort_summary, evaluate, load_benchmark
 
     bm, ds = load_benchmark(ds_dir)
     cards = apply_text_version(ds["cards"], VERSION_V2)

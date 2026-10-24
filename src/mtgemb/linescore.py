@@ -14,7 +14,6 @@ import numpy as np
 
 from . import exam
 from .abilities import flatten, split_abilities
-from .evaluate import evaluate, load_benchmark
 from .exam import mask_numbers
 from .util import RUNS, atomic_write_json, git_identity, log_event, read_json, sha256_file, utcnow
 
@@ -55,6 +54,8 @@ class LineScorer:
 
 def run(ds_dir, release_dir) -> dict:
     """whole-card baseline vs both variants on dev (selection-exposed) and the exam."""
+    from .evaluate import evaluate, load_benchmark
+
     rd = Path(release_dir)
     bm, _ = load_benchmark(ds_dir)
     meta = read_json(rd / "release_meta.json")
