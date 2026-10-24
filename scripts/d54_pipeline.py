@@ -1,6 +1,6 @@
 """One-off: score each finished run on the GPU before the next run is queued.
 
-Replaces d54_watch.py. After x-2: dev eval (saved vectors) and trap exam for x-2, a dev eval
+After x-2: dev eval (saved vectors) and trap exam for x-2, a dev eval
 of x-1's selected checkpoint (the effect-only baseline), then merge d54-train (train.py is
 in x-2's code identity, so it waits) and queue x-3. After x-3: score it, queue x-4. After
 x-4: score it. CPU-only variants run after the next run is queued. A failed step is

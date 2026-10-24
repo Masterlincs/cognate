@@ -13,10 +13,12 @@ Everything is prerendered to plain files. There is no server code; the explorer 
 npm ci
 npm test
 npm run build      # writes build/
-npm run preview    # serves build/ on http://localhost:4173
+node scripts/serve-build.mjs   # serves build/ with gzip on http://localhost:4318
 ```
 
-`npm run build` runs `vite build`, then `scripts/prune-build.mjs`, which keeps only the release named by `public/data/current.json` and its site data in `build/data`. Older releases stay in `public/data` for rollback but are not shipped.
+`npm run build` runs `vite build`, then `scripts/prune-build.mjs`, which keeps only the release named by `public/data/current.json` and its site data in `build/data`. Older releases stay in `public/data` for rollback but are not shipped. It also adds an inline script to `build/index.html` that requests the start-up data before the app's code loads.
+
+`npm run preview` serves the prerender output, not `build/`; use `scripts/serve-build.mjs` to check the artifact. `node scripts/time-load.mjs http://localhost:4318/ slow4g 6` times usable lookup on the throttled Lighthouse mobile profile (headless Chrome; set `CHROME` if it is not in the default Windows location).
 
 ## Data
 
