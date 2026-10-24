@@ -1,4 +1,4 @@
-"""Run tables, pilot advancement and registered promotion contrasts (MASTER_PLAN §5).
+"""Run tables, pilot advancement and registered promotion contrasts.
 
 Reads only immutable run records (runs/<id>/) and evaluation records
 (runs/eval/<benchmark_id>/<name>/). Nothing here selects a checkpoint.
@@ -172,7 +172,7 @@ def _check_confirm_run(bench_id: str, name: str, seed: int, recipe_run: str,
 
 def confirmation_report(bench_id: str, train_bench: str | None = None,
                         design: dict = CONFIRM) -> dict:
-    """Registered P7 contrasts and the promotion decision (MASTER_PLAN §5).
+    """Registered confirmation contrasts and the promotion decision.
 
     Every confirmation run must be the frozen recipe at its registered seed, and every eval
     must come from that run's final weights (pretrained: the pinned backbone). Decision:

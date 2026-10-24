@@ -1,4 +1,4 @@
-"""Tag-proxy retrieval evaluation (MASTER_PLAN §5).
+"""Tag-proxy retrieval evaluation.
 
 Benchmark: a frozen candidate universe U (fit+dev cards with usable text; untagged cards
 stay in with zero proxy gain), sorted by Oracle ID, and frozen development anchors. Every system

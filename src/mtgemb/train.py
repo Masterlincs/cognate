@@ -1,4 +1,4 @@
-"""Contrastive fine-tuning with exact resume (MASTER_PLAN §6, §7).
+"""Contrastive fine-tuning with exact resume.
 
 The batch schedule is a pure function of (config, data), so the sampler position is just
 the update counter. Checkpoints hold model, optimiser, scheduler, RNG states and counters,
@@ -77,7 +77,7 @@ class TrainConfig(BaseModel):
     grad_checkpointing: bool = False
     max_skip_rate: float = 0.01
     guardrail_hard_lexical: float | None = None  # pretrained hard-lexical nDCG
-    # guarded_best: pilot rule (MASTER_PLAN §5). final: confirmation runs, no selection
+    # guarded_best: pilot rule. final: confirmation runs, no selection
     selection: Literal["guarded_best", "final"] = "guarded_best"
     dataset_dir: str
     stop_after: int | None = None  # engineering: stop (resumably) after this update

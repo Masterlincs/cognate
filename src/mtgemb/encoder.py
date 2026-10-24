@@ -1,4 +1,4 @@
-"""Shared encoder path (MASTER_PLAN §6): prefix, tokenisation, pooling, normalisation.
+"""Shared encoder path: prefix, tokenisation, pooling, normalisation.
 
 Training, evaluation and export all call `embed()`/`encode()` so the contract lives once.
 """

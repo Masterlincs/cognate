@@ -1,8 +1,8 @@
 """The authorised one-shot sealed evaluation of the frozen systems.
 
 Re-scores the nine dev-evaluated systems, unchanged, on a sealed benchmark (sealed anchors,
-fit+dev+sealed universe), then re-tests the registered P7 contrasts there. Nothing here
-trains, tunes or selects; the P7 decision and the release are not touched.
+fit+dev+sealed universe), then re-tests the registered confirmation contrasts there. Nothing here
+trains, tunes or selects; the promotion decision and the release are not touched.
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ def sealed_eval(ds_dir) -> dict:
     launch, concurrent or after a crash, refuses. A crashed run needs a human decision."""
     dev_bid = read_json(bench_path(ds_dir))["benchmark_id"]
     if not (RUNS / "confirmation" / dev_bid / "report.json").exists():
-        raise FileNotFoundError("no P7 confirmation report: nothing frozen to test")
+        raise FileNotFoundError("no confirmation report: nothing frozen to test")
     lock = RUNS / "sealed" / "run.lock"
     lock.parent.mkdir(parents=True, exist_ok=True)
     try:

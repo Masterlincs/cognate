@@ -1,4 +1,4 @@
-"""Release export (P8): encode the permitted catalogue, exact top-k neighbours, static bundle.
+"""Release export: encode the permitted catalogue, exact top-k neighbours, static bundle.
 
 The catalogue is every fit+dev card (sealed rows are never loaded). Cards without usable
 text are listed but get no vector and no neighbours. The bundle follows web/SCHEMA.md;

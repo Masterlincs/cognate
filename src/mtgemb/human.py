@@ -1,4 +1,4 @@
-"""Optional human pilot (MASTER_PLAN §9, IMPLEMENTATION_PLAN P11; ).
+"""Optional human pilot.
 
 A blinded pool of development anchors with candidates pooled from frozen systems. The
 annotation tool sees only pool.json (cards, items, presentation order); key.json maps each

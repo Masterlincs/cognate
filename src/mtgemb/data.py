@@ -1,4 +1,4 @@
-"""Corpus, tags, families, split and fit-only statistics (MASTER_PLAN §3-4).
+"""Corpus, tags, families, split and fit-only statistics.
 
 `prepare()` turns a raw snapshot into an immutable processed dataset directory.
 """

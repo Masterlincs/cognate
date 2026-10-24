@@ -1,4 +1,4 @@
-"""Fit-only positive pairs and frozen lexical-negative pools (MASTER_PLAN §3, §6).
+"""Fit-only positive pairs and frozen lexical-negative pools.
 
 Run after the split is frozen. Everything here reads fit cards only.
 """

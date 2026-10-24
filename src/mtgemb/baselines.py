@@ -499,7 +499,7 @@ def _check_release(meta_p: Path, bm: Benchmark, ds: dict, metas: dict, vecs: dic
 
 
 def replay_evals(ds_dir, tol: float = 1e-9) -> dict:
-    """P10 evaluation replay from pinned embeddings; no encoding, no training.
+    """Evaluation replay from pinned embeddings; no encoding, no training.
 
     Every directory under runs/eval/<benchmark_id>/ must be a complete record: its benchmark
     id and file hashes are verified, its saved vectors re-scored (lexical: refit on fit text),

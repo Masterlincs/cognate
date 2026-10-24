@@ -188,7 +188,7 @@
   <section class="built">
     <h2>Built with</h2>
     <p>Python, PyTorch and Hugging Face Transformers for training and evaluation; scikit-learn for the map (t-SNE); SvelteKit for this static site, with no tracking and no server. Every result on this page is read from the run and evaluation records in the repository by a script.</p>
-    <p class="links"><a class="btn" href={REPO} rel="noopener">Code on GitHub</a> <a class="btn" href="{REPO}/blob/master/WRITE_UP.MD" rel="noopener">Full write-up</a> <a class="btn primary" href={resolve('/')}>Open the explorer</a></p>
+    <p class="links"><a class="btn" href={REPO} rel="noopener">Code on GitHub</a> <a class="btn" href="{REPO}/blob/master/the decision log" rel="noopener">Decision log</a> <a class="btn primary" href={resolve('/')}>Open the explorer</a></p>
   </section>
 </article>
 

@@ -81,7 +81,7 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--from-release", metavar="ID")
     q.add_argument("--decision", help="promotion decision text for a promoted release")
     q.add_argument("--ds", default=DEFAULT_DS)
-    q = sub.add_parser("confirm-report", help="registered P7 contrasts and promotion decision")
+    q = sub.add_parser("confirm-report", help="confirmation contrasts and promotion decision")
     q.add_argument("--ds", default=DEFAULT_DS)
     q.add_argument("--design", choices=["d18", "x1"], default="d18")
     q = sub.add_parser("site-data", help="map, pretrained neighbours and metrics for the site")

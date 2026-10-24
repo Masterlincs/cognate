@@ -1,4 +1,4 @@
-"""`no_reminder` v1 text representation (MASTER_PLAN §3).
+"""`no_reminder` v1 text representation.
 
 Pure functions only: the encoder input is exactly what `no_reminder_v1` returns.
 """

@@ -336,7 +336,7 @@ def _release_without_meta(tmp_path, v, d):
 
 
 def _release_incomplete_manifest(tmp_path, v, d):
-    r, b = _release(tmp_path, v)  # Sol r7: drop names.json and re-pin release.json
+    r, b = _release(tmp_path, v)  # drop names.json and re-pin release.json
     (b / "names.json").unlink()
     _edit_json(b / "release.json", lambda m: m["files"].pop("names.json"))
     _edit_json(r / "release_meta.json",
@@ -348,7 +348,7 @@ def _stray_eval_entry(tmp_path, v, d):
 
 
 def _empty_meta(tmp_path, v, d):
-    _edit_json(d / "summary.json", lambda r: r.update(meta={}))  # Sol r8
+    _edit_json(d / "summary.json", lambda r: r.update(meta={}))
 
 
 def _no_max_length(tmp_path, v, d):
@@ -356,12 +356,12 @@ def _no_max_length(tmp_path, v, d):
 
 
 def _no_model_path(tmp_path, v, d):
-    _edit_json(d / "summary.json", lambda r: r["meta"].pop("model_path"))  # Sol r9
+    _edit_json(d / "summary.json", lambda r: r["meta"].pop("model_path"))
     _release(tmp_path, v)  # a pretrained release it would otherwise match
 
 
 def _fake_recipe(tmp_path, v, d):
-    _edit_json(d / "summary.json", lambda r: r["meta"].update(recipe={"x": 1}))  # Sol r10
+    _edit_json(d / "summary.json", lambda r: r["meta"].update(recipe={"x": 1}))  # unknown recipe
 
 
 def _null_model_id(tmp_path, v, d):
@@ -375,14 +375,14 @@ def _wrong_dim(tmp_path, v, d):
 
 
 def _lexical_loose_types(tmp_path, v, d):
-    from mtgemb.lexical import LEXICAL_RECIPE  # Sol r11: 1 for True, 3.0 for 3
+    from mtgemb.lexical import LEXICAL_RECIPE  # 1 must not pass for True
     loose = {**json.loads(json.dumps(LEXICAL_RECIPE)), "lowercase": 1}
     _edit_json(d / "summary.json", lambda r: r["meta"].update(system="lexical", recipe=loose))
 
 
 def _encoder_labelled_lexical(tmp_path, v, d):
     _edit_json(d / "summary.json", lambda r: r["meta"].update(system="lexical"))
-    _release(tmp_path, v)  # would match the mislabelled record before r10
+    _release(tmp_path, v)  # must not match the mislabelled record
 
 
 def _empty_model_path(tmp_path, v, d):
@@ -402,7 +402,7 @@ def _release_bad_shard_size(tmp_path, v, d):
 
 
 def _release_encoder_pairs(tmp_path, v, d):
-    r, _ = _release(tmp_path, v)  # Sol r12: dict(pairs) must not normalise it
+    r, _ = _release(tmp_path, v)  # dict(pairs) must not normalise it
     _edit_json(r / "release_meta.json",
                lambda m: m.update(encoder=[list(x) for x in m["encoder"].items()]))
 

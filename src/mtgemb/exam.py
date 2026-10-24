@@ -4,7 +4,7 @@ Each item is an anchor (a whole card, or one of its ability lines), a true match
 near-identical trap. A model passes an item when it scores the match above the trap.
 
 The worksheet `exam/traps.md` is the source of truth. Items are proposed by rule-based
-mining or from user reports; only the user turns `proposed` into `accepted` or `rejected`.
+mining or from user reports; only a human reviewer turns `proposed` into `accepted` or `rejected`.
 Only accepted items are scored. Exam card families are kept out of new training inputs;
 fit exam cards remain in the existing card pairs (, `exam_cards`).
 Sealed cards are never loaded, so they cannot appear.
@@ -224,7 +224,7 @@ Rule: **same mechanism, flexible parameters.** Numbers, colours and riders are f
 a different or flipped mechanism is not.
 
 Each item: an anchor (a whole card, or `line N` of it), a true **match** and a **trap**.
-A model passes when it scores the match above the trap. Only the user changes `proposed` to
+A model passes when it scores the match above the trap. Only a human reviewer changes `proposed` to
 `accepted` or `rejected` in an item's heading. Only accepted items are scored. Never edit
 ids or card ids; to change an item, reject it and add a new one with the next id.
 Every card named here (and its family) is kept out of new training inputs.
