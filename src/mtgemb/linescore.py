@@ -7,10 +7,16 @@ line_invdf: the same, each anchor line weighted 1/df, df = universe cards that h
 
 from __future__ import annotations
 
+import time
+from pathlib import Path
+
 import numpy as np
 
-from .abilities import split_abilities
+from . import exam
+from .abilities import flatten, split_abilities
+from .evaluate import evaluate, load_benchmark
 from .exam import mask_numbers
+from .util import RUNS, atomic_write_json, git_identity, log_event, read_json, sha256_file, utcnow
 
 VARIANTS = ("line_mean", "line_invdf")
 
@@ -21,22 +27,17 @@ class LineScorer:
         row order (abilities.split_abilities), as the release stores them."""
         if variant not in VARIANTS:
             raise ValueError(variant)
-        lines, owner = [], []
-        for r, t in enumerate(texts):
-            a = split_abilities(t)
-            lines += a
-            owner += [r] * len(a)
+        lines, self.owner, self.starts = flatten(texts)
         if len(lines) != len(line_v):
             raise ValueError("line vectors do not match the universe texts")
-        self.v, self.owner = line_v, np.array(owner)
-        self.starts = np.flatnonzero(np.r_[True, self.owner[1:] != self.owner[:-1]])
+        self.v = line_v
         self.n = len(texts)
         if variant == "line_mean":
             self.w = np.ones(len(lines))
         else:
             keys = [mask_numbers(x) for x in lines]
             cards: dict[str, set[int]] = {}
-            for k, o in zip(keys, owner, strict=True):
+            for k, o in zip(keys, self.owner.tolist(), strict=True):
                 cards.setdefault(k, set()).add(o)
             self.w = np.array([1.0 / len(cards[k]) for k in keys])
 
@@ -54,22 +55,14 @@ class LineScorer:
 
 def run(ds_dir, release_dir) -> dict:
     """whole-card baseline vs both variants on dev (selection-exposed) and the exam."""
-    import json
-    import time
-    from pathlib import Path
-
-    from . import exam
-    from .evaluate import evaluate, load_benchmark
-    from .util import RUNS, atomic_write_json, git_identity, log_event, sha256_file, utcnow
-
     rd = Path(release_dir)
     bm, _ = load_benchmark(ds_dir)
-    meta = json.loads((rd / "release_meta.json").read_text("utf-8"))
+    meta = read_json(rd / "release_meta.json")
     for f, k in (("vectors.npy", "vectors_sha256"), ("ability_vectors.npy",
                                                      "ability_vectors_sha256")):
         if sha256_file(rd / f) != meta[k]:
             raise ValueError(f"{f} does not match its release hash")
-    owners = [x["oracle_id"] for x in json.loads((rd / "ability_lines.json").read_text("utf-8"))]
+    owners = [x["oracle_id"] for x in read_json(rd / "ability_lines.json")]
     if list(dict.fromkeys(owners)) != list(bm.ids):
         raise ValueError("release rows are not the dev benchmark universe in order")
     whole = np.load(rd / "vectors.npy")

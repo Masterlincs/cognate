@@ -13,11 +13,17 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import struct
+from collections import Counter
 from pathlib import Path
 
 import numpy as np
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 
+from .data import load_dataset
 from .export import SHARD, topk_neighbours
 from .util import ARTIFACTS, ROOT, RUNS, atomic_write_json, sha256_file
 
@@ -68,26 +74,18 @@ def region_labels(xy: np.ndarray, tag_sets: list[frozenset], labels: dict, k: in
     """KMeans regions labelled by the tag with the highest lift (cluster share / overall
     share) among tags held by at least min_support of the cluster; ties -> larger count,
     then label. Clusters with no such tag are dropped."""
-    from sklearn.cluster import KMeans
-
     km = KMeans(n_clusters=k, random_state=0, n_init=10).fit(xy)
     n = len(tag_sets)
-    overall: dict = {}
-    for ts in tag_sets:
-        for t in ts:
-            overall[t] = overall.get(t, 0) + 1
+    overall = Counter(t for ts in tag_sets for t in ts)
     out = []
     for c in range(k):
         members = np.flatnonzero(km.labels_ == c)
-        counts: dict = {}
-        for i in members:
-            for t in tag_sets[i]:
-                counts[t] = counts.get(t, 0) + 1
+        counts = Counter(t for i in members for t in tag_sets[i])
         ok = [(cnt / len(members) / (overall[t] / n), cnt, labels[t]) for t, cnt in counts.items()
               if cnt >= min_support * len(members)]
         if not ok:
             continue
-        best = max(ok, key=lambda r: (r[0], r[1], r[2]))
+        best = max(ok)
         cx, cy = xy[members].mean(0)
         out.append({"x": round(float(cx)), "y": round(float(cy)), "label": best[2],
                     "n": int(len(members))})
@@ -219,11 +217,6 @@ def write_metrics(path: Path | None = None) -> Path:
 
 def build_site_data(release_id: str, perplexity: float = 30.0) -> dict:
     """Map, regions and pretrained neighbours for one release, into a new folder."""
-    from sklearn.decomposition import PCA
-    from sklearn.manifold import TSNE
-
-    from .data import load_dataset
-
     if not release_id or Path(release_id).name != release_id:
         raise ValueError("release must be a release ID")
     out = WEB / "public" / "data" / f"site-{release_id}"
@@ -273,8 +266,6 @@ def build_site_data(release_id: str, perplexity: float = 30.0) -> dict:
 def copy_site_data(release_id: str, source_id: str) -> dict:
     """Site data for a release whose card vectors and card order equal an earlier release's
     (e.g. a re-export with --from-release): the map and pretrained neighbours are copied."""
-    import shutil
-
     for rid in (release_id, source_id):
         if not rid or Path(rid).name != rid:
             raise ValueError("releases must be release IDs")

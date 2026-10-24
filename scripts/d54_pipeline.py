@@ -1,12 +1,11 @@
 """One-off: score each finished run on the GPU before the next run is queued.
 
-After x-2: dev eval (saved vectors) and trap exam for x-2, a dev eval
-of x-1's selected checkpoint (the effect-only baseline), then merge d54-train (train.py is
-in x-2's code identity, so it waits) and queue x-3. After x-3: score it, queue x-4. After
-x-4: score it. CPU-only variants run after the next run is queued. A failed step is
-logged and skipped; it never holds back the queue. Usage: uv run python scripts/d54_pipeline.py
-
-GPU steps run with faulthandler and up to two retries.
+Waits for x-3, then runs the dev evals of x-2 and of x-1's selected checkpoint (the
+effect-only baseline; both re-run because the first attempts died in a native XPU abort on
+2026-10-22), scores x-3 (dev eval and trap exam) and queues x-4. The CPU-only variants
+of x-1 to x-3 run while x-4 trains; then x-4 is scored. A failed step is logged and skipped;
+it never holds back the queue. GPU steps run with faulthandler and up to two retries.
+Usage: uv run python scripts/d54_pipeline.py
 """
 
 import json

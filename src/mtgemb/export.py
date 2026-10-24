@@ -29,6 +29,7 @@ from .util import (
     atomic_write_json,
     git_identity,
     log_event,
+    read_json,
     sha256_file,
     sha256_json,
     utcnow,
@@ -69,7 +70,7 @@ def display_fields(raw_dir: Path, ids: list[str], manifest_sha256: str) -> dict[
     raw_dir = Path(raw_dir)
     if sha256_file(raw_dir / "manifest.json") != manifest_sha256:
         raise ValueError("raw manifest does not match the dataset")
-    f = json.loads((raw_dir / "manifest.json").read_text("utf-8"))["files"]["oracle_cards"]
+    f = read_json(raw_dir / "manifest.json")["files"]["oracle_cards"]
     if sha256_file(raw_dir / f["path"]) != f["sha256"]:
         raise ValueError("raw card file hash mismatch")
     want, out = set(ids), {}
@@ -227,7 +228,7 @@ def _reuse_vectors(release_id: str, dataset_id: str, model_hash: str, encoder: d
     if not release_id or Path(release_id).name != release_id or release_id in (".", ".."):
         raise ValueError("from_release must be a release ID")
     root = ARTIFACTS / "releases" / release_id
-    meta = json.loads((root / "release_meta.json").read_text("utf-8"))
+    meta = read_json(root / "release_meta.json")
     for key, expected in (("dataset_id", dataset_id), ("model_hash", model_hash),
                           ("encoder", encoder)):
         if meta.get(key) != expected:
@@ -241,7 +242,7 @@ def _reuse_vectors(release_id: str, dataset_id: str, model_hash: str, encoder: d
     lines, owner, _ = flatten(texts)
     expected_lines = [{"text": line, "oracle_id": ids[o]}
                       for line, o in zip(lines, owner, strict=True)]
-    if json.loads((root / "ability_lines.json").read_text("utf-8")) != expected_lines:
+    if read_json(root / "ability_lines.json") != expected_lines:
         raise ValueError("source release ability lines or oracle ids mismatch")
     v = np.load(root / "vectors.npy", allow_pickle=False)
     lv = np.load(root / "ability_vectors.npy", allow_pickle=False)
@@ -280,8 +281,8 @@ def finish_interrupted(final_out: Path, art: Path, final_art: Path) -> None:
     release is complete. Only artifacts that name this exact release.json are adopted.
     """
     meta_p = art / "release_meta.json"
-    if not meta_p.exists() or json.loads(meta_p.read_text("utf-8"))[
-            "release_json_sha256"] != sha256_file(final_out / "release.json"):
+    if not meta_p.exists() or read_json(meta_p)["release_json_sha256"] != sha256_file(
+            final_out / "release.json"):
         raise FileExistsError(f"bundle {final_out} exists without matching artifacts")
     os.replace(art, final_art)
 
@@ -408,16 +409,13 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
         finish_interrupted(final_out, art, final_art)
         log_event("export", "COMPLETED", release_id=release_id, recovered=True)
         return {"release_id": release_id, "bundle": str(final_out),
-                "artifacts": str(final_art), "parity": json.loads(
-                    (final_art / "release_meta.json").read_text("utf-8"))["parity"]}
+                "artifacts": str(final_art),
+                "parity": read_json(final_art / "release_meta.json")["parity"]}
     for p in (out, art):
         if p.exists():
             shutil.rmtree(p)  # leftover from a failed export; never published
-    (out / "cards").mkdir(parents=True)
-    (out / "neighbours").mkdir(parents=True)
-    (out / "abilities").mkdir(parents=True)
-    (out / "lines").mkdir(parents=True)
-    (out / "faces").mkdir(parents=True)
+    for d in ("cards", "neighbours", "abilities", "lines", "faces"):
+        (out / d).mkdir(parents=True)
     art.mkdir(parents=True)
 
     neigh: list[list] = [[] for _ in range(len(cards))]
@@ -425,13 +423,14 @@ def export(ds_dir, backbone: str, max_length: int, label: str, status: str,
     face_rows: list[list] = [[] for _ in range(len(cards))]
     card_tags: list[list] = [[] for _ in range(len(cards))]
     ability_rows: list[list] = [[] for _ in range(len(cards))]
+
+    def ranked(idx, sco):  # text-subset rows -> catalogue cards, scores to 4 decimals
+        return [[int(ti[j]), round(float(s), 4)] for j, s in zip(idx, sco, strict=True)]
+
     for r, ci in enumerate(ti):  # text-subset row r is catalogue card ci
-        neigh[ci] = [[int(ti[j]), round(float(s), 4)] for j, s in zip(nidx[r], nsco[r],
-                                                                      strict=True)]
-        line_rows[ci] = [[int(ti[j]), round(float(score), 4)]
-                         for j, score in zip(lidx[r], lsco[r], strict=True)]
-        face_rows[ci] = [[int(ti[j]), round(float(s), 4)] for j, s in zip(fidx[r], fsco[r],
-                                                                          strict=True)]
+        neigh[ci] = ranked(nidx[r], nsco[r])
+        line_rows[ci] = ranked(lidx[r], lsco[r])
+        face_rows[ci] = ranked(fidx[r], fsco[r])
         card_tags[ci] = tags["card"][r]
         ability_rows[ci] = [{"text": a["text"], "tags": tags["lines"][r][k], "neighbours": [
             [int(ti[j]), score] for j, score in a["neighbours"]]} for k, a in

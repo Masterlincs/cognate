@@ -81,18 +81,11 @@ def log_event(log: str, event: str, **fields: Any) -> dict:
 def git_identity() -> dict:
     """Commit hash and whether the tracked tree is dirty."""
     try:
-        head = subprocess.run(
-            ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
-        ).stdout.strip()
-        dirty = bool(
-            subprocess.run(
-                ["git", "status", "--porcelain", "--untracked-files=no"],
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-                check=True,
-            ).stdout.strip()
-        )
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+                              text=True, check=True).stdout.strip()
+        dirty = bool(subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"],
+                                    cwd=ROOT, capture_output=True, text=True,
+                                    check=True).stdout.strip())
     except (OSError, subprocess.CalledProcessError):
         return {"commit": None, "dirty": None}
     return {"commit": head, "dirty": dirty}

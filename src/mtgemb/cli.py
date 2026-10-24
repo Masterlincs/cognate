@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import time
 from pathlib import Path
 
-from .util import read_json
+from .util import log_event, read_json
 
 DEFAULT_DS = "data/processed/2026-10-16_no_reminder_v1"
 
@@ -19,9 +21,6 @@ def gpu_limits(env=None, clock=None, sleep=None) -> dict:
     (r=1 keeps the GPU at most about half busy). Lives here, not in train.py, so the code
     identity of a running run does not change and it can resume under the limits.
     """
-    import os
-    import time
-
     import torch
 
     env = os.environ if env is None else env
@@ -195,8 +194,6 @@ def main(argv: list[str] | None = None) -> None:
         cfg = TrainConfig(**read_json(a.config))
         limits = gpu_limits()
         if limits["mem_gb"] or limits["rest"]:
-            from .util import log_event
-
             log_event("train", "GPU_LIMITS", run_id=cfg.run_id, mem_gb=limits["mem_gb"],
                       rest=limits["rest"])
         bench = read_json(bench_path(cfg.dataset_dir)) if cfg.eval_every else None

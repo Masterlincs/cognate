@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 from .abilities import split_abilities
 from .baselines import _lexical_vectors
@@ -248,8 +249,6 @@ def analyse(pool_dir, n_boot: int = 10000) -> dict:
         for s, v in d.items():
             if not s.startswith("ability-") or s == "ability-lists":
                 rows.append({"anchor": a, "stratum": key["strata"][a], "system": s, **v})
-    import pandas as pd
-
     df = pd.DataFrame(rows)
     summary = {}
     for stratum in ("all", "single", "multi"):

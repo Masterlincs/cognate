@@ -13,11 +13,14 @@ rewarded for matching a cost rider.
 from __future__ import annotations
 
 import copy
+from functools import partial
 
 import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
+from .evaluate import cohort_summary, evaluate, load_benchmark
+from .pairs import MODIFIER_LABELS
 from .text import FACE_BOUNDARY
 from .util import RUNS, atomic_write_json, log_event, read_json, sha256_file, utcnow
 
@@ -86,8 +89,6 @@ def diagnose(ds_dir, name: str, batch_size: int = 32) -> dict:
     import torch
 
     from . import encoder as enc
-    from .evaluate import cohort_summary, evaluate, load_benchmark
-    from .pairs import MODIFIER_LABELS
 
     bm, ds = load_benchmark(ds_dir)
     bid = bm.spec["benchmark_id"]
@@ -109,8 +110,8 @@ def diagnose(ds_dir, name: str, batch_size: int = 32) -> dict:
     out_dir.mkdir(parents=True, exist_ok=True)
     np.save(out_dir / "face_vectors.npy", F)
     res = {}
-    both = lambda a: face_max(W, F, owner, a)  # noqa: E731
-    cand = lambda a: face_max(W, F, owner, a, query_faces=False)  # noqa: E731
+    both = partial(face_max, W, F, owner)
+    cand = partial(face_max, W, F, owner, query_faces=False)
     for key, b, scorer in (("whole", bm, None), ("face_match", bm, both),
                            ("face_match_candidate", bm, cand), ("whole_effect_only", eo, None),
                            ("face_match_effect_only", eo, both),
