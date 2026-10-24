@@ -1,4 +1,4 @@
-"""Static data for the Card Atlas site (redesign plan, Task 1).
+"""Static data for the Card Atlas site.
 
 Three outputs, all derived from existing records:
 - a 2D map of a release's card vectors (t-SNE) with region labels from Tagger tags;

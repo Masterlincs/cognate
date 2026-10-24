@@ -6,9 +6,7 @@ in x-2's code identity, so it waits) and queue x-3. After x-3: score it, queue x
 x-4: score it. CPU-only variants run after the next run is queued. A failed step is
 logged and skipped; it never holds back the queue. Usage: uv run python scripts/d54_pipeline.py
 
-Restarted 2026-10-22 after x-3 was queued: both dev evals had died in a native XPU abort
-(exit 0xC0000005), so it resumes at x-3 and re-runs the x-2 and x-1 dev evals while the GPU
-is free between x-3 and x-4. GPU steps run with faulthandler and up to two retries.
+GPU steps run with faulthandler and up to two retries.
 """
 
 import json
