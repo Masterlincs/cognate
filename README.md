@@ -35,7 +35,7 @@ The gain over the 2000-update model is about 0.01 nDCG@10, on the development ta
 
 ### Sealed evaluation of the earlier model
 
-The 2000-update systems were evaluated once on a sealed split that played no part in training, selection or any release: 3170 anchors in 2954 families, ranked against all 30,745 cards with rules text. The first attempt crashed on the GPU before scoring any model and was rerun from scratch. The sealed split is now spent, so the deployed 4000-update model has no sealed result.
+The 2000-update systems were evaluated once on a sealed split that played no part in training, selection or any release: 3170 anchors in 2954 families, ranked against all 30,745 cards with rules text. The first attempt crashed on the GPU before scoring any encoder and was rerun from scratch. The sealed split is now spent, so the deployed 4000-update model has no sealed result.
 
 | System | Full | Hard-lexical |
 | --- | --- | --- |
@@ -56,11 +56,11 @@ The model cleared its pre-registered promotion gate against both comparators on 
 ### Other checks
 
 - **Trap exam** (`exam/traps.md`): 51 hand-written items, mostly cards whose side clauses or mechanics invite a wrong match. The deployed model passes 47 and fails T001, T021, T022 and T029, the same four as the 2000-update model. The exam is a diagnostic, not a promotion criterion, and it is exposed: its fit cards appear in the training pairs.
-- **Follow-up runs:** three single-change runs aimed at the side-clause traps (more hard negatives, effect-only labels, rare-tag weighting). None cleared its registered gate, and each lost at least one exam item the deployed model passes.
+- **Follow-up runs:** three single-change runs aimed at the side-clause traps (more hard negatives, effect-only labels, rare-tag weighting). None cleared its registered gate, and each lost at least one exam item that its comparator, the 4000-update seed-0 run, passes.
 
 ## How it works
 
-- **Data.** The Scryfall `oracle_cards` snapshot of 2026-10-16: 31,066 paper, tournament-legal cards, of which 30,745 have rules text. Text is the Oracle rules text with parenthetical reminder text removed and faces joined by `\n//\n`. See [DATA_CARD.md](DATA_CARD.md).
+- **Data.** The Scryfall `oracle_cards` snapshot of 2026-10-16: 31,066 paper, tournament-legal cards, of which 30,745 have rules text. Text is the Oracle rules text with every balanced parenthetical removed (reminder text, but also any parenthetical that matters to the rules) and faces joined by `\n//\n`. See [DATA_CARD.md](DATA_CARD.md).
 - **Labels.** 2,709 functional Scryfall Tagger tags (for example "removal" or "card draw"). A candidate's relevance to an anchor is the sum of the fit-IDF weights of the tags they share.
 - **Splits.** Cards are grouped into families (identical text, self-name templates, meld pairs) and each family is hashed into fit, development or sealed (80/10/10), so near-copies never straddle splits.
 - **Training.** Masked InfoNCE on 108,220 pairs of fit cards that share a tag. In-batch negatives that share an eligible tag or a family with the anchor are masked, and each pair gets one hard negative from its lexical neighbours. 32 pairs per batch, learning rate 3e-5, 4000 updates, on a laptop Intel Arc iGPU (3.8 h). See [MODEL_CARD.md](MODEL_CARD.md).
@@ -90,10 +90,10 @@ uv run mtgemb audit --ds <dataset_dir>
 uv run mtgemb benchmark --ds <dataset_dir>
 ```
 
-Evaluate baselines. Results go to `runs/eval/<benchmark_id>/<name>/`, and a recorded name is never overwritten, so a replay uses a new name:
+Evaluate baselines. Results go to `runs/eval/<benchmark_id>/<name>/`, and a recorded name is never overwritten, so an encoder replay uses a new name:
 
 ```sh
-uv run mtgemb eval-lexical --ds <dataset_dir>
+uv run mtgemb eval-lexical --ds <dataset_dir>   # refuses if the lexical record exists
 uv run mtgemb eval-encoder replay-e5-base-v2 e5-base-v2 --max-length 94 --ds <dataset_dir>
 uv run mtgemb eval-encoder replay-bge-small-en-v1.5 bge-small-en-v1.5 --max-length 92 --ds <dataset_dir>
 ```
@@ -108,10 +108,10 @@ Train one configuration (resumes from its last checkpoint if interrupted), evalu
 
 ```sh
 uv run mtgemb train configs/confirm-x1-s1.json
-uv run mtgemb export e5-base-v2 --max-length 94 --label <label> --status promoted --model-path <model_dir> --run-id <run_id> --ds <dataset_dir>
+uv run mtgemb export e5-base-v2 --max-length 94 --label <label> --status promoted --model-path <model_dir> --run-id <run_id> --decision "<promotion decision>" --ds <dataset_dir>
 ```
 
-`--status` is one of `promoted`, `experimental` or `pretrained-fallback`. Site checks:
+`--status` is one of `promoted`, `experimental` or `pretrained-fallback`; a promoted release must state its promotion decision with `--decision`. Site checks:
 
 ```sh
 cd web
