@@ -2,7 +2,7 @@
   "phase": "P12",
   "status": "IN_PROGRESS",
   "last_completed": "Sealed evaluation (gate 1): sealed gate cleared; P10 complete",
-  "next_action": "round closed: x-2, x-3 and x-4 all did not clear their gates; x-1 stays the comparator; GPU free, no run queued. Site serves release v6 2026-10-16-e5-base-v2-3984a6b7 locally; nothing published. Awaiting the user's next direction. P10 re-check of release v6 (2026-10-23): replay v5/v6 bundle check added (0b9d37a, bba0d43). P9 load-time fix (, dc663cc, 2961da6): usable lookup 2.36-2.67 s on the throttled mobile profile, under the 3 s target. Deferred: intermittent native XPU abort in eval-encoder (passes on retry).",
+  "next_action": "(2026-10-24): behaviour-preserving cleanup done and reviewed; replay-eval passed (max diff 0.0). Branch curated-history (identical final tree) and tag archive/full-history pushed; replacing master needs the user's approval (force-push). GPU free, no run queued; nothing published. Before that: round closed: x-2, x-3 and x-4 all did not clear their gates; x-1 stays the comparator; GPU free, no run queued. Site serves release v6 2026-10-16-e5-base-v2-3984a6b7 locally; nothing published. Awaiting the user's next direction. P10 re-check of release v6 (2026-10-23): replay v5/v6 bundle check added (0b9d37a, bba0d43). P9 load-time fix (, dc663cc, 2961da6): usable lookup 2.36-2.67 s on the throttled mobile profile, under the 3 s target. Deferred: intermittent native XPU abort in eval-encoder (passes on retry).",
   "benchmark_id": "8bf2f48c0bba3b2c",
   "dataset_id": "cbd5c12011c94e68",
   "pairs_id": "795ebb1ae7ce8251",
@@ -10,7 +10,7 @@
   "initial_runs_used": 9,
   "extension_runs_used": 3,
   "confirmation_runs_used": 9,
-  "updated_utc": "2026-10-22T07:39:35Z",
+  "updated_utc": "2026-10-24T04:00:00Z",
   "active_run": null,
   "completed_runs": [
     "initial-1-e5-lr3e-05-s20",
