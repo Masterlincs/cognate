@@ -1,16 +1,14 @@
-# MTG effect-similarity
+# MTG effect similarity
 
-A project for finding Magic: The Gathering cards with similar main effects. It fine-tunes `intfloat/e5-base-v2`, compares it with pretrained E5, a freshly trained BGE-small control and lexical retrieval, and provides a static card discovery app.
+Find Magic: The Gathering cards that do the same thing, not just cards that use the same words.
 
-All relevance results are **tag-proxy results** based on Scryfall Tagger oracle tags. They are not human judgements.
+This project fine-tunes [`intfloat/e5-base-v2`](https://huggingface.co/intfloat/e5-base-v2) so that cards with similar effects sit close together, evaluates it against pretrained and lexical baselines with a pre-registered protocol, and serves the result in **Card Atlas**, a static site for browsing each card's nearest neighbours.
 
-## Status
+On development cards the deployed model reaches **nDCG@10 0.714**, against 0.566 for pretrained E5 and 0.604 for character TF-IDF. The earlier 2000-update model was evaluated once on a sealed split and scored 0.705 there. Relevance throughout is a **tag proxy** built from Scryfall Tagger tags, not human judgement.
 
-P0-P10 are complete; later extensions are recorded in the decision log (onwards). Dataset `cbd5c12011c94e68`, benchmark `8bf2f48c0bba3b2c` (3016 development anchors in 2853 families).
+## Results
 
-**Deployed model: `confirm-x1-s1`** - fine-tuned `intfloat/e5-base-v2`, lr 3e-5, scale 20, **4000 updates**, seed 1, final checkpoint. Release `2026-10-16-e5-base-v2-3984a6b7`, bundle schema v6. Promotion decision: **promote**, a *provisional tag-proxy promotion on selection-exposed development*. **This model has no sealed evaluation**; the sealed results below belong to the earlier 2000-update model (`confirm-e5-s1`), which it replaced.
-
-Development nDCG@10, tag proxy (higher is better):
+Development nDCG@10 (3016 anchors in 2853 card families; higher is better). The development split never enters training, but it informed model and checkpoint choices, so these results are selection-exposed.
 
 | System | Full | Hard-lexical |
 | --- | --- | --- |
@@ -23,7 +21,9 @@ Development nDCG@10, tag proxy (higher is better):
 | **Fine-tuned E5, 4000 updates, 3 seeds (mean)** | **0.7162** | **0.7011** |
 | Fine-tuned E5, 4000 updates, seed 1 (deployed) | 0.7142 | 0.6987 |
 
-Registered contrasts for the 4000-update recipe, 3 seeds, cluster bootstrap over families (`runs/confirmation/8bf2f48c0bba3b2c/x1/report.json`). Each cell is the point estimate, with the one-sided lower bound adjusted for M = 6 in brackets:
+"Hard-lexical" removes candidates from the anchor's own family and candidates whose wording is nearly identical (word-token Jaccard of 0.8 or more), so a model cannot score by matching reprinted text.
+
+The promotion test compares the 4000-update recipe with each baseline over 3 seeds, using a bootstrap over card families. Each cell is the point estimate, with the one-sided lower bound (adjusted for 6 comparisons) in brackets (`runs/confirmation/8bf2f48c0bba3b2c/x1/report.json`):
 
 | Contrast | Full | Hard-lexical |
 | --- | --- | --- |
@@ -31,19 +31,11 @@ Registered contrasts for the 4000-update recipe, 3 seeds, cluster bootstrap over
 | vs trained BGE | +0.0527 (+0.0457) | +0.0553 (+0.0481) |
 | vs the 2000-update E5 recipe | +0.0098 (+0.0063) | +0.0102 (+0.0063) |
 
-The gain over the 2000-update model is about 0.01 nDCG@10 on the selection-exposed development tag proxy only.
+The gain over the 2000-update model is about 0.01 nDCG@10, on the development tag proxy only.
 
-**Trap exam** (51 hand-written items, mostly rider and mechanism traps, `exam/traps.md`, a diagnostic, not a promotion criterion): the deployed model passes 47/51 and fails T001, T021, T022 and T029, the same four as the 2000-update model. No item has all three cards in dev, so the exam is exposed: its fit cards are in the training pairs (, dev-only n = 0).
+### Sealed evaluation of the earlier model
 
-**Later experiments**: three single-change runs against the 4000-update recipe at seed 0 aimed at the rider traps: three hard negatives (x-2), effect-only labels (x-3) and rare-tag weighting (x-4). None cleared its registered gate; each lost at least one exam item that the comparator passes. The deployed model is unchanged.
-
-**Exploratory site features**, not evaluated as improvements: per-ability neighbours, line match, per-line tags and face match (about level with whole-card ranking on the development tag proxy).
-
-### Sealed held-out evaluation of the earlier model (one authorised run)
-
-The frozen 2000-update systems were evaluated **once** on the sealed split, after promotion and with the user's authorisation. Sealed benchmark `c98bb619ea613672`: 3170 sealed anchors in 2954 families, candidate universe of 30,745 fit + development + sealed cards. Sealed cards played no part in training, selection or any release. Results are still tag-proxy results. The sealed split has now been used and is not evaluated again, so the deployed 4000-update model cannot be checked on it.
-
-Sealed nDCG@10, tag proxy:
+The 2000-update systems were evaluated once on a sealed split that played no part in training, selection or any release: 3170 anchors in 2954 families, ranked against all 30,745 cards with rules text. The first attempt crashed on the GPU before scoring any model and was rerun from scratch. The sealed split is now spent, so the deployed 4000-update model has no sealed result.
 
 | System | Full | Hard-lexical |
 | --- | --- | --- |
@@ -54,30 +46,41 @@ Sealed nDCG@10, tag proxy:
 | **Fine-tuned E5, 2000 updates, 3 seeds (mean)** | **0.7050** | **0.6830** |
 | Fine-tuned E5, 2000 updates, seed 1 | 0.7052 | 0.6833 |
 
-The same registered contrasts on sealed anchors (point estimate, with the M = 4 adjusted lower bound in brackets):
-
-| Contrast | Full | Hard-lexical |
+| Contrast (lower bound adjusted for 4 comparisons) | Full | Hard-lexical |
 | --- | --- | --- |
 | vs pretrained E5 | +0.1329 (+0.1239) | +0.1435 (+0.1326) |
 | vs trained BGE | +0.0409 (+0.0360) | +0.0451 (+0.0386) |
 
-The 2000-update fine-tuned E5 **cleared the registered promotion gate on sealed anchors** against both comparators (`runs/sealed/c98bb619ea613672/report.json`). This one sealed run shows the gate held on unseen cards under the tag proxy for that model. It is not a human-relevance result. `mtgemb sealed-eval` refuses to run again.
+The model cleared its pre-registered promotion gate against both comparators on sealed anchors (`runs/sealed/c98bb619ea613672/report.json`). This shows the gain held on unseen cards under the tag proxy; it is not a human-relevance result. `mtgemb sealed-eval` refuses to run a second time.
 
-Nothing has been published.
+### Other checks
 
-## Requirements
+- **Trap exam** (`exam/traps.md`): 51 hand-written items, mostly cards whose side clauses or mechanics invite a wrong match. The deployed model passes 47 and fails T001, T021, T022 and T029, the same four as the 2000-update model. The exam is a diagnostic, not a promotion criterion, and it is exposed: its fit cards appear in the training pairs.
+- **Follow-up runs:** three single-change runs aimed at the side-clause traps (more hard negatives, effect-only labels, rare-tag weighting). None cleared its registered gate, and each lost at least one exam item the deployed model passes.
 
-- Windows or Linux, Python 3.12, and [uv](https://docs.astral.sh/uv/).
-- CPU is supported. Intel XPU is optional and requires a compatible PyTorch XPU build.
-- Node.js and npm are required for the static app under `web/`.
+## How it works
 
-Install the Python package and dependencies with `uv sync`. The project pins the XPU PyTorch index in `pyproject.toml`; select a compatible environment for CPU-only use.
+- **Data.** The Scryfall `oracle_cards` snapshot of 2026-10-16: 31,066 paper, tournament-legal cards, of which 30,745 have rules text. Text is the Oracle rules text with parenthetical reminder text removed and faces joined by `\n//\n`. See [DATA_CARD.md](DATA_CARD.md).
+- **Labels.** 2,709 functional Scryfall Tagger tags (for example "removal" or "card draw"). A candidate's relevance to an anchor is the sum of the fit-IDF weights of the tags they share.
+- **Splits.** Cards are grouped into families (identical text, self-name templates, meld pairs) and each family is hashed into fit, development or sealed (80/10/10), so near-copies never straddle splits.
+- **Training.** Masked InfoNCE on 108,220 pairs of fit cards that share a tag. In-batch negatives that share an eligible tag or a family with the anchor are masked, and each pair gets one hard negative from its lexical neighbours. 32 pairs per batch, learning rate 3e-5, 4000 updates, on a laptop Intel Arc iGPU (3.8 h). See [MODEL_CARD.md](MODEL_CARD.md).
+- **Evaluation.** nDCG@10 for each development anchor against the whole fit and development catalogue. Comparisons, seeds, thresholds and the promotion gate were registered before the runs they judge. Decisions and the evidence behind them are logged in [the decision log].
 
-## Reproduction
+## Card Atlas
 
-The commands below use the CLI's implemented subcommands and options. Replace `<raw_dir>` and `<dataset_dir>` with the acquired snapshot directory and processed dataset directory. The default dataset directory is `data/processed/2026-10-16_no_reminder_v1`.
+A SvelteKit static site in [`web/`](web/README.md). The explorer offers name search, a 2D map of the catalogue, and the 200 nearest neighbours of each card with colour, type and mana-value filters. It also offers exploratory views: per-ability neighbours, line match and face match, none of which is claimed as an improvement. A case-study page explains the project and compares the pretrained and fine-tuned neighbours side by side. The site reads a static release bundle exported by `mtgemb export`. Nothing has been published yet.
 
-### Build data and benchmark
+## Reproducing
+
+Requirements: Windows or Linux, Python 3.12, [uv](https://docs.astral.sh/uv/), and Node.js for the site. CPU works; Intel XPU needs a compatible PyTorch XPU build (the XPU index is pinned in `pyproject.toml`, so pick a matching environment for CPU-only use).
+
+```sh
+uv sync
+uv run ruff check src tests
+uv run pytest -q
+```
+
+Build the dataset and benchmark (the default dataset directory is `data/processed/2026-10-16_no_reminder_v1`):
 
 ```sh
 uv run mtgemb acquire
@@ -87,81 +90,58 @@ uv run mtgemb audit --ds <dataset_dir>
 uv run mtgemb benchmark --ds <dataset_dir>
 ```
 
-### Replay evaluation
-
-Evaluation replay uses an existing processed dataset and benchmark; it does not retrain a model. Results go to `runs/eval/<benchmark_id>/<name>/`. A recorded name is never overwritten (the recorded baselines are `lexical-char35-tfidf`, `pretrained-e5-base-v2` and `pretrained-bge-small-en-v1.5`), so a replay uses a new name and is compared with the recorded summary:
+Evaluate baselines. Results go to `runs/eval/<benchmark_id>/<name>/`, and a recorded name is never overwritten, so a replay uses a new name:
 
 ```sh
-uv run mtgemb eval-lexical --ds <dataset_dir>   # refuses if the lexical record exists
+uv run mtgemb eval-lexical --ds <dataset_dir>
 uv run mtgemb eval-encoder replay-e5-base-v2 e5-base-v2 --max-length 94 --ds <dataset_dir>
 uv run mtgemb eval-encoder replay-bge-small-en-v1.5 bge-small-en-v1.5 --max-length 92 --ds <dataset_dir>
 ```
 
-To re-score every recorded evaluation from its saved vectors (no encoding, no training), and check that each exported release's vectors equal the evaluated run's vectors:
+Re-score every recorded evaluation from its saved vectors and check that each exported release matches the run it came from (no encoding or training):
 
 ```sh
-uv run mtgemb replay-eval --ds <dataset_dir>   # writes runs/replay/<benchmark_id>/<utc>-<ns>.json
+uv run mtgemb replay-eval --ds <dataset_dir>
 ```
 
-To evaluate a fine-tuned checkpoint, pass its model directory with `--model-path` and use a distinct evaluation name. The encoder names and lengths above match the configured baseline recipes.
-
-### Full retraining and export
-
-Full retraining requires the registered run configuration and the acquired data. Each invocation trains or resumes the single config passed to `train`; it can use the GPU. Review the run caps and ensure only one GPU workload is active:
+Train one configuration (resumes from its last checkpoint if interrupted), evaluate a checkpoint with `eval-encoder --model-path`, and export a release bundle for the site:
 
 ```sh
-uv run mtgemb train configs/initial-1-e5-lr3e-05-s20.json
+uv run mtgemb train configs/confirm-x1-s1.json
+uv run mtgemb export e5-base-v2 --max-length 94 --label <label> --status promoted --model-path <model_dir> --run-id <run_id> --ds <dataset_dir>
 ```
 
-Repeat with the intended registered config file, one invocation at a time. P6/P7 pilot decisions determine which trained artifact, if any, is selected. After a verified selection, export using the actual backbone, checkpoint and status:
-
-```sh
-uv run mtgemb export e5-base-v2 --max-length 94 --label <label> --status <promoted-or-experimental-or-pretrained-fallback> --model-path <model_dir> --run-id <run_id> --ds <dataset_dir>
-```
-
-The accepted `--status` values are `promoted`, `experimental` and `pretrained-fallback`. Export writes the static release bundle; it does not publish the repository.
-
-### Static app checks
+`--status` is one of `promoted`, `experimental` or `pretrained-fallback`. Site checks:
 
 ```sh
 cd web
 npm ci
-npm run fixture
+npm run fixture   # synthetic bundle, not model results
 npm test
 npm run build
-node scripts/check-bundle.mjs <dir>
 ```
-
-The bundle checker directory is the release bundle to validate. Fixture content is synthetic and does not represent model results.
 
 ## Repository layout
 
-- `src/mtgemb/`: CLI, acquisition, data preparation, text processing, pair construction and audit, lexical retrieval, encoder, training, evaluation, reporting, export and shared utilities.
-- `configs/`: registered training configurations.
-- `web/`: Card Atlas, the SvelteKit static site (explorer and case study), release schema and fixture tooling. Build and deploy notes are in [web/README.md](web/README.md).
-- `runs/`: git-ignored run and evaluation logs.
-- `artifacts/`: git-ignored generated model and release artifacts.
-
-## Evaluation and data rules
-
-The sealed test split is excluded by default and is never loaded for routine training or evaluation. It has been evaluated once; do not evaluate it again or tune in response to it. Training ceilings are **10 initial runs**, **3 extension runs** and **9 confirmation runs**; these are caps, not targets.
+- `src/mtgemb/`: the `mtgemb` CLI and library: acquisition, data preparation, pairs, lexical retrieval, encoder, training, evaluation, reporting and release export.
+- `tests/`: unit and contract tests (real-model tests are deselected by default).
+- `configs/`: the registered training configurations, one per run.
+- `exam/`: the trap exam worksheet.
+- `scripts/`: the run queue and the follow-up experiment pipeline.
+- `web/`: Card Atlas.
+- `runs/`, `artifacts/`, `data/`: git-ignored run logs, models and data.
 
 ## Limitations
 
-- Relevance labels are Scryfall Tagger tag proxies, not human judgements.
-- The site meets the plan's mobile load target with a small margin: on the throttled Lighthouse mobile profile the search became usable after 2.36–2.67 s in 6 runs on one machine (target 3 s; 3.6–5.5 s before the fix). Unthrottled it takes about 0.25 s. Fonts and mana symbols load after the search index, so they can appear a moment late on a slow connection.
-- The proxy sums the fit-IDF weights of shared tags without telling main effects from riders, so on multi-ability cards a rider clause with several co-occurring tags can outrank the main effect. Example: for Deflecting Swat, commander/alternative-cost cards score higher than redirect cards, and the fine-tuned model ranks them first. Proxy gains therefore partly reward this behaviour (WRITE_UP, "User review of the app").
-- Development results are selection-exposed because they inform model and checkpoint choices. The sealed results come from one run and are not selection-exposed, but they use the same tag proxy.
-- App filters apply only to the **200 saved neighbours**; they do not search the full catalogue.
-- Cosine scores are ranking scores, not probabilities.
-- Three training seeds give only weak information about training variability.
-- The deployed model fails 4 of the 51 trap-exam items (T001 and T021 are rider traps, T022 and T029 mechanism traps); three runs aimed at the rider traps did not fix them.
-- Training to 4000 updates beat 2000 updates on the development proxy. Longer training was not tested, and the deployed model has no sealed evaluation.
-- No full retraining replay has been performed. The evaluation replay re-scores saved vectors only.
-- On the test laptop's Intel Arc iGPU (torch XPU), training and encoding sometimes abort with a native error (`AssertHandler::printMessage`). Training resumes exactly from the last checkpoint.
+- Relevance labels are community tags, not human judgements. A blinded human-labelling pool is prepared but unlabelled.
+- The tag proxy weights side-clause tags (alternative costs, casting modes) as much as main effects, so on multi-ability cards a side clause can outrank the main effect, and the model partly learned this. For Deflecting Swat, commander and alternative-cost cards outscore redirect effects on the proxy, and the model ranks them first.
+- Development results are selection-exposed. The sealed results come from one run of the earlier model.
+- Three training seeds give only weak information about training variability. Training longer than 4000 updates was not tested.
+- No full retraining replay has been done; the evaluation replay re-scores saved vectors.
+- The site's filters apply to the 200 saved neighbours, not the full catalogue. Cosine scores rank cards; they are not probabilities.
+- On the throttled Lighthouse mobile profile the search became usable after 2.36–2.67 s over 6 runs on one machine (target 3 s). Fonts and mana symbols load after the search index, so they can appear a moment late on a slow connection.
+- On the Intel Arc iGPU used here, training and encoding sometimes abort with a native XPU error; training resumes exactly from the last checkpoint.
 
 ## Attribution
 
-Card data and images © Wizards of the Coast; data from Scryfall (scryfall.com). Not affiliated with or endorsed by Wizards of the Coast or Scryfall. Tags from Scryfall Tagger.
-
-The pinned `intfloat/e5-base-v2` and `BAAI/bge-small-en-v1.5` model revisions are recorded in the decision log. Both model pages identify the models as MIT licensed: [E5-base-v2](https://huggingface.co/intfloat/e5-base-v2) and [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5).
+Card data and images © Wizards of the Coast; data from [Scryfall](https://scryfall.com), tags from Scryfall Tagger. Not affiliated with or endorsed by Wizards of the Coast or Scryfall. The pinned `intfloat/e5-base-v2` and `BAAI/bge-small-en-v1.5` revisions are recorded in the decision log; both are MIT licensed ([E5-base-v2](https://huggingface.co/intfloat/e5-base-v2), [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)).

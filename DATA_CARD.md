@@ -37,7 +37,7 @@ One row per Oracle ID. A card is included if it exists in paper, its vintage leg
 | --- | --- | --- | --- |
 | Fit | 24,817 | 24,554 | training pairs, lexical fitting, tag statistics |
 | Development | 3,049 | 3,019 | model and checkpoint selection; reported results (selection-exposed) |
-| Sealed | 3,200 | — | one authorised evaluation of the earlier model; never used for training, selection or any release |
+| Sealed | 3,200 | — | one evaluation of the earlier model; never used for training, selection or any release |
 
 - **Catalogue:** the released catalogue holds the fit and development cards only (27,866 cards). Sealed cards are not in any release.
 

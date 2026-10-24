@@ -6,7 +6,7 @@ Status: **provisional tag-proxy promotion on selection-exposed development**. No
 
 A fine-tune of [`intfloat/e5-base-v2`](https://huggingface.co/intfloat/e5-base-v2) (revision `f52bf8ec8c7124536f0efb74aca902b2995e5bcd`, MIT licence). It maps a Magic: The Gathering card's rules text to a 768-dimensional unit vector. Cards whose main effects are similar should be close by cosine.
 
-Intended use: card-to-card discovery ("cards that do something like this card"), as in the Card Atlas site. It is not a natural-language search model. Query relevance was never measured, so this is not a claim about queries (MASTER_PLAN §9, item 4). It does not judge card strength, legality or deck fit.
+Intended use: card-to-card discovery ("cards that do something like this card"), as in the Card Atlas site. It is not a natural-language search model. Query relevance was never measured, so this is not a claim about queries. It does not judge card strength, legality or deck fit.
 
 ## Encoder contract
 
@@ -49,7 +49,7 @@ The registered promotion test (3 seeds, family-cluster bootstrap, M = 6, `runs/c
 | vs trained BGE | +0.0527 (+0.0457) | +0.0553 (+0.0481) |
 | vs the previous 2000-update model | +0.0098 (+0.0063) | +0.0102 (+0.0063) |
 
-**Sealed evaluation:** none for this model. The one authorised sealed run evaluated the previous 2000-update model, which cleared the gate on sealed anchors (seed 1: 0.7052 / 0.6833). The sealed split has now been used and will not be used again.
+**Sealed evaluation:** none for this model. The single sealed run evaluated the previous 2000-update model, which cleared the gate on sealed anchors (seed 1: 0.7052 / 0.6833). The sealed split has now been used and will not be used again.
 
 **Trap exam** (, `exam/traps.md`; a diagnostic, not part of promotion): 47/51. It fails T001 and T021 (rider traps) and T022 and T029 (mechanism traps), the same four as the previous model. The exam is exposed: no item has all three cards in dev, and its fit cards are in the training pairs (, dev-only n = 0). Three later runs aimed at the rider traps did not clear their gates.
 
