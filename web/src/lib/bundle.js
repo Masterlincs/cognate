@@ -135,11 +135,6 @@ export function validateTags(release, tags) {
   return true;
 }
 
-// fill IDs into the open suggestions only; a dismissed (empty) list stays dismissed
-export function withIds(suggestions, ids) {
-  return suggestions.map((entry) => ({ ...entry, id: ids?.[entry.index] ?? '' }));
-}
-
 export function validateIds(release, data) {
   const ids = data?.ids;
   if (!Array.isArray(ids) || ids.length !== release?.n_cards) throw new Error('ID count does not match release.json.');

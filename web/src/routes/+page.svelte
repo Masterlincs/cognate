@@ -11,9 +11,9 @@
   import Rules from '#lib/Rules.svelte';
   import Search from '#lib/Search.svelte';
   import Segmented from '#lib/Segmented.svelte';
-  import { isV4Plus, isV5Plus, isV6, parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
+  import { filterNeighbours, isV4Plus, isV5Plus, isV6, parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
   import { getAbilities, getCard, getFaces, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
-  import { activeFilters, hasMore, resolveSelection, savedList, visibleNeighbours } from '#lib/explorer.js';
+  import { activeFilters, hasMore, resolveSelection, savedList } from '#lib/explorer.js';
   import { loadFonts } from '#lib/load-fonts.js';
   import { decodeMap, regionLabel } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
@@ -56,7 +56,7 @@
   const byFace = $derived(ability === null && rank === 'face');
   const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, faces: faceRows, abilities }));
   const filtering = $derived(activeFilters(filters));
-  const visible = $derived(visibleNeighbours(saved, (i) => byIndex[i], filters));
+  const visible = $derived(filterNeighbours(saved, (i) => byIndex[i], filters));
   const pageRows = $derived(visible.slice(0, shown));
   const shownError = $derived(error || (ability === null && rowsError[rank]) || '');
   const pending = $derived((byLine && lineRows === null) || (byFace && faceRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));

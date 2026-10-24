@@ -1,5 +1,3 @@
-import { filterNeighbours } from './bundle.js';
-
 // ids are strictly ascending (validateIds), so a binary search finds the card index
 export function resolveSelection(ids, state) {
   if (!state.card) return { index: -1, unknown: false };
@@ -11,8 +9,6 @@ export function resolveSelection(ids, state) {
   }
   return { index: -1, unknown: true };
 }
-
-export const visibleNeighbours = (saved, cardByIndex, filters) => filterNeighbours(saved, cardByIndex, filters);
 
 export const activeFilters = (f) => Boolean(f.color || f.creature || f.type || Number.isFinite(f.minMv) || Number.isFinite(f.maxMv));
 

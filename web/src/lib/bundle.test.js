@@ -1,19 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchKeys, searchNames, serializeUrl, validateIds, validateRelease, validateTags, withIds, validateReleasePointer, validateShard } from './bundle.js';
+import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchKeys, searchNames, serializeUrl, validateIds, validateRelease, validateTags, validateReleasePointer, validateShard } from './bundle.js';
 
 const names = { names: ['Café Lantern', 'Blue Door', 'Green Thread // Thread Unbound'], aliases: [['Thread Unbound', 2]] };
 const ids = { ids: ['a', 'b', 'c'] };
 const release = { schema: 'mtgemb-release-v2', n_cards: 3, shard_size: 2, k: 2 };
 
 describe('search and ranking helpers', () => {
-  it('adds IDs to open suggestions without reopening a dismissed list', () => {
-    const open = searchNames('thread', names);
-    expect(open[0].id).toBe('');
-    expect(withIds(open, ids.ids)).toEqual([{ index: 2, id: 'c', name: 'Green Thread // Thread Unbound' }]);
-    expect(withIds([], ids.ids)).toEqual([]);
-  });
   it('normalizes accents and searches prefixes before substring matches', () => {
     expect(normalize(' CAFÉ ')).toBe('cafe');
+    expect(searchNames('thread', names)[0].id).toBe('');
     expect(searchNames('thread unbound', names, ids.ids)[0]).toMatchObject({ index: 2, id: 'c' });
     expect(searchNames('thread', names, ids.ids).map((entry) => entry.id)).toEqual(['c']);
     const order = { names: ['The Silver Lamp', 'Silver Lamp Keeper'], aliases: [] };
@@ -42,6 +37,13 @@ describe('search and ranking helpers', () => {
   it('filters only saved neighbours using the selected constraints', () => {
     const cards = [{ color_identity: 'U', mv: 2, type_line: 'Instant', is_creature: false }, { color_identity: '', mv: 4, type_line: 'Artifact', is_creature: false }];
     expect(filterNeighbours([[1, 0.8], [2, 0.7]], (index) => cards[index - 1], { color: 'C', minMv: 3, maxMv: null, creature: 'noncreature', type: 'arti' })).toEqual([[2, 0.7]]);
+  });
+  it('keeps order with no filters and drops cards not loaded yet', () => {
+    const cards = { 1: { color_identity: 'R', mv: 1, type_line: 'Instant', is_creature: false }, 2: { color_identity: 'G', mv: 3, type_line: 'Creature — Elf', is_creature: true } };
+    const saved = [[2, 0.9], [1, 0.8]];
+    expect(filterNeighbours(saved, (i) => cards[i], {})).toEqual(saved);
+    expect(filterNeighbours(saved, (i) => cards[i], { creature: 'creature', maxMv: 2 })).toEqual([]);
+    expect(filterNeighbours([[5, 0.5]], () => undefined, {})).toEqual([]);
   });
 });
 
