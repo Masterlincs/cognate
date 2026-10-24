@@ -150,7 +150,7 @@ def self_noun(type_line: str) -> str:
 def replace_self_names(text: str, names: list[str], noun: str) -> str:
     """Own names (longest first) -> noun; "named <Name>" is a name reference and is kept.
 
-    ponytail: a bare word match; a card whose name is also an ordinary rules word would
+    Limitation: a bare word match; a card whose name is also an ordinary rules word would
     be rewritten wherever that word appears. Measured before use.
     """
     for n in sorted(names, key=len, reverse=True):
@@ -164,7 +164,7 @@ def no_reminder_v2(faces: list[dict], names: list[str]) -> dict:
     """v1 after replacing each face's own names with that face's Oracle-style noun.
 
     `faces`: dicts with oracle_text and type_line; `names`: the card's self names (full
-    name, face names, the part before ", "), as data._self_names returns them.
+    name, face names, the part before ", "), as data.self_names returns them.
     """
     return no_reminder_v1([replace_self_names(f.get("oracle_text") or "", names,
                                               self_noun(f.get("type_line", "")))

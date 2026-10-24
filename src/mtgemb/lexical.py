@@ -10,10 +10,7 @@ LEXICAL_RECIPE = {"analyzer": "char", "ngram_range": (3, 5), "lowercase": True, 
 
 
 def fit_vectorizer(fit_texts: list[str]) -> TfidfVectorizer:
-    vec = TfidfVectorizer(analyzer="char", ngram_range=(3, 5), lowercase=True, norm="l2",
-                          dtype=np.float32)
-    vec.fit(fit_texts)
-    return vec
+    return TfidfVectorizer(**{**LEXICAL_RECIPE, "dtype": np.float32}).fit(fit_texts)
 
 
 def topk_sparse(q, c, k: int, exclude=None, block: int = 1024) -> tuple[np.ndarray, np.ndarray]:

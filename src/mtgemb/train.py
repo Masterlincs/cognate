@@ -12,6 +12,7 @@ import json
 import math
 import os
 import random
+import shutil
 import time
 from pathlib import Path
 from typing import Literal
@@ -101,17 +102,14 @@ class TrainData:
         fit_ok = (cards["split"] == "fit") & (cards["text_status"] == "ok")
         self.fit_texts_changed = int((cards.loc[fit_ok, "text"] !=
                                      ds["cards"].loc[fit_ok, "text"]).sum())
-        self.text_version = text_version
+        self.text_version, self.pairs_version = text_version, pairs_version
         ds["cards"] = cards
-        self.pairs_version = pairs_version
         pdir = Path(ds_dir) / pairs_version
         self.pairs_rec = read_json(pdir / "pairs.json")
         for name, h in self.pairs_rec["files"].items():
             if sha256_file(pdir / name) != h:
                 raise ValueError(f"pairs file changed: {name}")
-        cards = ds["cards"]
-        fit = cards[(cards["split"] == "fit") & (cards["text_status"] == "ok")]
-        fit = fit.sort_values("oracle_id").reset_index(drop=True)
+        fit = cards[fit_ok].sort_values("oracle_id").reset_index(drop=True)
         self.ids = fit["oracle_id"].tolist()
         self.texts = fit["text"].tolist()
         pos = {o: i for i, o in enumerate(self.ids)}
@@ -505,15 +503,11 @@ def code_identity() -> str:
     return sha256_json({f: sha256_file(here / f) for f in _CODE_FILES})[:16]
 
 
-def run_dir(run_id: str) -> Path:
-    return RUNS / run_id
-
-
 def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | None = None,
           data: TrainData | None = None) -> dict:
     """Train (or resume) one run. Returns the run record."""
     dev = dev or enc.device()
-    out = run_dir(cfg.run_id)
+    out = RUNS / cfg.run_id
     out.mkdir(parents=True, exist_ok=True)
     data = data or TrainData(cfg.dataset_dir, cfg.text_version, cfg.pairs_version)
     if getattr(data, "text_version", "no_reminder_v1") != cfg.text_version:
@@ -610,7 +604,7 @@ def synth_loss(model, tok, recipe, max_length, synth_rows: dict, rows: np.ndarra
 
 
 def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_hash,
-                  aux=None, card_hash=None, synth_rows=None):
+                  aux, card_hash, synth_rows):
     tag_w = data.tag_weights() if cfg.pair_weighting == "tag_idf" else None
     torch.manual_seed(cfg.seed)
     random.seed(cfg.seed)
@@ -749,11 +743,11 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
                                       "schedule_hash": sched_hash}, identity)
     except BaseException as ex:
         metrics_f.close()
-        log_event("train", "FAILED" if not isinstance(ex, KeyboardInterrupt) else "INTERRUPTED",
+        log_event("train", "INTERRUPTED" if isinstance(ex, KeyboardInterrupt) else "FAILED",
                   run_id=cfg.run_id, error=repr(ex)[:500])
         raise
     metrics_f.close()
-    finished = (cfg.stop_after is None or cfg.stop_after >= cfg.total_updates)
+    finished = cfg.stop_after is None or cfg.stop_after >= cfg.total_updates
     result = {"run_id": cfg.run_id, "updates_done": done,
               "evals": evals, "schedule_hash": sched_hash, "card_schedule_hash": card_hash,
               "finished": finished}
@@ -775,8 +769,6 @@ def _train_locked(cfg, bench, dev, data, recipe, identity, out, batches, sched_h
 
 def _save_weights(model, tok, path: Path) -> None:
     """Atomic directory replace: save to sibling temp dir, then swap."""
-    import shutil
-
     tmp = path.with_name(path.name + ".tmp")
     old = path.with_name(path.name + ".old")
     if old.exists():  # an interrupted earlier swap

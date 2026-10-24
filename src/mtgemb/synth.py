@@ -31,12 +31,12 @@ def build(ds: dict, elig: set[str], exclude: set[str], seed: int = 0) -> dict:
     for oid, text, family in zip(ids, texts, families, strict=True):
         positives = [(kind, p) for kind, p in (("numbers", augment.numbers(text)),
                                                ("wording", augment.wording(text)))
-                     if p is not None and p != text]
+                     if p is not None]
         if not positives:
             continue
         kind, positive = positives[int(rng.integers(len(positives)))]
         negative = augment.flip(text, seed, key=oid)
-        if negative is None or negative == text:
+        if negative is None:
             negative = text_of.get(openers.get(oid))
         rows.append({"anchor_id": oid, "anchor": text, "positive": positive,
                      "negative": negative, "family": family, "positive_kind": kind})

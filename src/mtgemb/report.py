@@ -149,8 +149,8 @@ def _check_eval(bench_id: str, name: str, backbone: str, max_length: int,
 def _check_confirm_run(bench_id: str, name: str, seed: int, recipe_run: str,
                        eval_bench: str | None = None) -> None:
     res = read_json(RUNS / name / "result.json")
-    man, ref = read_json(RUNS / name / "manifest.json"), read_json(RUNS / recipe_run /
-                                                                   "manifest.json")
+    man = read_json(RUNS / name / "manifest.json")
+    ref = read_json(RUNS / recipe_run / "manifest.json")
     cfg = man["config"]
     if not (res["finished"] and res["selection"] == "final" == cfg["selection"]):
         raise ValueError(f"{name}: not a finished selection='final' run")

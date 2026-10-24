@@ -151,7 +151,7 @@ def tag_reason(label: str) -> str | None:
 
 # ---------------------------------------------------------------- families
 
-def _self_names(name: str, faces: list[dict]) -> list[str]:
+def self_names(name: str, faces: list[dict]) -> list[str]:
     names = {name} | {f["name"] for f in faces if f.get("name")}
     for n in list(names):
         if ", " in n:
@@ -161,7 +161,7 @@ def _self_names(name: str, faces: list[dict]) -> list[str]:
 
 def name_normalised(text: str, name: str, faces: list[dict]) -> str:
     """Grouping key only (never an encoder input): own names -> CARDNAME."""
-    for n in _self_names(name, faces):
+    for n in self_names(name, faces):
         text = re.sub(rf"(?<!\w){re.escape(n)}(?!\w)", "CARDNAME", text)
     return text
 

@@ -16,6 +16,7 @@ import pandas as pd
 import scipy.sparse as sp
 from sklearn.feature_extraction.text import CountVectorizer
 
+from .data import load_dataset
 from .text import word_tokens
 from .util import atomic_write_json, read_json, sha256_json, utcnow
 
@@ -104,8 +105,6 @@ def load_benchmark(ds_dir, held: str = "dev") -> tuple[Benchmark, dict]:
 
     Only held="sealed" (the authorised final evaluation) parses sealed rows.
     """
-    from .data import load_dataset
-
     if held not in HELD:
         raise ValueError(f"held must be one of {HELD}")
     ds = load_dataset(ds_dir, include_sealed=held == "sealed")

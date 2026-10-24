@@ -97,7 +97,7 @@ def test_guard_compares_identical_items_only():
 
 @pytest.mark.parametrize("version", ["no_reminder_v1", "no_reminder_v2"])
 def test_exam_score_text_version(tmp_path, monkeypatch, selfname_cards, version):
-    from mtgemb import data, encoder, selfname, util
+    from mtgemb import encoder, selfname
 
     cards = selfname_cards
     ids = cards["oracle_id"].tolist()
@@ -119,10 +119,10 @@ def test_exam_score_text_version(tmp_path, monkeypatch, selfname_cards, version)
         seen.append(texts)
         return np.tile([1., 0.], (len(texts), 1))
 
-    monkeypatch.setattr(data, "load_dataset", lambda _: {"cards": cards})
+    monkeypatch.setattr(exam, "load_dataset", lambda _: {"cards": cards})
     monkeypatch.setattr(encoder, "load", lambda *_: (None, Model()))
     monkeypatch.setattr(encoder, "encode", encode)
-    monkeypatch.setattr(util, "RUNS", tmp_path / "exam-records")
+    monkeypatch.setattr(exam, "RUNS", tmp_path / "exam-records")
     kwargs = {} if version == "no_reminder_v1" else {"text_version": version}
     out = exam.exam_score("unused", "fixture", "e5-base-v2", 94, path=worksheet, **kwargs)
     expected = selfname.apply_text_version(cards, version)["text"].tolist()

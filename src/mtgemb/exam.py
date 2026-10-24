@@ -21,12 +21,16 @@ Mined sections (one-line cards only, so every tag on a card belongs to its singl
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 import numpy as np
 
 from .abilities import split_abilities
-from .util import ROOT
+from .data import load_dataset, tag_sets
+from .lexical import fit_vectorizer
+from .selfname import apply_text_version
+from .util import ROOT, RUNS, atomic_write_json, git_identity, log_event, sha256_file, utcnow
 
 EXAM = ROOT / "exam" / "traps.md"  # absolute: a wrong cwd must not empty the exclusions
 STATUSES = ("proposed", "accepted", "rejected")
@@ -118,9 +122,6 @@ def exam_cards(path: Path = EXAM) -> set[str]:
 
 def mine(ds: dict, k: int = PER_SECTION) -> list[dict]:
     """Proposed items from fit+dev one-line cards. Dev anchors first, then fit."""
-    from .data import tag_sets
-    from .lexical import fit_vectorizer
-
     cards = ds["cards"]
     ok = cards[cards["text_status"] == "ok"].sort_values("oracle_id")
     one = ok[ok["text"].map(lambda t: len(split_abilities(t)) == 1)].reset_index(drop=True)
@@ -304,14 +305,9 @@ def exam_score(ds_dir, name: str, backbone: str, max_length: int,
                model_path: str | None = None, path: Path = EXAM,
                text_version: str = "no_reminder_v1") -> dict:
     """Score one encoder (on CPU) on the accepted items; one new record per call."""
-    import time
-
     import torch
 
     from . import encoder as enc
-    from .data import load_dataset
-    from .selfname import apply_text_version
-    from .util import RUNS, atomic_write_json, git_identity, log_event, sha256_file, utcnow
 
     items = parse(path.read_text("utf-8"))
     cards = apply_text_version(load_dataset(ds_dir)["cards"], text_version).set_index("oracle_id")

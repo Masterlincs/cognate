@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from .data import card_row, corpus_reason, load_raw, name_normalised
+from .data import card_row, corpus_reason, load_dataset, load_raw, name_normalised
 from .evaluate import BENCHMARK_VERSION, VIEWS, K
 from .util import DATA, atomic_write_json, log_event, sha256_json, utcnow
 
@@ -71,8 +71,6 @@ def collect(ds: dict, old_raw: Path, new_raw: Path) -> tuple[pd.DataFrame, pd.Da
 
 def build(ds_dir, old_raw: Path, new_raw: Path) -> dict:
     """Write data/fresh/<snapshot>/ (cards, memberships, benchmark spec) when large enough."""
-    from .data import load_dataset
-
     ds = load_dataset(ds_dir)
     cards, mem, rep = collect(ds, old_raw, new_raw)
     fit_tags = set(ds["tags"].loc[ds["tags"]["df_fit"] > 0, "tag_id"])

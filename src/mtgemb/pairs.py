@@ -136,8 +136,8 @@ def build_pairs(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame, cfg=
             rows.append({
                 "a": a, "b": b, "split": "fit", "tag_id": t, "tag_label": label[t],
                 "tag_df_fit": len(members[t]),
-                "sampling_reason": f"tag_matching_round_{r}" if len(members[t]) - 1 > cfg[
-                    "rounds"] else "tag_all_pairs",
+                "sampling_reason": (f"tag_matching_round_{r}" if len(members[t]) - 1 > cfg["rounds"]
+                                    else "tag_all_pairs"),
                 "relation_source": "scryfall_tagger_oracle_tag",
                 "confidence": "very_strong" if (a, t) in strong and (b, t) in strong else "median",
                 "shared_eligible": sorted(elig_sets[a] & elig_sets[b]),
@@ -227,7 +227,7 @@ def build_training_data(ds_dir: Path, version: str = PAIRS_VERSION) -> dict:
     cards, mem, tags = ds["cards"], ds["memberships"], ds["tags"]
     dropped = set()
     if cfg.get("exclude_labels"):
-        mem, dropped = drop_modifier_tags(ds["memberships"], tags, cfg["exclude_labels"])
+        mem, dropped = drop_modifier_tags(mem, tags, cfg["exclude_labels"])
     pairs, elig, pstats = build_pairs(cards, mem, tags, cfg)
     neg, nstats = lexical_negatives(cards, mem, cfg["neg_pool"])
     if dropped:
@@ -255,7 +255,6 @@ def build_training_data(ds_dir: Path, version: str = PAIRS_VERSION) -> dict:
     log_event("data", "COMPLETED", step="pairs", version=version, pairs_id=rec["pairs_id"],
               **pstats)
     return rec
-
 
 
 def audit_pairs(ds_dir: Path, per_band: int = 40) -> dict:

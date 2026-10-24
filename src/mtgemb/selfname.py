@@ -8,12 +8,15 @@ run on v2 would be ext-3 and needs registration.
 from __future__ import annotations
 
 import json
+import time
 
 import pandas as pd
 
 from .abilities import split_abilities
-from .data import _self_names
+from .data import self_names
+from .evaluate import cohort_summary, evaluate, load_benchmark
 from .text import VERSION, VERSION_V2, no_reminder_v2
+from .util import RUNS, atomic_write_json, git_identity, log_event, utcnow
 
 
 def v2_texts(cards: pd.DataFrame) -> pd.Series:
@@ -21,7 +24,7 @@ def v2_texts(cards: pd.DataFrame) -> pd.Series:
     out = {}
     for r in cards.itertuples():
         faces = json.loads(r.faces)
-        t = no_reminder_v2(faces, _self_names(r.name, faces))
+        t = no_reminder_v2(faces, self_names(r.name, faces))
         out[r.oracle_id] = t["text"] if t["status"] == "ok" else None
     return pd.Series(out)
 
@@ -47,13 +50,9 @@ def apply_text_version(cards: pd.DataFrame, version: str) -> pd.DataFrame:
 
 def diagnose(ds_dir, name: str, backbone: str, max_length: int,
              model_path: str | None = None, cpu: bool = False) -> dict:
-    import time
-
     import torch
 
     from . import encoder as enc
-    from .evaluate import cohort_summary, evaluate, load_benchmark
-    from .util import RUNS, atomic_write_json, git_identity, log_event, utcnow
 
     bm, ds = load_benchmark(ds_dir)
     cards = apply_text_version(ds["cards"], VERSION_V2)

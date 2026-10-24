@@ -27,6 +27,7 @@ from .util import (
     sha256_file,
     utcnow,
 )
+from .variants import face_index, face_max
 
 V4_K = 50  # v4 bundles store 50 line and ability matches; export.K grew to 200 in v5
 V5_K = 200  # v5+ store 200 whole-card, line and (v6) face matches; ability matches stay 50
@@ -132,6 +133,10 @@ def _bundle_needs(ver: int, shards: int) -> list[str]:
     return files + [f"{d}/{i:03d}.json" for d in dirs for i in range(shards)]
 
 
+def _is_bool(x) -> bool:
+    return isinstance(x, bool | np.bool_)
+
+
 def _num_diff(a, b) -> float:
     """Largest numeric difference between two JSON-like values; inf on any structural or
     non-numeric mismatch (NaN matches only NaN)."""
@@ -143,11 +148,8 @@ def _num_diff(a, b) -> float:
         if len(a) != len(b):
             return float("inf")
         return max((_num_diff(x, y) for x, y in zip(a, b, strict=True)), default=0.0)
-    def is_bool(x):
-        return isinstance(x, bool | np.bool_)
-
-    if is_bool(a) or is_bool(b):  # True must not match the count 1
-        return 0.0 if is_bool(a) and is_bool(b) and bool(a) == bool(b) else float("inf")
+    if _is_bool(a) or _is_bool(b):  # True must not match the count 1
+        return 0.0 if _is_bool(a) and _is_bool(b) and bool(a) == bool(b) else float("inf")
     if isinstance(a, numbers.Real) and isinstance(b, numbers.Real):
         if np.isnan(a) or np.isnan(b):
             return 0.0 if np.isnan(a) and np.isnan(b) else float("inf")
@@ -166,9 +168,8 @@ def _path_or_null(x) -> bool:
 
 
 def _encoder_key(recipe, max_length, model_path) -> str:
-    """Canonical JSON, so True never matches 1 and key order never matters."""
-    return json.dumps([recipe, max_length, None if model_path is None else
-                       str(_under_root(model_path))], sort_keys=True)
+    return _canon([recipe, max_length,
+                   None if model_path is None else str(_under_root(model_path))])
 
 
 def _under_root(p) -> Path:
@@ -224,7 +225,7 @@ def _replay_one(d: Path, bm: Benchmark, ds: dict, bid: str, tol: float) -> tuple
                 and m["recipe"].get("dim") != v.shape[1]:
             probs.append(f"recipe dim {m['recipe'].get('dim')} != vector width {v.shape[1]}")
         res = evaluate(bm, v)
-    elif rec["meta"].get("system") == "lexical":
+    elif m.get("system") == "lexical":
         res = evaluate(bm, _lexical_vectors(bm, ds))
     else:
         return {"ok": False, "problems": probs + ["no saved vectors to replay"]}, None
@@ -371,8 +372,6 @@ def _check_scores(bundle: Path, man: dict, v: np.ndarray, art: Path, meta: dict,
 
 
 def _scores_problems(bundle, man, v, art, meta, cards, ver, n_rows, tol) -> list[str]:
-    from .variants import face_index, face_max
-
     has_text = (cards["text_status"] == "ok").to_numpy()
     ti = np.flatnonzero(has_text)
     row_of = {int(c): r for r, c in enumerate(ti)}
