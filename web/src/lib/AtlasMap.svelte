@@ -90,7 +90,7 @@
   // larger regions first; a label is skipped when it would overlap one already drawn
   function drawLabels(zoom) {
     const size = 11 + Math.min(3, zoom / 3);
-    ctx.font = `600 ${size}px 'Inter Variable', system-ui, sans-serif`;
+    ctx.font = `600 ${size}px 'Schibsted Grotesk Variable', system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const placed = [];
