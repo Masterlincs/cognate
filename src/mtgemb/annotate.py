@@ -52,12 +52,15 @@ def make_server(pool_dir: str | Path, port: int = 8765) -> ThreadingHTTPServer:
                 self.json_reply(404, {"error": "Not found"})
                 return
             try:
+                length = int(self.headers.get("Content-Length", "0"))
+                # read before rejecting: closing on unread data resets the connection on
+                # Windows, so the client would see an abort instead of the 400
+                body = self.rfile.read(length) if 0 < length <= 1 << 20 else b""
                 if self.headers.get_content_type() != "application/json":
                     raise ValueError("Expected application/json")
-                length = int(self.headers.get("Content-Length", "0"))
                 if not 0 < length <= 16384:
                     raise ValueError("Invalid body length (maximum 16384 bytes)")
-                label = json.loads(self.rfile.read(length))
+                label = json.loads(body)
                 if not isinstance(label, dict) or set(label) != {
                     "item_id", "grade", "ability", "reason"
                 }:
