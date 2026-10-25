@@ -4,11 +4,13 @@
   import { goto } from '$app/navigation';
   import BarChart from '#lib/BarChart.svelte';
   import BeforeAfter from '#lib/BeforeAfter.svelte';
+  import ContrastPlot from '#lib/ContrastPlot.svelte';
   import DotPlot from '#lib/DotPlot.svelte';
   import Rules from '#lib/Rules.svelte';
   import Search from '#lib/Search.svelte';
   import { loadRelease, setRoot } from '#lib/data.js';
-  import { delta, fixed } from '#lib/format.js';
+  import { delta, fixed, mean } from '#lib/format.js';
+  import { contrastRows, runScore } from '#lib/study.js';
   import m from '#lib/generated/metrics.json';
 
   const REPO = 'https://github.com/Masterlincs/mtg-embeddings';
@@ -16,22 +18,51 @@
   const dep = m.deployed;
   const train = dep?.training;
   const enc = dep?.encoder;
-  const d18 = m.promotion.d18;
-  const x1 = m.promotion.x1;
+  const promo = m.promotion.x1 ?? m.promotion.d18;
   const sealed = m.sealed;
   const exam = m.exam;
   const exPre = exam['pretrained-e5-base-v2'];
   const exDep = dep ? exam[dep.run_id] : null;
   const margin = (rec, id) => rec?.failed.find((f) => f.id === id)?.margin ?? null;
+  const marginText = (rec, id) => (margin(rec, id) === null ? '—' : fixed(margin(rec, id)));
   const fineTuned = m.dev['fine-tuned E5'];
   // the dev row whose runs include the deployed run (falls back to the first E5 recipe)
   const depRow = Object.values(m.dev).find((r) => r.runs.includes(dep?.run_id)) ?? fineTuned;
+  const depScore = runScore(depRow, dep?.run_id) ?? mean(depRow.full);
   const lexical = m.dev['keyword baseline (character TF-IDF)'];
   const pretrained = m.dev['pretrained E5-base'];
-  const mean = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
-  const devRows = Object.entries(m.dev).map(([label, r]) => ({ label, values: { full: r.full, hard_lexical: r.hard_lexical }, highlight: r === depRow, note: r.runs.length > 1 ? `mean of ${r.runs.length} seeds, range shown` : '' }));
-  const stepRows = Object.entries(m.steps).map(([s, v]) => ({ label: `seed ${s}`, a: v['2000'], b: v['4000'] }));
   const split = m.data.split_counts;
+  const [stepA, stepB] = Object.keys(Object.values(m.steps)[0] ?? {});
+  const stepRows = Object.entries(m.steps).map(([s, v]) => ({ label: `seed ${s}`, a: v[stepA], b: v[stepB] }));
+
+  const seeds = Math.max(...Object.values(m.dev).map((r) => r.runs.length));
+  const spread = Math.max(...Object.values(m.dev).flatMap((r) => [r.full, r.hard_lexical].map((xs) => Math.max(...xs) - Math.min(...xs))));
+  const devRows = Object.entries(m.dev).map(([label, r]) => ({
+    label,
+    values: { full: r.full, hard_lexical: r.hard_lexical },
+    highlight: r === depRow,
+    note: [r === depRow && 'deployed recipe', r.runs.length > 1 && `mean of ${r.runs.length} seeds`].filter(Boolean).join(', '),
+  }));
+
+  const contrastLabels = { pretrained_e5: 'pretrained E5', trained_bge: 'fine-tuned BGE-small', incumbent_e5: `the ${stepA}-update recipe` };
+  const promoIsDeployed = promo.deployment?.run_id === dep?.run_id;
+  const sealedIsDeployed = sealed.deployment.run_id === dep?.run_id;
+  const panels = [
+    { title: `Development cards: ${promoIsDeployed ? 'the deployed recipe' : 'the promoted recipe'}`, note: `${seeds} seeds, ${promo.m_contrasts} comparisons corrected together. Decision: ${promo.decision} (${promo.qualifier}).`, rows: contrastRows(promo, contrastLabels) },
+    { title: `Sealed cards: ${sealedIsDeployed ? 'the deployed model' : `the earlier ${stepA}-update model`}, scored once`, note: `${sealed.m_contrasts} comparisons. Gate ${sealed.sealed_gate}.`, rows: contrastRows(sealed, contrastLabels) },
+  ];
+
+  const steps = [
+    ['data', 'Data', `${n(m.data.n_cards)} cards from Scryfall`],
+    ['labels', 'Labels', `${n(m.data.tags_functional)} effect tags`],
+    ['splits', 'Splits', 'fit, dev, sealed'],
+    ['training', 'Training', `${n(train?.total_updates ?? 0)} updates`],
+    ['results', 'Results', `${fixed(depScore)} dev nDCG@10`],
+    ['limits', 'Where it fails', exDep ? `${exDep.n - exDep.passed} of ${exDep.n} trap items` : 'known misses'],
+    ['built', 'Built with', 'tools and credits'],
+  ];
+  const allClear = panels.every((p) => p.rows.every((r) => r.adj > 0));
+  const stepNo = Object.fromEntries(steps.map(([id], i) => [id, i + 1]));
 
   // hero search: card names load only when the reader focuses the box
   let names = $state.raw(null);
@@ -57,201 +88,266 @@
   <meta name="description" content="How Card Atlas was built: a sentence-embedding model fine-tuned to find Magic cards with similar effects, how it was tested, and where it still fails." />
 </svelte:head>
 
+{#snippet eyebrow(id)}<p class="eyebrow"><span class="num">{stepNo[id]}</span> {steps[stepNo[id] - 1][1]}</p>{/snippet}
+
 <article class="study">
   <header class="hero">
     <h1>Finding Magic cards by what they do, not what they say</h1>
-    <p class="lede">Card Atlas ranks {n(m.data.split_counts.fit + m.data.split_counts.dev)} Magic: The Gathering cards by how similar their effects are. Under it is a small open text-embedding model, e5-base-v2, fine-tuned on community tags so that cards doing the same job end up close together even when their wording differs. This page covers the problem, the data, the training, how the model was tested and where it still goes wrong.</p>
+    <p class="lede">Pick a Magic: The Gathering card and Card Atlas lists the cards whose effects are most like it, even when the wording differs. Under it is e5-base-v2, a small open text-embedding model, fine-tuned on community tags. This page shows how it was built and tested, and where it still fails.</p>
     <div class="hero-actions">
       <div class="hero-search"><Search {names} id="hero-search" label="Open a card in the explorer" placeholder="Try a card, e.g. Counterspell" onfocus={loadNames} onpick={open} /></div>
       <a class="btn primary" href={resolve('/')}>Open the explorer</a>
     </div>
     <dl class="facts">
       <div><dt>Cards in the explorer</dt><dd class="num">{n(split.fit + split.dev)}</dd></div>
-      <div><dt>Effect tags used as labels</dt><dd class="num">{n(m.data.tags_functional)}</dd></div>
-      <div><dt>Dev score, fine-tuned</dt><dd class="num">{fixed(mean(depRow.full))}</dd></div>
-      <div><dt>Dev score, before tuning</dt><dd class="num">{fixed(pretrained.full[0])}</dd></div>
+      <div><dt>Effect tags as labels</dt><dd class="num">{n(m.data.tags_functional)}</dd></div>
+      <div><dt>Dev nDCG@10, deployed</dt><dd class="num">{fixed(depScore)}</dd></div>
+      <div><dt>Dev nDCG@10, untuned</dt><dd class="num">{fixed(pretrained.full[0])}</dd></div>
     </dl>
   </header>
 
-  <section>
+  <nav class="pipeline" aria-label="On this page">
+    <ol>
+      {#each steps as [id, title, detail], i (id)}
+        <li><a href="#{id}"><span class="no num" aria-hidden="true">{i + 1}</span><b>{title}</b><small>{detail}</small></a></li>
+      {/each}
+    </ol>
+  </nav>
+
+  <section id="problem">
     <h2>Keyword search matches words, not effects</h2>
-    <p>Magic has over thirty thousand distinct cards, and players often want "something that does what this card does": a cheaper copy, the same effect in another colour, or a card for a deck theme. Search engines match words. These two cards share almost every word and do opposite things:</p>
-    <div class="pair">
+    <p>Players often want "something that does what this card does": a cheaper copy, the same effect in another colour, a card for a deck theme. Search engines match words, and these two cards share almost every word while doing opposite things:</p>
+    <div class="pair bleed">
       <figure class="quote"><figcaption>Ghosts of the Innocent</figcaption><p>If a source would deal damage to a permanent or player, it deals <mark>half</mark> that damage, rounded down, to that permanent or player instead.</p></figure>
-      <figure class="quote"><figcaption>Furnace of Rath</figcaption><p>If a source would deal damage to a permanent or player, it deals <mark>double</mark> that damage to that permanent or player instead.</p></figure>
+      <figure class="quote"><figcaption>Furnace of Rath <span>same words, opposite effect</span></figcaption><p>If a source would deal damage to a permanent or player, it deals <mark>double</mark> that damage to that permanent or player instead.</p></figure>
       <figure class="quote good"><figcaption>Kitsune Palliator <span>a real match, different words</span></figcaption><p><Rules text={'{T}'} />: Prevent the next 1 damage that would be dealt to each creature and each player this turn.</p></figure>
     </div>
-    <p>A model that reads meaning should place Ghosts next to damage-prevention cards such as Kitsune Palliator, not next to Furnace. Word overlap is still a strong signal: on the development set below, a plain keyword baseline (character TF-IDF) scores {fixed(lexical.full[0])}, above the untuned embedding model at {fixed(pretrained.full[0])}.</p>
+    <p>A model that reads meaning should place Ghosts next to damage-prevention cards such as Kitsune Palliator, not next to Furnace. Word overlap is still a strong signal: on the development cards, a plain keyword baseline (character TF-IDF) scores {fixed(lexical.full[0])}, above the untuned embedding model at {fixed(pretrained.full[0])}.</p>
   </section>
 
-  <section>
-    <h2>Community tags as a stand-in for "same effect"</h2>
-    <div class="cols2">
-      <div>
-        <p>Card text comes from Scryfall's bulk data (snapshot {dep?.release_id.slice(0, 10) ?? ''}). Reminder text in parentheses is removed. The labels come from <a href="https://tagger.scryfall.com" rel="noopener">Scryfall Tagger</a>, where players tag cards with what they do ("removal", "card draw", "change target"). After dropping tags about cycles, names, errata and printing or set trivia, {n(m.data.tags_functional)} effect tags remain, with {n(m.data.functional_memberships)} card–tag links.</p>
-        <p>Two cards count as similar when they share tags, weighted by how rare each tag is. That makes the tags a <strong>proxy</strong>: they reward any shared tag, including incidental ones, and the model is trained and scored on the same source. Every score on this page is a proxy score.</p>
+  <section id="data">
+    {@render eyebrow('data')}
+    <h2>Rules text from Scryfall</h2>
+    <p>The card text comes from Scryfall's bulk data, snapshot {dep?.release_id.slice(0, 10) ?? ''}: {n(m.data.n_cards)} cards. Text in parentheses is removed: mostly reminder text, though this also drops the odd parenthetical that matters to the rules. The faces of the {n(m.data.multi_face)} multi-face cards are joined into one text, and only English rules text is used.</p>
+  </section>
+
+  <section id="labels">
+    {@render eyebrow('labels')}
+    <h2>Community tags stand in for "same effect"</h2>
+    <p>The labels come from <a href="https://tagger.scryfall.com" rel="noopener">Scryfall Tagger</a>, where players tag cards with what they do ("removal", "card draw", "change target"). After dropping tags about cycles, names, errata and printing or set trivia, {n(m.data.tags_functional)} effect tags remain, with {n(m.data.functional_memberships)} card–tag links.</p>
+    <p>Two cards count as similar when they share tags, weighted by how rare each tag is. That makes the tags a <strong>proxy</strong>: they reward any shared tag, including incidental ones, and the model is trained and scored on the same source. Every ranking score on this page is a proxy score, not a human judgement.</p>
+  </section>
+
+  <section id="splits">
+    {@render eyebrow('splits')}
+    <h2>Three splits, one opened only once</h2>
+    <figure class="splits">
+      <div class="splitbar" role="img" aria-label="Fit {n(split.fit)}, development {n(split.dev)}, sealed {n(split.sealed)} cards">
+        <span class="fit" style:flex={split.fit}></span>
+        <span class="dev" style:flex={split.dev}></span>
+        <span class="sealed" style:flex={split.sealed}></span>
       </div>
-      <figure class="splits">
-        <figcaption>How the {n(m.data.n_cards)} cards were split</figcaption>
-        <div class="splitbar" role="img" aria-label="Fit {n(split.fit)}, development {n(split.dev)}, sealed test {n(split.sealed)} cards">
-          <span class="fit" style:flex={split.fit}>fit {n(split.fit)}</span>
-          <span class="dev" style:flex={split.dev}>dev</span>
-          <span class="sealed" style:flex={split.sealed}>sealed</span>
-        </div>
-        <ul>
-          <li><b>Fit ({n(split.fit)})</b>: training pairs come only from these.</li>
-          <li><b>Dev ({n(split.dev)})</b>: used to compare runs and pick the recipe.</li>
-          <li><b>Sealed ({n(split.sealed)})</b>: locked away and scored once, after the model was chosen.</li>
-        </ul>
-        <p class="muted small">Reprints and cards with identical text ({n(m.data.families)} families) stay in one split, so a model cannot score by remembering a copy.</p>
-      </figure>
-    </div>
+      <ul>
+        <li><i class="fit"></i><b>Fit</b> <span class="num">{n(split.fit)}</span><span>Training pairs come only from these.</span></li>
+        <li><i class="dev"></i><b>Dev</b> <span class="num">{n(split.dev)}</span><span>Used to compare runs and pick the recipe.</span></li>
+        <li><i class="sealed"></i><b>Sealed</b> <span class="num">{n(split.sealed)}</span><span>Locked away, scored once after a model was chosen. Not in the explorer.</span></li>
+      </ul>
+    </figure>
+    <p>Reprints and cards with identical text are grouped into {n(m.data.families)} families, and each family stays in one split, so a model cannot score by remembering a copy.</p>
   </section>
 
-  <section>
+  <section id="training">
+    {@render eyebrow('training')}
     <h2>Contrastive fine-tuning of a small encoder</h2>
-    <div class="flow" aria-label="Encoding pipeline">
-      <div class="box"><small>Input</small>"{enc?.prefix ?? ''}" + rules text<br /><span class="muted">up to {enc?.max_length} tokens</span></div>
-      <span class="arrow" aria-hidden="true">→</span>
-      <div class="box accent"><small>Encoder</small>{enc?.model_id ?? 'e5-base-v2'}<br /><span class="muted">{enc?.pooling} pooling</span></div>
-      <span class="arrow" aria-hidden="true">→</span>
-      <div class="box"><small>Output</small>{enc?.dim}-number vector<br /><span class="muted">compared by cosine</span></div>
-    </div>
+    <ol class="flow" aria-label="How a card becomes a vector">
+      <li><small>Input</small>"{enc?.prefix ?? ''}" + rules text<span>up to {enc?.max_length} tokens</span></li>
+      <li class="accent"><small>Encoder</small>{enc?.model_id ?? 'e5-base-v2'}<span>{enc?.pooling} pooling</span></li>
+      <li><small>Output</small>{enc?.dim}-number vector<span>compared by cosine</span></li>
+    </ol>
+    <p>Each card becomes one vector, and its neighbours are the cards with the most similar vectors. The pretrained model already knows English, but not which Magic effects are alike. Fine-tuning teaches it with pairs of cards that share an effect tag.</p>
     <div class="cols2">
-      <div>
-        <p>Each card becomes one vector, and neighbours are the cards with the most similar vectors. The pretrained model already knows English, but not which Magic effects are alike. Fine-tuning teaches it with pairs of cards that share an effect tag.</p>
-        <p>Training uses a contrastive loss ({train?.objective === 'masked_infonce' ? 'InfoNCE' : train?.objective}): in each batch of {train?.batch_pairs} pairs, the model is pushed to score a card's partner above every other card in the batch. Other cards in the batch that also share a tag or a reprint family with it are masked out, so related cards are not pushed apart. Each card also gets {train?.hard_negatives} <em>hard negative</em>: a card with very similar wording but no shared tag, the Furnace-of-Rath case, chosen from its closest keyword matches.</p>
-        <p class="muted small">Deployed run: {train?.total_updates} updates, learning rate {train?.lr?.toExponential()}, seed {train?.seed} (<code>{train?.source}</code>).</p>
-      </div>
-      <figure class="triplet" aria-label="Training example">
+      <p>The loss is contrastive ({train?.objective === 'masked_infonce' ? 'InfoNCE' : train?.objective}): in each batch of {train?.batch_pairs} pairs, the model is pushed to score a card's partner above every other card in the batch. Cards in the batch that also share a tag or a reprint family with it are masked out, so related cards are not pushed apart. Each pair also gets {train?.hard_negatives} <em>hard negative</em>: a card with very similar wording but no shared tag, chosen from its closest keyword matches.</p>
+      <figure class="triplet" aria-label="One training example">
         <div class="t anchor"><small>Card</small>Ghosts of the Innocent</div>
         <div class="t pos"><small>Pulled closer: shares a tag</small>Kitsune Palliator</div>
         <div class="t neg"><small>Pushed away: similar words, no shared tag</small>Furnace of Rath</div>
       </figure>
     </div>
+    <p class="muted small">Deployed run: {n(train?.total_updates ?? 0)} updates, learning rate {train?.lr?.toExponential()}, seed {train?.seed} (<code>{train?.source}</code>).</p>
   </section>
 
-  <section class="wide">
-    <h2>The same card, before and after fine-tuning</h2>
-    <p>Top {8} neighbours from the pretrained model (left) and the deployed fine-tuned model (right). Cards in both lists are marked. Pick an example or type any card.</p>
-    <BeforeAfter showcase={m.showcase} />
-  </section>
+  <section id="results">
+    {@render eyebrow('results')}
+    <h2>What changed, and how sure we can be</h2>
 
-  <section class="wide">
-    <h2>How much better, and how sure</h2>
-    <p>The main score is nDCG@10 on the {n(split.dev)} development cards: for each card, how good its top 10 neighbours are by shared tags, with higher ranks counting more (1.0 is perfect). The <b>hard-lexical</b> view removes reprints and near-identical wording from the candidates, so a model cannot score by finding copies.</p>
-    <BarChart rows={devRows} series={[{ key: 'full', label: 'full' }, { key: 'hard_lexical', label: 'hard-lexical' }]} caption="Dev tag-proxy nDCG@10 (higher is better). Trained models were run with 3 seeds; whiskers show the seed range." />
+    <h3 class="sub">The same card, before and after</h3>
+    <p>Top 8 neighbours from the pretrained model and from the deployed fine-tuned model. Pick an example or type any card.</p>
+    <div class="bleed"><BeforeAfter showcase={m.showcase} /></div>
 
-    <div class="cards3">
-      <div class="stat">
-        <h3>Promotion test</h3>
-        <p class="big num">{delta(d18.contrasts.pretrained_e5.full.point)}</p>
-        <p>over pretrained E5 (full view), adjusted lower bound {delta(d18.contrasts.pretrained_e5.full.lower_adjusted)}; {delta(d18.contrasts.trained_bge.full.point)} over a fine-tuned BGE-small. Cluster bootstrap over card families, {d18.m_contrasts} contrasts with a multiple-comparison correction. Decision: {d18.decision} ({d18.qualifier}).</p>
-      </div>
-      <div class="stat">
-        <h3>Sealed test, run once</h3>
-        <p class="big num">{delta(sealed.contrasts.pretrained_e5.full.point)}</p>
-        <p>over pretrained E5 on the sealed cards, lower bound {delta(sealed.contrasts.pretrained_e5.full.lower_adjusted)}. Scored once, after the decision; the gate was {sealed.sealed_gate}. Model scored: {sealed.deployment.run_id}, {fixed(sealed.deployment.full)} full, {fixed(sealed.deployment.hard_lexical)} hard-lexical. {#if dep && sealed.deployment.run_id !== dep.run_id}The model deployed now was promoted later, on the development cards only, and has not been sealed-tested.{/if}</p>
-      </div>
-      <div class="stat">
-        <h3>Trap exam</h3>
-        <p class="big num">{exPre?.passed} → {exDep?.passed}<span class="of">/{exDep?.n}</span></p>
-        <p>{exDep?.n} reviewed items, each a card, its true match and a lookalike that must rank lower (shared rider clauses, one-word flips, changed numbers). Pretrained E5 passes {exPre?.passed}; the deployed model passes {exDep?.passed}.</p>
-      </div>
-    </div>
+    <h3 class="sub">Scores against baselines</h3>
+    <p>The score is nDCG@10 on the {n(split.dev)} development cards: for each card, how good its top 10 neighbours are by shared tags, with higher ranks counting more (1.0 is perfect). The <b>hard-lexical</b> view removes reprints and near-identical wording from the candidates, so a model cannot score by finding copies.</p>
+    <BarChart rows={devRows} series={[{ key: 'full', label: 'full' }, { key: 'hard_lexical', label: 'hard-lexical' }]} axisLabel="nDCG@10" caption="Development tag-proxy nDCG@10, higher is better; bars start at zero. Trained systems show the mean of {seeds} seeds, whose scores differ by at most {fixed(spread)}. The deployed model is seed {train?.seed} of its recipe: {fixed(depScore)} full." />
+
+    <h3 class="sub">Is the gain more than noise?</h3>
+    <p>A cluster bootstrap over card families gives each difference a 95% interval and a one-sided lower bound, adjusted because several comparisons are tested at once. {#if allClear}Every adjusted lower bound is above zero.{/if}</p>
+    <ContrastPlot {panels} caption="Difference in tag-proxy nDCG@10 between the fine-tuned E5 model and each comparator." />
+    <p class="caveat">Development results are selection-exposed: those cards informed which recipe and checkpoint were kept. The sealed numbers belong to {sealedIsDeployed ? 'the deployed model' : `the earlier ${stepA}-update model (${sealed.deployment.run_id}: ${fixed(sealed.deployment.full)} full, ${fixed(sealed.deployment.hard_lexical)} hard-lexical)`}. {#if !sealedIsDeployed}The sealed split is now spent, so the deployed {stepB}-update model has no sealed result.{/if}</p>
 
     {#if stepRows.length}
-      <h3 class="sub">Training longer: 2000 vs 4000 updates</h3>
-      <p>Doubling the training length raised the dev score on every seed tried. {#if x1}A second promotion test, the same design with the 2000-update recipe added as a third comparator ({x1.m_contrasts} contrasts), decided: <b>{x1.decision}</b> ({x1.qualifier}). Against the 2000-update recipe the gain is {delta(x1.contrasts.incumbent_e5.full.point)} full (adjusted lower bound {delta(x1.contrasts.incumbent_e5.full.lower_adjusted)}) and {delta(x1.contrasts.incumbent_e5.hard_lexical.point)} hard-lexical. {#if dep?.run_id === x1.deployment?.run_id}The deployed model is now the 4000-update recipe, seed {x1.deployment.seed}.{/if}{:else}A formal promotion test of the 4000-update recipe needs a third seed, which is still training, so the deployed model is the 2000-update one.{/if}</p>
-      <DotPlot rows={stepRows} aLabel="2000 updates" bLabel="4000 updates" caption="Dev tag-proxy nDCG@10 (full view) at the end of training, same seed and data order." />
+      <h3 class="sub">Training longer: {stepA} vs {stepB} updates</h3>
+      <p>Doubling the training length raised the dev score on every seed tried. {#if m.promotion.x1}Against the {stepA}-update recipe the gain is {delta(m.promotion.x1.contrasts.incumbent_e5.full.point)} full and {delta(m.promotion.x1.contrasts.incumbent_e5.hard_lexical.point)} hard-lexical: small, and measured on the development tag proxy only.{/if}</p>
+      <DotPlot rows={stepRows} aLabel="{stepA} updates" bLabel="{stepB} updates" caption="Development tag-proxy nDCG@10 (full view) at the end of training, same seed and data order. The axis is zoomed and does not start at zero." />
+    {/if}
+
+    {#if exPre && exDep}
+      <h3 class="sub">Trap exam</h3>
+      <div class="exam">
+        <div class="meters" role="img" aria-label="Pretrained E5 passes {exPre.passed} of {exPre.n}; the deployed model passes {exDep.passed} of {exDep.n}">
+          {#each [['pretrained E5', exPre], ['deployed', exDep]] as [label, rec] (label)}
+            <div class="meter"><span class="ml">{label}</span><span class="cells">{#each Array.from({ length: rec.n }, (_, i) => i) as i (i)}<i class:on={i < rec.passed}></i>{/each}</span><b class="num">{rec.passed}<span>/{rec.n}</span></b></div>
+          {/each}
+        </div>
+        <p>{exDep.n} hand-written items, each a card, its true match and a lookalike that must rank lower: shared rider clauses, one-word flips, changed numbers. The deployed model fails {exDep.failed.length} ({exDep.failed.map((f) => f.id).join(', ')}); two of them are below. The exam is a diagnostic, not part of promotion, and it is exposed: its fit cards appear in the training pairs.</p>
+      </div>
     {/if}
   </section>
 
-  <section>
+  <section id="limits">
+    {@render eyebrow('limits')}
     <h2>Where it still goes wrong</h2>
-    <div class="limit">
+    <div class="case">
       <h3>Deflecting Swat: the labels favour the wrong neighbour</h3>
-      <p>Deflecting Swat redirects a spell, and it is free if you control a commander. The ideal neighbour is Redirect. The fine-tuned model ranks Obscuring Haze above it, which shares only the free-if-commander line. The tags explain it: Swat shares three tags with Obscuring Haze and two with Redirect, so training on tags pulls the wrong card closer. On the trap exam the margin went from {margin(exPre, 'T001') !== null ? fixed(margin(exPre, 'T001')) : '—'} before tuning to {margin(exDep, 'T001') !== null ? fixed(margin(exDep, 'T001')) : '—'} after (below zero is a fail). Fixing it means changing the labels, not the model. In the explorer, picking Swat's redirect line under "similar cards" does find Redirect.</p>
+      <p>Deflecting Swat redirects a spell, and it is free if you control a commander. The ideal neighbour is Redirect. The fine-tuned model ranks Obscuring Haze above it, which shares only the free-if-commander line. The tags explain it: Swat shares three tags with Obscuring Haze and two with Redirect, so training on tags pulls the wrong card closer. On the trap exam the margin went from {marginText(exPre, 'T001')} before tuning to {marginText(exDep, 'T001')} after (below zero is a fail). Fixing it means changing the labels, not the model. In the explorer, picking Swat's redirect line under "similar cards" does find Redirect.</p>
       <p><a href="{resolve('/')}?card=ae120613-97d6-4393-b39d-c3e6c076f5d6">See Deflecting Swat in the explorer</a></p>
     </div>
-    <div class="limit">
+    <div class="case">
       <h3>Lexical twins still fool it</h3>
-      <p>Ghosts of the Innocent still ranks Furnace of Rath above Kitsune Palliator (trap-exam margin {margin(exDep, 'T021') !== null ? fixed(margin(exDep, 'T021')) : '—'}). A run with three hard negatives per card instead of one is testing whether more contrast against lookalikes helps; its result is not in yet.</p>
+      <p>Ghosts of the Innocent still ranks Furnace of Rath above Kitsune Palliator (trap-exam margin {marginText(exDep, 'T021')}). Three follow-up runs aimed at these side-clause traps, with more hard negatives, effect-only labels and rare-tag weighting, did not clear their registered gates, and each lost at least one exam item that its comparator passes. The rider problem is not solved.</p>
     </div>
     <ul class="plain">
-      <li><b>Proxy, not people.</b> The ranking scores and promotion tests measure agreement with community tags. The trap exam is a set of 51 hand-made card comparisons, accepted by the author rather than a panel. No human relevance study has been run yet.</li>
-      <li><b>Line matching is exploratory.</b> The explorer's Line match ranking scored below the whole-card ranking on an earlier model's tag benchmark, and "match one line" has not been evaluated.</li>
-      <li><b>Snapshot.</b> Cards printed after the data snapshot are missing, and only English rules text is used.</li>
+      <li><b>Proxy, not people.</b> The scores and promotion tests measure agreement with community tags. The trap exam items were accepted by the author, not a panel. No human relevance study has been run; a blinded labelling pool is prepared but unlabelled.</li>
+      <li><b>Selection-exposed.</b> Development scores informed model choices. The only sealed result is for the earlier model.</li>
+      <li><b>Card to card only.</b> You start from a card. It is not a natural-language search model, and query relevance was never measured.</li>
+      <li><b>Exploratory views.</b> Per-ability neighbours, line match and face match are labelled exploratory in the explorer, and none is claimed as an improvement. Line match scored below the whole-card ranking on an earlier model's tag benchmark.</li>
+      <li><b>Few seeds.</b> Each trained recipe ran with {seeds} seeds, which says little about run-to-run variation.</li>
+      <li><b>Snapshot.</b> Cards printed after the data snapshot are missing.</li>
     </ul>
   </section>
 
-  <section class="built">
+  <section id="built">
+    {@render eyebrow('built')}
     <h2>Built with</h2>
     <p>Python, PyTorch and Hugging Face Transformers for training and evaluation; scikit-learn for the map (t-SNE); SvelteKit for this static site, with no tracking and no server. Every result on this page is read from the run and evaluation records in the repository by a script.</p>
+    <p>Card data and images come from <a href="https://scryfall.com" rel="noopener">Scryfall</a> and tags from <a href="https://tagger.scryfall.com" rel="noopener">Scryfall Tagger</a>. The trap exam and several ideas for line-level labels and training come from <a href="https://github.com/Ballchinian/Delvefall" rel="noopener">Delvefall</a> (ideas only; no code, data or exam items were copied).</p>
     <p class="links"><a class="btn" href={REPO} rel="noopener">Code on GitHub</a> <a class="btn" href="{REPO}/blob/master/the decision log" rel="noopener">Decision log</a> <a class="btn primary" href={resolve('/')}>Open the explorer</a></p>
   </section>
 </article>
 
 <style>
-  .study { max-width: 1080px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 32px) 48px; }
-  section, .hero { max-width: 760px; margin: 0 auto; padding: 56px 0 8px; }
-  section.wide { max-width: none; }
-  section.wide > p { max-width: 760px; }
-  .hero { padding-top: clamp(32px, 8vh, 88px); }
-  .hero h1 { margin: 12px 0 18px; }
-  .lede { font-size: 1.12rem; color: var(--muted); }
+  /* one reading column; .bleed children widen to the outer track */
+  .study {
+    display: grid;
+    grid-template-columns: [full-start] minmax(0, 1fr) [wide-start] minmax(0, 170px) [col-start] min(720px, 100%) [col-end] minmax(0, 170px) [wide-end] minmax(0, 1fr) [full-end];
+    padding: 0 clamp(16px, 4vw, 32px) 56px;
+  }
+  .study > *, section > :global(*) { grid-column: col; }
+  .study > section { grid-column: full; display: grid; grid-template-columns: subgrid; padding-top: 64px; scroll-margin-top: 56px; }
+  .bleed, .study > .pipeline { grid-column: wide; }
+
+  .hero { padding-top: clamp(32px, 8vh, 80px); }
+  .hero h1 { margin: 0 0 18px; text-wrap: balance; }
+  .lede { font-size: 1.12rem; color: var(--muted); max-width: 62ch; }
   .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 26px 0 8px; }
   .hero-search { flex: 1 1 280px; }
   .hero-actions .btn { height: 48px; padding: 0 20px; font-size: 0.95rem; }
   .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 30px 0 0; }
-  .facts div { padding: 12px 14px; border-top: 2px solid var(--ink); }
+  .facts div { padding: 10px 2px 0; border-top: 2px solid var(--ink); }
   .facts dt { font-size: 0.76rem; color: var(--muted); }
-  .facts dd { margin: 2px 0 0; font-size: 1.35rem; }
-  h2 { margin: 6px 0 16px; }
-  .sub { margin: 36px 0 8px; }
+  .facts dd { margin: 2px 0 0; font-size: 1.35rem; font-weight: 600; }
+
+  .pipeline { margin-top: 44px; }
+  .pipeline ol { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+  .pipeline li { position: relative; }
+  /* the line joining the step numbers */
+  .pipeline li + li::before { content: ''; position: absolute; top: 21px; left: -50%; right: 50%; height: 1px; background: var(--line); margin: 0 18px; }
+  .pipeline a { display: grid; justify-items: center; gap: 2px; padding: 8px 4px; text-align: center; text-decoration: none; border-radius: var(--radius); }
+  .pipeline a:hover .no { background: var(--ink); color: var(--bg); }
+  .no { display: grid; place-items: center; width: 26px; height: 26px; margin-bottom: 6px; border: 1px solid var(--ink); border-radius: 50%; background: var(--bg); font-size: 0.78rem; font-weight: 600; }
+  .pipeline b { font-size: 0.86rem; font-weight: 650; line-height: 1.2; }
+  .pipeline small { font-size: 0.74rem; color: var(--muted); line-height: 1.25; }
+
+  .eyebrow { margin: 0 0 8px; font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+  .eyebrow .num { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 4px; border: 1px solid currentColor; border-radius: 50%; font-size: 0.7rem; }
+  h2 { margin: 0 0 16px; text-wrap: balance; }
+  .sub { margin: 40px 0 8px; font-size: 1.12rem; }
+  h2 + .sub { margin-top: 8px; }
   .small { font-size: 0.84rem; }
-  .pair { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
-  .quote { margin: 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.9rem; }
+
+  .pair { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 6px 0 22px; }
+  .quote { margin: 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
   .quote figcaption { font: 600 1rem var(--sans); margin-bottom: 6px; }
-  .quote figcaption span { display: block; font: 400 0.74rem var(--sans); color: var(--muted); }
-  .quote p { margin: 0; font-family: var(--serif); font-size: 0.95rem; }
-  .quote.good { border-color: color-mix(in srgb, var(--wubrg-g) 55%, var(--line)); }
+  .quote figcaption span { display: block; font: 400 0.76rem var(--sans); color: var(--muted); }
+  .quote p { margin: 0; font-family: var(--serif); font-size: 0.95rem; line-height: 1.5; }
+  .quote.good { border-color: var(--wubrg-g); }
   mark { background: var(--mark); color: inherit; padding: 0 2px; }
-  .cols2 { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 28px; align-items: start; }
-  .splits { margin: 0; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.88rem; }
-  .splits figcaption { font-weight: 600; margin-bottom: 10px; }
-  .splitbar { display: flex; height: 30px; border-radius: 4px; overflow: hidden; font: 0.72rem/30px var(--sans); color: #fff; }
-  .splitbar span { padding: 0 6px; white-space: nowrap; overflow: hidden; }
-  .fit { background: color-mix(in srgb, var(--wubrg-u) 70%, #000); }
-  .dev { background: color-mix(in srgb, var(--wubrg-g) 70%, #000); }
-  .sealed { background: color-mix(in srgb, var(--wubrg-b) 70%, #000); }
-  .splits ul { margin: 12px 0 8px; padding-left: 1.1em; }
-  .splits li { margin: 3px 0; }
-  .flow { display: flex; align-items: stretch; gap: 10px; margin: 18px 0 24px; }
-  .box { flex: 1; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.88rem; }
-  .box small, .t small { display: block; font: 600 0.68rem var(--sans); color: var(--muted); margin-bottom: 4px; }
-  .box.accent { border-color: var(--ink); }
-  .arrow { align-self: center; color: var(--muted); font-size: 1.3rem; }
-  .triplet { margin: 0; display: grid; gap: 10px; }
-  .t { padding: 12px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); font: 600 0.98rem var(--sans); }
+
+  .splits { margin: 4px 0 18px; }
+  .splitbar { display: flex; gap: 2px; height: 14px; }
+  .splitbar span:first-child { border-radius: 3px 0 0 3px; }
+  .splitbar span:last-child { border-radius: 0 3px 3px 0; }
+  .fit { background: var(--ink); }
+  .dev { background: var(--wubrg-c); }
+  .sealed { background: repeating-linear-gradient(135deg, var(--muted) 0 2px, transparent 2px 5px); box-shadow: inset 0 0 0 1px var(--muted); }
+  .splits ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 14px 0 0; padding: 0; list-style: none; font-size: 0.88rem; }
+  .splits li i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border-radius: 2px; vertical-align: 0; }
+  .splits li .num { color: var(--muted); }
+  .splits li > span:last-child { display: block; margin-top: 2px; color: var(--muted); font-size: 0.84rem; }
+
+  .flow { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; margin: 4px 0 22px; padding: 0; list-style: none; counter-reset: none; }
+  .flow li { position: relative; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); font-size: 0.9rem; overflow-wrap: anywhere; }
+  .flow li + li::before { content: '→'; position: absolute; left: -22px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  .flow li.accent { border-color: var(--ink); }
+  .flow small, .t small { display: block; font: 600 0.7rem var(--sans); color: var(--muted); margin-bottom: 4px; }
+  .flow span { display: block; color: var(--muted); font-size: 0.82rem; }
+  .cols2 { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; align-items: start; margin-bottom: 8px; }
+  .triplet { margin: 0; display: grid; gap: 8px; }
+  .t { padding: 10px 14px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); font: 600 0.95rem var(--sans); }
   .t.anchor { border-color: var(--ink); }
-  .t.pos { border-left: 4px solid var(--wubrg-g); margin-left: 24px; }
-  .t.neg { border-left: 4px solid var(--wubrg-r); margin-left: 24px; }
-  .cards3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin: 32px 0 8px; }
-  .stat { padding-top: 12px; border-top: 2px solid var(--ink); font-size: 0.86rem; }
-  .stat h3 { font-size: 0.95rem; }
-  .stat p { margin: 0 0 6px; }
-  .big { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; margin: 6px 0 8px !important; }
-  .of { font-size: 1rem; color: var(--muted); }
-  .limit { margin: 18px 0 26px; }
-  .limit h3 { margin-bottom: 6px; }
-  .plain { padding-left: 1.1em; }
-  .plain li { margin: 6px 0; }
-  .built .links { display: flex; flex-wrap: wrap; gap: 8px; }
-  @media (max-width: 760px) {
-    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .pair, .cols2, .cards3 { grid-template-columns: minmax(0, 1fr); }
-    .flow { flex-direction: column; }
-    .arrow { transform: rotate(90deg); }
+  .t.pos { border-left: 4px solid var(--wubrg-g); margin-left: 20px; }
+  .t.neg { border-left: 4px solid var(--wubrg-r); margin-left: 20px; }
+
+  .caveat { margin-top: 16px; padding: 10px 14px; border-left: 3px solid var(--muted); background: var(--surface); font-size: 0.9rem; }
+  .exam { display: grid; gap: 12px; }
+  .meters { display: grid; gap: 8px; }
+  .meter { display: grid; grid-template-columns: 96px 1fr 52px; gap: 12px; align-items: center; font-size: 0.84rem; }
+  .ml { color: var(--muted); }
+  .cells { display: grid; grid-template-columns: repeat(auto-fill, minmax(6px, 1fr)); gap: 2px; }
+  .cells i { height: 14px; border-radius: 1px; box-shadow: inset 0 0 0 1px var(--wubrg-c); }
+  .cells i.on { background: var(--wubrg-c); box-shadow: none; }
+  .meter:last-child .cells i.on { background: var(--ink); }
+  .meter b { font-size: 1.05rem; text-align: right; }
+  .meter b span { font-size: 0.8rem; font-weight: 400; color: var(--muted); }
+
+  .case { margin: 4px 0 22px; }
+  .case h3 { margin-bottom: 6px; }
+  .plain { margin: 8px 0 0; padding-left: 1.1em; }
+  .plain li { margin: 8px 0; }
+  .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+
+  @media (max-width: 860px) {
+    .pipeline ol { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 8px; }
+    .pipeline li:nth-child(5)::before { display: none; }
+  }
+  @media (max-width: 640px) {
+    .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 18px; }
+    .pipeline ol { grid-template-columns: minmax(0, 1fr); }
+    .pipeline li::before { display: none; }
+    .pipeline a { grid-template-columns: 26px auto 1fr; justify-items: start; align-items: center; gap: 10px; text-align: left; padding: 6px 0; }
+    .no { margin: 0; }
+    .pipeline small { justify-self: end; text-align: right; }
+    .pair, .cols2, .splits ul, .flow { grid-template-columns: minmax(0, 1fr); }
+    .flow { gap: 22px; }
+    .flow li + li::before { content: '↓'; left: 50%; top: -20px; transform: translateX(-50%); }
+    .meter { grid-template-columns: 72px 1fr 44px; gap: 8px; }
   }
 </style>
