@@ -59,7 +59,7 @@ export function inkOn(hex) {
 
 // Region labels: how many to place (more as the view zooms in, up to three times as many) and how the
 // k-th largest region's label is drawn, so a few big regions lead and the rest recede.
-export const labelBudget = (width, height, zoom) => Math.max(4, Math.round((Math.sqrt(width * height) / 64) * Math.min(3, Math.sqrt(Math.max(1, zoom)))));
+export const labelBudget = (width, height, zoom) => Math.max(4, Math.round((Math.sqrt(width * height) / 54) * Math.min(3, Math.sqrt(Math.max(1, zoom)))));
 export function labelStyle(rank, zoom) {
   const lead = rank < 6;
   return { size: (lead ? 13 : 11.5) + Math.min(2.5, zoom / 4), weight: lead ? 700 : 600, alpha: lead ? 1 : 0.8 };

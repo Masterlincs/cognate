@@ -1,21 +1,26 @@
 <script>
   import { onMount } from 'svelte';
   import { buildGrid, colorKey, hitTest, TEXTLESS, toScreen, toWorld } from './map.js';
-  import { densityGrid, EXTENT, inkOn, LEGEND, PALETTE, pointRadius } from './map-style.js';
+  import { dataBounds, densityGrid, EXTENT, inkOn, labelBudget, labelStyle, LEGEND, PALETTE, pointRadius } from './map-style.js';
 
-  // map: decodeMap() result; regions: [{x, y, label, n}]; names: names.json; selected: index or -1
-  let { map, regions = [], names, selected = -1, neighbours = [], onselect } = $props();
+  // map: decodeMap() result; regions: [{x, y, label, n}]; names: names.json; selected: index or -1;
+  // highlight: a card to ring (the result row under the pointer), or -1
+  let { map, regions = [], names, selected = -1, neighbours = [], highlight = -1, onselect } = $props();
 
   const TAU = Math.PI * 2;
   const SHADE = EXTENT * 1.15; // the density wash reaches past the outermost cards so its blur fades out
   let wrap, canvas, ctx, shade, controls, legend;
+  let caption = $state(null); // the caption over the map, which labels keep clear of
   let width = 0, height = 0, dpr = 1;
   let v = { scale: 1, tx: 0, ty: 0 };
   let fit = 1;
   let tip = $state(null);
   let ready = $state(false);
   let palette = $state.raw(PALETTE.light);
-  let focusKey = ''; // a colour hovered in the legend
+  let hoverKey = ''; // a colour hovered in the legend
+  let pinned = $state(''); // a colour picked in the legend; the others fade
+  let focusKey = '';
+  let hint = $state(true); // the how-to-read caption, until it is closed or a card is picked
   let frame = 0;
   let anim = 0;
   const grid = $derived(buildGrid(map.x, map.y, 1024));
@@ -28,6 +33,10 @@
     return out;
   });
   const density = $derived(densityGrid(map.x, map.y, 160, SHADE, TEXTLESS));
+  const bounds = $derived(dataBounds(map.x, map.y, TEXTLESS));
+  const placed = $derived.by(() => { let k = 0; for (let i = 0; i < map.n; i += 1) if (map.x[i] !== TEXTLESS) k += 1; return k; });
+  // regions by size, largest first: the order labels are placed in, and their rank for labelStyle
+  const ranked = $derived([...regions].sort((a, b) => b.n - a.n));
 
   let colors = {};
   function readColors() {
@@ -51,9 +60,12 @@
     g.putImageData(img, 0, 0);
   }
 
+  // frame the cards themselves, clear of the controls above and the legend below
   function fitAll() {
-    fit = Math.min(width, height) / (2 * EXTENT + 2000);
-    v = { scale: fit, tx: width / 2, ty: height / 2 };
+    const b = bounds ?? { x0: -EXTENT, y0: -EXTENT, x1: EXTENT, y1: EXTENT };
+    const top = 20, bottom = 52, side = 20;
+    fit = Math.max(1e-6, Math.min((width - 2 * side) / Math.max(1, b.x1 - b.x0), (height - top - bottom) / Math.max(1, b.y1 - b.y0)));
+    v = { scale: fit, tx: width / 2 - ((b.x0 + b.x1) / 2) * fit, ty: top + (height - top - bottom) / 2 - ((b.y0 + b.y1) / 2) * fit };
   }
 
   // The density wash and the dots are rendered into an offscreen layer a margin larger than the
@@ -75,7 +87,7 @@
     // smaller dots behind a selection, so its neighbours stand out; from a few pixels across,
     // each dot gets a thin surface-coloured rim so neighbours stay separate instead of merging
     const pr = dim ? Math.max(1.1, r * 0.7) : r, rim = pr >= 2.5 ? Math.min(1, pr * 0.2) : 0;
-    const base = dim ? 0.26 : 0.9, faded = base * 0.18;
+    const base = dim ? 0.36 : 0.9, faded = base * 0.14;
     const pad = pr + rim, x0 = -mw - pad, y0 = -mh - pad, x1 = width + mw + pad, y1 = height + mh + pad;
     const path = (list, rad) => {
       g.beginPath();
@@ -134,6 +146,11 @@
       const [hx, hy] = toScreen(v, map.x[tip.i], map.y[tip.i]);
       ring(hx, hy, Math.max(r, 3) + 3.5, colors.ink, 1.5);
     }
+    if (highlight >= 0 && highlight !== selected && map.x[highlight] !== TEXTLESS) {
+      const [hx, hy] = toScreen(v, map.x[highlight], map.y[highlight]), hr = Math.max(5, r + 2.5);
+      dot(hx, hy, hr, palette[keys[highlight]], 2);
+      ring(hx, hy, hr + 4, colors.ink, 2);
+    }
   }
 
   const ring = (x, y, rad, stroke, lineWidth) => {
@@ -166,29 +183,30 @@
     ring(cx, cy, 9.5, colors.ink, 2.25);
   }
 
-  // larger regions first; a label is skipped when it would crowd one already drawn or sit under
-  // the controls or legend, and a small map gets fewer labels
+  // larger regions first, and drawn larger (labelStyle); a label is skipped when it would crowd one
+  // already drawn or sit under the controls, caption or legend, and a small or zoomed-out map gets
+  // fewer labels (labelBudget)
   function drawLabels(zoom, dim) {
-    const size = 11.5 + Math.min(2.5, zoom / 4);
-    ctx.font = `600 ${size}px 'Schibsted Grotesk Variable', system-ui, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
-    const most = Math.max(4, Math.round(Math.sqrt(width * height) / 48));
-    const placed = [controls, legend].map((el) => [el.offsetLeft, el.offsetTop, el.offsetLeft + el.offsetWidth, el.offsetTop + el.offsetHeight]);
+    const placed = [controls, legend, caption].filter(Boolean).map((el) => [el.offsetLeft, el.offsetTop, el.offsetLeft + el.offsetWidth, el.offsetTop + el.offsetHeight]);
     if (dim) {
       const [cx, cy] = toScreen(v, map.x[selected], map.y[selected]);
       placed.push([cx - 18, cy - 18, cx + 18, cy + 18]);
     }
-    for (const reg of [...regions].sort((a, b) => b.n - a.n)) {
-      if (placed.length > most + 2) break;
+    const most = labelBudget(width, height, zoom) + placed.length;
+    for (const [rank, reg] of ranked.entries()) {
+      if (placed.length >= most) break;
+      const st = labelStyle(rank, zoom);
+      ctx.font = `${st.weight} ${st.size}px 'Schibsted Grotesk Variable', system-ui, sans-serif`;
       const [sx, sy] = toScreen(v, reg.x, reg.y);
-      const w = ctx.measureText(reg.label).width + 14, h = size + 10;
+      const w = ctx.measureText(reg.label).width + 14, h = st.size + 10;
       const box = [sx - w / 2, sy - h / 2, sx + w / 2, sy + h / 2];
       if (box[0] < 4 || box[1] < 4 || box[2] > width - 4 || box[3] > height - 4) continue;
       if (placed.some((p) => box[0] < p[2] && box[2] > p[0] && box[1] < p[3] && box[3] > p[1])) continue;
       placed.push(box);
-      ctx.globalAlpha = dim ? 0.6 : 1;
+      ctx.globalAlpha = st.alpha * (dim || focusKey ? 0.6 : 1);
       ctx.lineWidth = 4;
       ctx.strokeStyle = colors.surface;
       ctx.strokeText(reg.label, sx, sy);
@@ -232,11 +250,14 @@
     const cx = map.x[selected], cy = map.y[selected];
     let reach = 300;
     for (const i of neighbours) if (map.x[i] !== TEXTLESS) reach = Math.max(reach, Math.abs(map.x[i] - cx), Math.abs(map.y[i] - cy));
-    const scale = Math.min(fit * 20, Math.max(fit * 1.5, (Math.min(width, height) * 0.36) / reach));
+    const scale = Math.min(fit * 8, Math.max(fit * 1.5, (Math.min(width, height) * 0.36) / reach));
     flyTo({ scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale });
   }
 
   $effect(() => { void selected; void neighbours; frameSelection(); redraw(); });
+  $effect(() => { void highlight; redraw(); });
+  // a picked card replaces the how-to-read caption for good
+  $effect(() => { if (selected >= 0) hint = false; });
 
   // pointer handling: drag to pan, two pointers to pinch, a click without movement selects
   const pointers = new Map();
@@ -294,7 +315,9 @@
     zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * (e.deltaMode ? 0.05 : 0.0015)));
   }
   const showAll = () => { const t = { ...v }; fitAll(); const target = v; v = t; flyTo(target); };
-  const focusColour = (k) => { focusKey = k; redraw(); };
+  const setFocus = () => { focusKey = hoverKey || pinned; redraw(); };
+  const previewColour = (k) => { hoverKey = k; setFocus(); };
+  const pinColour = (k) => { pinned = pinned === k ? '' : k; setFocus(); };
 
   onMount(() => {
     ctx = canvas.getContext('2d');
@@ -316,7 +339,7 @@
   });
 </script>
 
-<div class="atlas" bind:this={wrap}>
+<div class="map-view" bind:this={wrap}>
   <p class="sr-only">Map of every card, placed so that cards the model finds similar sit close together. Clicking a dot selects a card; the search box does the same from the keyboard.</p>
   <canvas bind:this={shade} class="shade" aria-hidden="true"></canvas>
   <canvas bind:this={canvas} class:ready aria-hidden="true" onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onpointerleave={leave}></canvas>
@@ -332,18 +355,30 @@
     </div>
     <button type="button" aria-label="Show the whole map" onclick={showAll}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" /></svg></button>
   </div>
-  <ul class="legend" aria-label="Colour identity" bind:this={legend}>
+  {#if selected >= 0 && map.x[selected] !== TEXTLESS}
+    <div class="caption picked" bind:this={caption}>
+      <i style:background={palette[keys[selected]]}></i><span class="name">{names.names[selected]}</span>
+      <span>and its {neighbours.length} closest</span>
+      <button type="button" class="link" onclick={showAll}>Whole map</button>
+    </div>
+  {:else if hint}
+    <div class="caption" bind:this={caption}>
+      <p><strong>{placed.toLocaleString('en')} cards</strong>, placed by what they do. Nearby dots have similar effects: hover for a name, click one to see its matches.</p>
+      <button type="button" class="close" aria-label="Hide this note" onclick={() => { hint = false; redraw(); }}>×</button>
+    </div>
+  {/if}
+  <div class="legend" role="group" aria-label="Highlight one colour identity" bind:this={legend}>
     {#each LEGEND as [k, label] (k)}
-      <li title={label} onpointerenter={() => focusColour(k)} onpointerleave={() => focusColour('')}>
+      <button type="button" title={pinned === k ? 'Show every colour' : `Highlight ${label.toLowerCase()} cards`} aria-pressed={pinned === k} class:faded={pinned && pinned !== k} onpointerenter={() => previewColour(k)} onpointerleave={() => previewColour('')} onclick={() => pinColour(k)}>
         <span class="swatch" style:background={palette[k]} style:color={inkOn(palette[k])}>{#if k !== 'm'}<i class="ms ms-{k}" aria-hidden="true"></i>{/if}</span>
-        {#if k === 'm'}{label}{:else}<span class="sr-only">{label}</span>{/if}
-      </li>
+        {#if k === 'm'}<span class="mlabel">{label}</span>{:else}<span class="sr-only">{label}</span>{/if}
+      </button>
     {/each}
-  </ul>
+  </div>
 </div>
 
 <style>
-  .atlas { position: relative; width: 100%; height: 100%; min-height: 320px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); touch-action: none; }
+  .map-view { position: relative; width: 100%; height: 100%; min-height: 320px; overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); touch-action: none; }
   canvas { position: relative; display: block; width: 100%; height: 100%; cursor: grab; opacity: 0; transition: opacity 0.35s ease-out; }
   canvas.ready { opacity: 1; }
   .shade { position: absolute; left: 0; top: 0; width: auto; height: auto; opacity: 0; transform-origin: 0 0; pointer-events: none; transition: none; }
@@ -359,8 +394,24 @@
   .controls > button { border: 1px solid var(--line); border-radius: var(--radius); }
   .controls button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, var(--surface)); }
   .controls svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-  .legend { position: absolute; left: 10px; bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 7px; margin: 0; padding: 5px 9px 5px 6px; list-style: none; border-radius: 999px; background: color-mix(in srgb, var(--surface) 90%, transparent); box-shadow: 0 0 0 1px var(--line); font-size: 0.75rem; color: var(--muted); }
-  .legend li { display: flex; align-items: center; gap: 5px; }
+  .legend { position: absolute; left: 10px; bottom: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 1px; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: 0 0 0 1px var(--line); font-size: 0.75rem; color: var(--muted); }
+  .legend button { display: flex; align-items: center; gap: 5px; height: 26px; padding: 0 5px; border: 0; border-radius: 999px; background: none; color: inherit; }
+  .legend button:hover { background: var(--sunken); color: var(--ink); }
+  .legend button[aria-pressed='true'] { background: var(--sunken); box-shadow: inset 0 0 0 1.5px var(--ink); color: var(--ink); }
+  .legend button.faded .swatch { opacity: 0.35; }
+  .legend .mlabel { padding-right: 4px; }
+  .caption { position: absolute; left: 10px; top: 10px; max-width: min(340px, calc(100% - 64px)); display: flex; align-items: flex-start; gap: 6px; padding: 8px 6px 8px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: 0 0 0 1px var(--line), 0 4px 16px rgb(0 0 0 / 0.08); font-size: 0.8rem; line-height: 1.4; color: var(--muted); }
+  .caption p { margin: 0; }
+  .caption strong { color: var(--ink); font-weight: 650; }
+  .close { flex: none; width: 24px; height: 24px; margin: -3px 0; padding: 0; border: 0; border-radius: 4px; background: none; font-size: 1.1rem; line-height: 1; color: var(--muted); }
+  .close:hover { color: var(--ink); background: var(--sunken); }
+  .picked { align-items: center; flex-wrap: wrap; gap: 3px 7px; padding: 6px 8px 6px 11px; }
+  .picked i { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--ink); margin-right: 2px; }
+  .picked .name { min-width: 0; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 650; }
+  .link { padding: 1px 5px; border: 0; border-radius: 4px; background: none; font-size: inherit; font-weight: 550; color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.2em; }
+  .link:hover { text-decoration-color: currentColor; }
+  /* narrow screens name the picked card in the page's own bar over the map */
+  @media (max-width: 900px) { .picked { display: none; } }
   .swatch { display: grid; place-items: center; width: 16px; height: 16px; border-radius: 50%; }
   .swatch .ms { font-size: 9px; line-height: 1; }
   @media (prefers-reduced-motion: reduce) { canvas { transition: none; } }
