@@ -19,3 +19,13 @@ describe('card faces', () => {
     expect(faceName({ name: 'Solo', faces: [] }, false)).toBe('Solo');
   });
 });
+
+describe('cardImage', async () => {
+  const { cardImage } = await import('./faces.js');
+  const url = 'https://cards.scryfall.io/normal/front/a/4/a4.jpg?17';
+  it('swaps the Scryfall image version', () => {
+    expect(cardImage(url, 'art_crop')).toBe('https://cards.scryfall.io/art_crop/front/a/4/a4.jpg?17');
+    expect(cardImage(url, 'small')).toBe('https://cards.scryfall.io/small/front/a/4/a4.jpg?17');
+  });
+  it('keeps a missing image missing', () => expect(cardImage(null, 'small')).toBeNull());
+});

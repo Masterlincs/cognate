@@ -36,3 +36,30 @@ describe('map style', () => {
     expect(inkOn(PALETTE.light.b)).toBe('#ffffff');
   });
 });
+
+describe('region labels', async () => {
+  const { labelBudget, labelStyle } = await import('./map-style.js');
+  it('draws a few labels on a small map and more as the view zooms in, up to a cap', () => {
+    expect(labelBudget(200, 200, 1)).toBe(4);
+    const z = [1, 2, 4, 9, 50].map((k) => labelBudget(620, 800, k));
+    for (let k = 1; k < z.length; k += 1) expect(z[k]).toBeGreaterThanOrEqual(z[k - 1]);
+    expect(z[0]).toBeLessThan(z[3]);
+    expect(z[4]).toBe(z[3]);
+  });
+  it('the largest regions lead with bigger, bolder labels', () => {
+    const lead = labelStyle(0, 1), rest = labelStyle(10, 1);
+    expect(lead.size).toBeGreaterThan(rest.size);
+    expect(lead.weight).toBeGreaterThan(rest.weight);
+    expect(lead.alpha).toBeGreaterThan(rest.alpha);
+    expect(labelStyle(0, 8).size).toBeGreaterThan(lead.size);
+  });
+});
+
+describe('dataBounds', async () => {
+  const { dataBounds } = await import('./map-style.js');
+  it('spans the placed cards and skips textless ones', () => {
+    const x = new Int16Array([-100, 300, TEXTLESS, 50]), y = new Int16Array([20, -40, TEXTLESS, 500]);
+    expect(dataBounds(x, y, TEXTLESS)).toEqual({ x0: -100, y0: -40, x1: 300, y1: 500 });
+  });
+  it('is null when no card is placed', () => expect(dataBounds(new Int16Array([TEXTLESS]), new Int16Array([TEXTLESS]), TEXTLESS)).toBeNull());
+});

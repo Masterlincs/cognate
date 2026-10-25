@@ -56,3 +56,24 @@ export function inkOn(hex) {
   const lin = [1, 3, 5].map((k) => { const c = parseInt(hex.slice(k, k + 2), 16) / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; });
   return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2] > 0.3 ? '#15171c' : '#ffffff';
 }
+
+// Region labels: how many to place (more as the view zooms in, up to three times as many) and how the
+// k-th largest region's label is drawn, so a few big regions lead and the rest recede.
+export const labelBudget = (width, height, zoom) => Math.max(4, Math.round((Math.sqrt(width * height) / 64) * Math.min(3, Math.sqrt(Math.max(1, zoom)))));
+export function labelStyle(rank, zoom) {
+  const lead = rank < 6;
+  return { size: (lead ? 13 : 11.5) + Math.min(2.5, zoom / 4), weight: lead ? 700 : 600, alpha: lead ? 1 : 0.8 };
+}
+
+// The box around every placed card, so the first view frames the cards rather than the whole coordinate range.
+export function dataBounds(x, y, skip) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < x.length; i += 1) {
+    if (x[i] === skip) continue;
+    if (x[i] < x0) x0 = x[i];
+    if (x[i] > x1) x1 = x[i];
+    if (y[i] < y0) y0 = y[i];
+    if (y[i] > y1) y1 = y[i];
+  }
+  return x0 === Infinity ? null : { x0, y0, x1, y1 };
+}

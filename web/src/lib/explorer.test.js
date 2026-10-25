@@ -54,3 +54,46 @@ describe('hasMore', () => {
     expect(hasMore({ saved, visible: saved.slice(0, 20), shown: 12, filtering: true })).toBe(true);
   });
 });
+
+describe('filterChips', async () => {
+  const { clearFilter, filterChips } = await import('./explorer.js');
+  const none = { color: '', colorMode: 'include', colorBy: 'identity', minMv: null, maxMv: null, creature: '', type: '' };
+  it('has no chips without filters', () => expect(filterChips(none)).toEqual([]));
+  it('names each active filter once, in display order', () => {
+    const f = { ...none, color: 'UR', colorMode: 'exact', creature: 'noncreature', type: 'goblin', minMv: 2, maxMv: 4 };
+    expect(filterChips(f)).toEqual([
+      { key: 'color', label: 'Identity: exactly Blue, Red' },
+      { key: 'creature', label: 'Non-creatures' },
+      { key: 'type', label: 'Type: goblin' },
+      { key: 'mv', label: 'MV 2–4' },
+    ]);
+  });
+  it('describes colourless, printed colour, at-most and one-sided mana ranges', () => {
+    expect(filterChips({ ...none, color: 'C', colorMode: 'exact' })[0].label).toBe('Identity: colourless');
+    expect(filterChips({ ...none, color: 'G', colorMode: 'within', colorBy: 'color' })[0].label).toBe('Colour: at most Green');
+    expect(filterChips({ ...none, color: 'W' })[0].label).toBe('Identity: including White');
+    expect(filterChips({ ...none, minMv: 3 })[0].label).toBe('MV ≥ 3');
+    expect(filterChips({ ...none, maxMv: 0 })[0].label).toBe('MV ≤ 0');
+    expect(filterChips({ ...none, minMv: 2, maxMv: 2 })[0].label).toBe('MV 2');
+  });
+  it('clearFilter resets only the named filter, colour with its match settings', () => {
+    const f = { ...none, color: 'B', colorMode: 'within', colorBy: 'color', minMv: 1, maxMv: 5, type: 'elf', creature: 'creature' };
+    expect(clearFilter(f, 'color')).toEqual({ ...f, color: '', colorMode: 'include', colorBy: 'identity' });
+    expect(clearFilter(f, 'mv')).toEqual({ ...f, minMv: null, maxMv: null });
+    expect(clearFilter(f, 'type')).toEqual({ ...f, type: '' });
+    expect(clearFilter(f, 'creature')).toEqual({ ...f, creature: '' });
+    expect(f.color).toBe('B');
+  });
+});
+
+describe('randomIndex', async () => {
+  const { randomIndex } = await import('./explorer.js');
+  const seq = (...xs) => () => xs.shift() ?? 0;
+  it('takes the drawn index when it passes', () => expect(randomIndex(10, () => true, seq(0.55))).toBe(5));
+  it('draws again past rejected indexes', () => expect(randomIndex(10, (i) => i === 7, seq(0.1, 0.2, 0.75))).toBe(7));
+  it('falls back to a scan when draws keep missing, and -1 when nothing passes', () => {
+    expect(randomIndex(10, (i) => i === 3, () => 0.95)).toBe(3);
+    expect(randomIndex(10, () => false)).toBe(-1);
+    expect(randomIndex(0, () => true)).toBe(-1);
+  });
+});

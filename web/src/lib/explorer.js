@@ -18,3 +18,36 @@ export const savedList = ({ ability, rank, whole, lines, faces, abilities }) =>
 
 // unfiltered, every saved neighbour can be shown (its card loads on demand); filtered, only matches
 export const hasMore = ({ saved, visible, shown, filtering }) => (filtering ? visible.length : saved.length) > shown;
+
+// the active filters as removable chips, [{ key, label }]; clearFilter(filters, key) removes one
+const COLOUR_NAMES = { W: 'White', U: 'Blue', B: 'Black', R: 'Red', G: 'Green' };
+const COLOUR_MODES = { include: 'including', exact: 'exactly', within: 'at most' };
+export function filterChips(f) {
+  const out = [];
+  if (f.color) {
+    const what = f.color === 'C' ? 'colourless' : `${COLOUR_MODES[f.colorMode] ?? 'including'} ${[...f.color].map((c) => COLOUR_NAMES[c]).join(', ')}`;
+    out.push({ key: 'color', label: `${f.colorBy === 'color' ? 'Colour' : 'Identity'}: ${what}` });
+  }
+  if (f.creature) out.push({ key: 'creature', label: f.creature === 'creature' ? 'Creatures' : 'Non-creatures' });
+  if (f.type) out.push({ key: 'type', label: `Type: ${f.type}` });
+  const lo = Number.isFinite(f.minMv), hi = Number.isFinite(f.maxMv);
+  if (lo || hi) out.push({ key: 'mv', label: lo && hi ? (f.minMv === f.maxMv ? `MV ${f.minMv}` : `MV ${f.minMv}–${f.maxMv}`) : lo ? `MV ≥ ${f.minMv}` : `MV ≤ ${f.maxMv}` });
+  return out;
+}
+
+export function clearFilter(f, key) {
+  if (key === 'color') return { ...f, color: '', colorMode: 'include', colorBy: 'identity' };
+  if (key === 'mv') return { ...f, minMv: null, maxMv: null };
+  return { ...f, [key]: '' };
+}
+
+// a random index in [0, n) that passes ok: a few draws, then a scan from a random start; -1 if none passes
+export function randomIndex(n, ok, rand = Math.random) {
+  for (let t = 0; t < 64 && n > 0; t += 1) {
+    const i = Math.floor(rand() * n);
+    if (ok(i)) return i;
+  }
+  const start = Math.floor(rand() * n);
+  for (let k = 0; k < n; k += 1) if (ok((start + k) % n)) return (start + k) % n;
+  return -1;
+}

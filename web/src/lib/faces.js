@@ -8,3 +8,6 @@ export function flipKind(card) {
 export function faceName(card, flipped) {
   return (flipped ? card.faces[1]?.name : card.faces[0]?.name) || card.name;
 }
+
+// another size of a Scryfall card image: small, normal, large or art_crop
+export const cardImage = (url, version) => url?.replace(/\/(small|normal|large|png|art_crop|border_crop)\//, `/${version}/`) ?? null;
