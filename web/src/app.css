@@ -3,6 +3,7 @@
   --bg: #f2f3f5;
   --surface: #ffffff;
   --sunken: #e6e8ec;
+  --raised: #ffffff; /* the pressed button of a segmented control */
   --ink: #15171c;
   --muted: #5d6370;
   --line: #d9dce1;
@@ -27,6 +28,7 @@
   --bg: #15171b;
   --surface: #1d2025;
   --sunken: #111316;
+  --raised: #2e323a;
   --ink: #e8eaee;
   --muted: #9aa1ad;
   --line: #30343b;
@@ -66,6 +68,7 @@ h3 { font-size: 1.05rem; font-weight: 650; }
 p { margin: 0 0 1em; }
 .num { font-variant-numeric: tabular-nums; }
 code { font: 0.9em ui-monospace, Consolas, monospace; }
+kbd { display: inline-block; min-width: 1.6em; padding: 0 0.4em; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; background: var(--surface); font: 600 0.78em/1.6 var(--sans); text-align: center; color: var(--ink); }
 .muted { color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 /* the mana symbol font failed or is late (load-fonts.js): show each symbol's text instead */
@@ -96,6 +99,9 @@ code { font: 0.9em ui-monospace, Consolas, monospace; }
 
 .btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 0.88rem; font-weight: 500; text-decoration: none; }
 .btn:hover { border-color: var(--ink); }
+.btn:disabled { opacity: 0.55; cursor: default; border-color: var(--line); }
+.btn.ghost { border-color: transparent; background: none; color: var(--muted); }
+.btn.ghost:hover { border-color: var(--line); color: var(--ink); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; background: var(--sunken); font-size: 0.8rem; color: var(--muted); }
 .notice { padding: 10px 14px; border-left: 3px solid var(--muted); background: var(--surface); color: var(--ink); font-size: 0.92rem; }

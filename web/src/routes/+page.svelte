@@ -3,7 +3,7 @@
   import { asset } from '$app/paths';
   import { afterNavigate, beforeNavigate, pushState, replaceState } from '$app/navigation';
   import { page } from '$app/state';
-  import AtlasMap from '#lib/AtlasMap.svelte';
+  import CardMap from '#lib/CardMap.svelte';
   import CardText from '#lib/CardText.svelte';
   import CardGridItem from '#lib/CardGridItem.svelte';
   import CardTile from '#lib/CardTile.svelte';
@@ -324,7 +324,7 @@
 
   <section class="map-pane" id="map-pane" class:hidden={tab !== 'map'} aria-label="Card map">
     {#if map && names}
-      <AtlasMap {map} {regions} {names} selected={card?.has_text ? index : -1} neighbours={pageRows.map(([i]) => i)} onselect={(i) => select(i, { focus: false })} />
+      <CardMap {map} {regions} {names} selected={card?.has_text ? index : -1} neighbours={pageRows.map(([i]) => i)} onselect={(i) => select(i, { focus: false })} />
       {#if card}
         <div class="map-bar"><span>{card.name}</span><button type="button" class="btn" onclick={() => setTab('results')}>See results</button></div>
       {/if}

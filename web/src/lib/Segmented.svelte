@@ -1,21 +1,26 @@
 <script>
-  // A row of mutually exclusive buttons. options: [{ value, label }]
-  let { label, options, value, onchange } = $props();
+  // A row of mutually exclusive buttons on a sunken track. options: [{ value, label, hint?, icon? }]:
+  // hint is the button's tooltip; icon (an SVG path in a 16-unit box) shows instead of the label,
+  // which stays as the accessible name
+  let { label, options, value, onchange, describedby = undefined, full = false } = $props();
 </script>
 
-<div class="seg" role="group" aria-label={label}>
+<div class="seg" class:full role="group" aria-label={label} aria-describedby={describedby}>
   {#each options as o (o.value)}
-    <button type="button" aria-pressed={value === o.value} onclick={() => onchange(o.value)}>{o.label}</button>
+    <button type="button" class:icon={o.icon} aria-pressed={value === o.value} title={o.hint ?? (o.icon ? o.label : undefined)} onclick={() => onchange(o.value)}>
+      {#if o.icon}<svg viewBox="0 0 16 16" aria-hidden="true"><path d={o.icon} /></svg><span class="sr-only">{o.label}</span>{:else}{o.label}{/if}
+    </button>
   {/each}
 </div>
 
 <style>
-  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
-  button { padding: 5px 11px; border: 0; background: none; font-size: 0.84rem; color: var(--muted); white-space: nowrap; }
-  button + button { border-left: 1px solid var(--line); }
+  .seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: calc(var(--radius) + 3px); background: var(--sunken); box-shadow: inset 0 0 0 1px var(--line); }
+  .full { display: flex; }
+  .full button { flex: 1; }
+  button { display: inline-flex; align-items: center; justify-content: center; height: 28px; padding: 0 11px; border: 0; border-radius: var(--radius); background: none; font-size: 0.84rem; font-weight: 550; color: var(--muted); white-space: nowrap; }
+  button.icon { width: 32px; padding: 0; }
+  svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
   button:hover { color: var(--ink); }
-  button[aria-pressed='true'] { background: var(--ink); color: var(--bg); }
-  button:focus-visible { outline-offset: -2px; }
-  /* the accent ring vanishes on the pressed button's ink fill; use the page colour there */
-  button[aria-pressed='true']:focus-visible { outline-color: var(--bg); outline-offset: -4px; }
+  button[aria-pressed='true'] { background: var(--raised); color: var(--ink); box-shadow: 0 0 0 1px var(--line), 0 1px 3px rgb(0 0 0 / 0.12); }
+  button:focus-visible { outline-offset: 0; }
 </style>
