@@ -9,7 +9,7 @@
   let input;
   const matches = $derived(names && query.trim() ? findCards(query, names, 8) : query.trim() ? [] : recent);
   const options = $derived(open ? matches : []);
-  const status = $derived(!open || !query.trim() ? '' : !names ? 'Loading card names…' : matches.length ? '' : 'No matching card.');
+  const status = $derived(!open || !query.trim() ? '' : !names ? 'Loading card names…' : matches.length ? '' : 'No card matches that name.');
 
   function pick(option) {
     query = '';

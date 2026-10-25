@@ -21,7 +21,7 @@
     </header>
     <p class="meta">
       {#if score !== null}Similarity <span class="num">{score.toFixed(3)}</span>. {/if}
-      {shared.size ? `${shared.size} ${shared.size > 1 ? 'lines' : 'line'} shared (highlighted; numbers and card names ignored).` : 'No shared lines.'}
+      {shared.size ? `${shared.size} shared ${shared.size > 1 ? 'lines' : 'line'}, highlighted. This check ignores numbers and card names.` : 'No shared lines.'}
     </p>
     <div class="cols">
       {#each [a, b] as card, i (i)}
@@ -32,7 +32,7 @@
         </section>
       {/each}
     </div>
-    <footer><button type="button" class="btn primary" onclick={() => { onselect?.(b); dialog.close(); }}>Explore {b.name}</button></footer>
+    <footer><button type="button" class="btn primary" onclick={() => { onselect?.(b); dialog.close(); }}>Find cards like {b.name}</button></footer>
   {/if}
 </dialog>
 

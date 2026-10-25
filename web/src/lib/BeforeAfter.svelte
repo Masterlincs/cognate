@@ -72,9 +72,9 @@
   </div>
 
   {#if phase === 'missing'}
-    <p class="notice">The before-and-after comparison is not available for this release.</p>
+    <p class="notice">This release has no before-and-after comparison.</p>
   {:else if error}
-    <p class="notice" role="alert">Could not load the comparison: {error}</p>
+    <p class="notice" role="alert">The comparison did not load: {error}</p>
   {:else if current && !current.has_text}
     <p class="notice">{current.name} has no rules text, so neither model has anything to compare.</p>
   {:else}

@@ -336,7 +336,7 @@
 </script>
 
 <div class="map-view" bind:this={wrap}>
-  <p class="sr-only">Map of every card, placed so that cards the model finds similar sit close together. Clicking a dot selects a card; the search box does the same from the keyboard.</p>
+  <p class="sr-only">A map of every card. Cards that the model finds similar are close together. Click a dot to open that card. From the keyboard, use the search box.</p>
   <canvas bind:this={shade} class="shade" aria-hidden="true"></canvas>
   <canvas bind:this={canvas} class:ready aria-hidden="true" onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={up} onpointerleave={leave}></canvas>
   {#if tip}

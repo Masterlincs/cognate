@@ -25,9 +25,9 @@
   const PAGE = 12;
   // the ranking modes, with what each does and how far it was tested (the caveats are the evaluation's, keep them)
   const MODES = {
-    whole: { label: 'Whole card', hint: 'Compare all of each card’s rules text at once', about: 'Compares all of each card’s rules text at once.' },
-    line: { label: 'Line match', hint: 'Pair each line with the closest line on the other card', about: 'Pairs each line with the closest line on the other card, so one shared ability can count even when the rest differs.', note: 'Exploratory: ranked below whole-card on an earlier model’s tag benchmark.' },
-    face: { label: 'Face match', hint: 'Also score each face of a two-faced card on its own', about: 'Also scores each face of a two-faced card on its own, so a card can match on just its front or back.', note: 'Exploratory: about the same as whole-card on the development benchmark.' },
+    whole: { label: 'Whole card', hint: 'Compare all the rules text on both cards', about: 'Compares all the rules text on each card at once.' },
+    line: { label: 'Line match', hint: 'Match each line to the closest line on the other card', about: 'Matches each line to the closest line on the other card. One shared ability can count, even when the rest of the card is different.', note: 'Exploratory. On an earlier model’s tag benchmark, it ranked below Whole card.' },
+    face: { label: 'Face match', hint: 'Also score each face of a two-faced card on its own', about: 'Also scores each face of a two-faced card on its own. A card can match on only its front or only its back.', note: 'Exploratory. On the development benchmark, it scored about the same as Whole card.' },
   };
   const ICON_LIST = 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01';
   const ICON_GRID = 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z';
@@ -91,7 +91,7 @@
   const showcase = metrics.showcase ?? [];
   const recentOptions = $derived(names && idsLoaded ? recent.map((r) => ({ index: byId(r.id), name: r.name })).filter((r) => r.index >= 0 && r.index !== index) : []);
   const examples = $derived(showcase.map((ex) => ({ id: ex.id, name: ex.name, card: exampleCards[ex.id] ?? null })));
-  const rankNote = $derived(ability !== null ? { about: 'Each card scores by its line closest to the one picked above.', note: 'Exploratory: line matches were not evaluated.' } : MODES[rank] ?? MODES.whole);
+  const rankNote = $derived(ability !== null ? { about: 'Each card gets the score of its line that is closest to the line you picked.', note: 'Exploratory. One-line matches have not been evaluated.' } : MODES[rank] ?? MODES.whole);
 
   // the result row under the pointer, ringed on the map (one listener on the list, not one per row)
   $effect(() => {
@@ -237,8 +237,8 @@
     else if (r.index < 0) clear();
     else select(r.index, { push: false, abilityIndex: state.ability, back });
     // select() clears the notice before its first await, so these land after it
-    const dropped = state.dropped.length ? `Unrecognised link value for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}; ${state.dropped.length > 1 ? 'those filters are' : 'that filter is'} off.` : '';
-    const unavailableFace = state.rank === 'face' && !hasFaces ? 'Face match is unavailable in this release.' : '';
+    const dropped = state.dropped.length ? `This link has an unknown value for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}, so ${state.dropped.length > 1 ? 'those filters are' : 'that filter is'} off.` : '';
+    const unavailableFace = state.rank === 'face' && !hasFaces ? 'Face match is not available in this release.' : '';
     notice = [r.unknown ? 'That card is not in this release.' : '', dropped, unavailableFace].filter(Boolean).join(' ');
   }
 
@@ -384,7 +384,7 @@
 
 <svelte:head>
   <title>{card ? `${card.name} · Cognate` : 'Cognate'}</title>
-  <meta name="description" content="Find Magic cards whose rules text does a similar thing, ranked by a fine-tuned embedding model." />
+  <meta name="description" content="Pick a Magic card and find the cards that do a similar thing. A fine-tuned embedding model ranks them." />
 </svelte:head>
 
 {#snippet dice()}<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.75" /><circle cx="5.4" cy="5.4" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="10.6" cy="10.6" r="1" /></svg>{/snippet}
@@ -404,20 +404,20 @@
         <div class="map-bar"><span>{card.name}</span><button type="button" class="btn" onclick={() => setTab('results')}>See results</button></div>
       {/if}
     {:else if siteMissing}
-      <p class="notice">No map for this release.</p>
+      <p class="notice">This release has no map.</p>
     {:else}
       <div class="map-loading" aria-hidden="true"></div>
     {/if}
   </section>
 
   <section class="results-pane" id="results-pane" class:hidden={tab !== 'results'} class:busy aria-label="Results">
-    {#if shownError}<p class="notice" role="alert">Could not load card data: {shownError}</p>{/if}
+    {#if shownError}<p class="notice" role="alert">The card data did not load: {shownError}</p>{/if}
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
 
     {#if !card}
       <div class="intro">
         <h1>Find Magic cards by what they do.</h1>
-        <p class="lede">Pick a card and Cognate ranks the cards whose rules text does the most similar thing, even when it is worded differently.</p>
+        <p class="lede">Pick a card. Cognate finds the cards whose rules text does the most similar thing, even when the words are different.</p>
         <div class="search-row">
           <Search {names} recent={recentOptions} onpick={(i) => select(i)} />
           <button type="button" class="btn random" onclick={random} disabled={!idsLoaded} aria-keyshortcuts="r" title="Open a random card (R)">{@render dice()}<span class="lbl">Random card</span></button>
@@ -457,7 +457,7 @@
       </article>
 
       {#if !card.has_text}
-        <p class="notice">No rules text to compare.</p>
+        <p class="notice">This card has no rules text, so there is nothing to compare.</p>
       {:else}
         <section class="similar" aria-labelledby="similar-title">
           <h2 id="similar-title">Similar cards</h2>
@@ -506,7 +506,7 @@
                 <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11l-4.25 5v4l-2.5 1.25V8.5z" /></svg>Filters{#if chips.length}<span class="badge num">{chips.length}</span>{/if}
               </button>
               <p class="count" aria-live="polite">
-                {#if (byLine && lineRows === null) || (byFace && faceRows === null)}Loading matches…{:else if filtering}<strong class="num">{visible.length}</strong> of the top {saved.length} match{:else}Top <strong class="num">{saved.length}</strong> by similarity{/if}
+                {#if (byLine && lineRows === null) || (byFace && faceRows === null)}Loading similar cards…{:else if filtering}<strong class="num">{visible.length}</strong> of the top {saved.length} match{:else}Top <strong class="num">{saved.length}</strong> by similarity{/if}
               </p>
               {#if chips.length}
                 <ul class="active" aria-label="Active filters">
@@ -534,7 +534,7 @@
             </div>
           {/if}
           {#if hasMore({ saved, visible, shown, filtering })}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
-          <p class="model-note muted">{byLine ? 'Line-match score' : 'Cosine similarity'}, {release.model.label}.</p>
+          <p class="model-note muted">Scores: {byLine ? 'line-match score' : 'cosine similarity'}. Model: {release.model.label}.</p>
         </section>
       {/if}
     {/if}
