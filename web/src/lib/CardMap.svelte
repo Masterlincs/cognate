@@ -250,7 +250,7 @@
     const cx = map.x[selected], cy = map.y[selected];
     let reach = 300;
     for (const i of neighbours) if (map.x[i] !== TEXTLESS) reach = Math.max(reach, Math.abs(map.x[i] - cx), Math.abs(map.y[i] - cy));
-    const scale = Math.min(fit * 8, Math.max(fit * 1.5, (Math.min(width, height) * 0.36) / reach));
+    const scale = Math.min(fit * 12, Math.max(fit * 1.5, (Math.min(width, height) * 0.36) / reach));
     flyTo({ scale, tx: width / 2 - cx * scale, ty: height / 2 - cy * scale });
   }
 
@@ -405,7 +405,7 @@
   .caption strong { color: var(--ink); font-weight: 650; }
   .close { flex: none; width: 24px; height: 24px; margin: -3px 0; padding: 0; border: 0; border-radius: 4px; background: none; font-size: 1.1rem; line-height: 1; color: var(--muted); }
   .close:hover { color: var(--ink); background: var(--sunken); }
-  .picked { align-items: center; flex-wrap: wrap; gap: 3px 7px; padding: 6px 8px 6px 11px; }
+  .picked { max-width: calc(100% - 64px); align-items: center; gap: 7px; padding: 6px 8px 6px 11px; white-space: nowrap; }
   .picked i { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--ink); margin-right: 2px; }
   .picked .name { min-width: 0; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 650; }
   .link { padding: 1px 5px; border: 0; border-radius: 4px; background: none; font-size: inherit; font-weight: 550; color: var(--ink); text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.2em; }
