@@ -9,6 +9,12 @@ function pack(records) {
 }
 
 describe('map', () => {
+  it('decodeMap drops hidden cards from the map', () => {
+    const m = decodeMap(pack([[1, 2, 1], [3, 4, 2], [5, 6, 4]]), new Set([1, 99]));
+    expect([...m.x]).toEqual([1, TEXTLESS, 5]);
+    expect([...m.y]).toEqual([2, TEXTLESS, 6]);
+  });
+
   it('decodeMap reads 5-byte records', () => {
     const m = decodeMap(pack([[-32000, 5, 1], [TEXTLESS, TEXTLESS, 0], [32000, -7, 10]]));
     expect(m.n).toBe(3);

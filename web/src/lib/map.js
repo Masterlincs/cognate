@@ -3,7 +3,7 @@ export const TEXTLESS = -32768;
 const W = 1, U = 2, B = 4, R = 8, G = 16;
 export const SINGLE = { [W]: 'w', [U]: 'u', [B]: 'b', [R]: 'r', [G]: 'g' };
 
-export function decodeMap(buf) {
+export function decodeMap(buf, hidden = new Set()) {
   if (buf.byteLength % 5) throw new Error('Map data is truncated.');
   const n = buf.byteLength / 5;
   const view = new DataView(buf);
@@ -13,6 +13,7 @@ export function decodeMap(buf) {
     y[i] = view.getInt16(i * 5 + 2, true);
     color[i] = view.getUint8(i * 5 + 4);
   }
+  for (const i of hidden) if (i < n) x[i] = y[i] = TEXTLESS;
   // cards with identical text share a point; fan the repeats out on a small golden-angle
   // spiral (first card stays put) so each one can be hovered and picked when zoomed in.
   // Every original point is reserved first, and a step that lands on a taken point moves on.

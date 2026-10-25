@@ -89,6 +89,8 @@ def main(argv: list[str] | None = None) -> None:
     q = sub.add_parser("site-data", help="build map, pretrained neighbours, and site metrics")
     q.add_argument("--release", metavar="ID")
     q.add_argument("--metrics-only", action="store_true")
+    q.add_argument("--keyword-only", action="store_true",
+                   help="add the keyword-only card list to an existing site folder")
     q.add_argument(
         "--copy-from",
         metavar="ID",
@@ -183,9 +185,10 @@ def main(argv: list[str] | None = None) -> None:
         out = confirmation_report(read_json(bench_path(a.ds))["benchmark_id"],
                                   design=DESIGNS[a.design])
     elif a.cmd == "site-data":
-        from .sitedata import build_site_data, copy_site_data, write_metrics
+        from .sitedata import build_site_data, copy_site_data, write_keyword_only, write_metrics
 
         out = (str(write_metrics()) if a.metrics_only else
+               str(write_keyword_only(a.release)) if a.keyword_only else
                copy_site_data(a.release, a.copy_from) if a.copy_from else
                build_site_data(a.release))
     elif a.cmd == "sealed-eval":

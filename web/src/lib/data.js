@@ -144,7 +144,10 @@ export async function loadSiteData(releaseId, fetchFn = fetcher) {
   try {
     const [info, map] = await Promise.all([get(`site-${releaseId}/map.json`, 'json', fetchFn), get(`site-${releaseId}/map.bin`, 'buffer', fetchFn)]);
     if (info.release_id !== releaseId) return null;
-    site = { ...info, map };
+    // keyword-only cards are hidden from the map and the lists; the file is optional
+    const listed = await get(`site-${releaseId}/keyword_only.json`, 'json', fetchFn).catch(() => null);
+    const hidden = new Set(listed?.release_id === releaseId ? listed.indices : []);
+    site = { ...info, map, hidden };
     return site;
   } catch (reason) {
     if (reason.status === 404) return null;

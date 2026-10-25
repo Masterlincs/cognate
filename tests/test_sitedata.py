@@ -135,3 +135,15 @@ def test_copy_site_data_needs_identical_vectors_and_cards(tmp_path, monkeypatch)
     with pytest.raises(ValueError, match="vectors.npy"):
         sitedata.copy_site_data("lying-meta", "old")
     assert [p.name for p in data.glob("site-*")] == ["site-new", "site-old"]
+
+
+def test_is_keyword_only():
+    vocab = sorted(["flying", "vigilance", "protection", "cycling", "haste"], key=len, reverse=True)
+    yes = ["Flying", "Flying, vigilance", "Flying (Reminder text.)\nVigilance",
+           "Cycling {2} ({2}, Discard this card: Draw a card.)",
+           "Protection from white and from blue"]
+    no = ["", "(Only reminder text.)", "Flying creatures you control have haste.",
+          "Flying\nWhenever this creature attacks, draw a card.", "Haste, you may cast",
+          "Flyingfoo"]
+    assert all(sitedata.is_keyword_only(t, vocab) for t in yes)
+    assert not any(sitedata.is_keyword_only(t, vocab) for t in no)

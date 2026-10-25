@@ -31,6 +31,7 @@
   let idsReady = null;
   let map = $state(null);
   let regions = $state([]);
+  let hidden = $state.raw(new Set()); // keyword-only cards: off the map and out of the lists
   let siteMissing = $state(false);
   let error = $state('');
   let rowsError = $state({}); // mode -> message: a failed Line or Face match load, shown only in that mode; clearing it retries
@@ -67,7 +68,7 @@
   const hasColours = $derived(isV5Plus(release));
   const byLine = $derived(ability === null && rank === 'line');
   const byFace = $derived(ability === null && rank === 'face');
-  const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, faces: faceRows, abilities }));
+  const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, faces: faceRows, abilities }).filter(([i]) => !hidden.has(i)));
   const filtering = $derived(activeFilters(filters));
   const filterCount = $derived([filters.color, filters.creature, filters.type, Number.isFinite(filters.minMv) || Number.isFinite(filters.maxMv)].filter(Boolean).length);
   const visible = $derived(filterNeighbours(saved, (i) => byIndex[i], filters));
@@ -295,7 +296,7 @@
         const r = await starting;
         release = r.release; names = r.names; idsReady = Promise.all([r.idsReady, fontsReady]).then(([v]) => v);
         loadSiteData(release.release_id).then((s) => {
-          if (s) { map = decodeMap(s.map); regions = s.regions.map((r) => ({ ...r, label: regionLabel(r.label) })); } else siteMissing = true;
+          if (s) { hidden = s.hidden; map = decodeMap(s.map, hidden); regions = s.regions.map((r) => ({ ...r, label: regionLabel(r.label) })); } else siteMissing = true;
         }).catch(() => { siteMissing = true; });
         const before = token;
         ids = await idsReady;

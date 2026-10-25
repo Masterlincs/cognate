@@ -11,7 +11,10 @@ Only fit and dev cards are read (load_dataset drops sealed rows).
 
 from __future__ import annotations
 
+import gzip
+import json
 import os
+import re
 import shutil
 import struct
 from collections import Counter
@@ -88,6 +91,66 @@ def region_labels(xy: np.ndarray, tag_sets: list[frozenset], labels: dict, k: in
         cx, cy = xy[members].mean(0)
         out.append({"x": round(float(cx)), "y": round(float(cy)), "label": best[2],
                     "n": int(len(members))})
+    return out
+
+
+_PAREN = re.compile(r"\([^()]*\)")
+# what may follow a keyword: costs, numbers, "from red"
+_KEYWORD_TAIL = re.compile(
+    r"^(?:\s*(?:\{[^}]+\}|[0-9x+\-/]+|from [a-z]+(?: and from [a-z]+)*|—))*\s*$")
+
+
+def keyword_vocabulary(ids: set[str]) -> list[str]:
+    """Scryfall keywords of the catalogue cards, longest first. The raw snapshot also holds
+    sealed cards, so a record is dropped by oracle_id before anything else is read."""
+    path = next((ROOT / "data" / "raw" / "2026-10-16").glob("oracle-cards-*.jsonl.gz"))
+    vocab: set[str] = set()
+    with gzip.open(path, "rt", encoding="utf-8") as f:
+        for line in f:
+            rec = json.loads(line)
+            if rec.get("oracle_id") in ids:
+                vocab.update(k.lower() for k in rec.get("keywords", []))
+    return sorted(vocab, key=len, reverse=True)
+
+
+def is_keyword_only(oracle_text: str, vocab: list[str]) -> bool:
+    """True when, reminder text aside, every line is a list of keyword abilities
+    (a "French vanilla" card). No text at all is not keyword-only: those cards have no vector."""
+    lines = [_PAREN.sub("", ln).strip() for ln in oracle_text.split("\n")]
+    items = [i.strip().lower() for ln in lines for i in re.split(r"[;,]", ln) if i.strip()]
+
+    def keyword_item(item: str) -> bool:
+        return any(item.startswith(k) and (len(item) == len(k) or item[len(k)] in " {—-:")
+                   and _KEYWORD_TAIL.match(item[len(k):]) for k in vocab)
+
+    return bool(items) and all(keyword_item(i) for i in items)
+
+
+def keyword_only_indices(release_id: str) -> list[int]:
+    """Card indices (release order) of keyword-only cards, from the release's public card files."""
+    rel = WEB / "public" / "data" / release_id
+    ids = _read(rel / "ids.json")["ids"]
+    vocab = keyword_vocabulary(set(ids))
+    out, i = [], 0
+    for shard in sorted((rel / "cards").glob("*.json")):
+        for card in _read(shard):
+            text = "\n".join(f.get("oracle_text") or "" for f in card["faces"])
+            if is_keyword_only(text, vocab):
+                out.append(i)
+            i += 1
+    if i != len(ids):
+        raise ValueError("card files do not match ids.json")
+    return out
+
+
+def write_keyword_only(release_id: str) -> Path:
+    """site-<id>/keyword_only.json, for a site folder built before this list existed."""
+    if not release_id or Path(release_id).name != release_id:
+        raise ValueError("release must be a release ID")
+    out = WEB / "public" / "data" / f"site-{release_id}" / "keyword_only.json"
+    if out.exists():
+        raise FileExistsError(f"{out} exists; site data is never overwritten")
+    atomic_write_json(out, {"release_id": release_id, "indices": keyword_only_indices(release_id)})
     return out
 
 
@@ -258,6 +321,8 @@ def build_site_data(release_id: str, perplexity: float = 30.0) -> dict:
             "pretrained": {"model": "intfloat/e5-base-v2", "max_length": 94, "k": 10,
                            "shard_size": SHARD}}
     atomic_write_json(part / "map.json", info)
+    atomic_write_json(part / "keyword_only.json",
+                      {"release_id": release_id, "indices": keyword_only_indices(release_id)})
     os.replace(part, out)
     return {"site_data": _rel(out), "regions": len(regions), "metrics": _rel(write_metrics())}
 

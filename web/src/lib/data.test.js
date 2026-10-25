@@ -17,6 +17,14 @@ describe('loadSiteData', () => {
     expect(site.regions[0].label).toBe('Burn');
   });
 
+  it('reads the keyword-only list, and treats a missing or foreign one as empty', async () => {
+    const serve = (listed) => async (url) => url.endsWith('map.bin') ? ok(new ArrayBuffer(10))
+      : url.endsWith('keyword_only.json') ? (listed ? ok(listed) : { ok: false, status: 404 }) : ok({ release_id: 'r1', regions: [] });
+    expect([...(await loadSiteData('r1', serve({ release_id: 'r1', indices: [3, 7] }))).hidden]).toEqual([3, 7]);
+    expect((await loadSiteData('r1', serve(null))).hidden.size).toBe(0);
+    expect((await loadSiteData('r1', serve({ release_id: 'other', indices: [3] }))).hidden.size).toBe(0);
+  });
+
   it('rejects site data for another release', async () => {
     const fetchFn = async (url) => url.endsWith('map.bin') ? ok(new ArrayBuffer(10)) : ok({ release_id: 'other', regions: [] });
     expect(await loadSiteData('r1', fetchFn)).toBeNull();
