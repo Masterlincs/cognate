@@ -28,7 +28,7 @@ async function get(path, kind = 'json', fetchFn = fetcher) {
   if (request) delete early[path];
   const prefetched = request && (await request.catch(() => null));
   const response = prefetched?.ok ? prefetched : await fetchFn(url);
-  if (!response.ok) throw Object.assign(new Error(`Could not load ${path} (${response.status}).`), { status: response.status });
+  if (!response.ok) throw Object.assign(new Error(`The file ${path} did not load (error ${response.status}).`), { status: response.status });
   return kind === 'json' ? response.json() : response.arrayBuffer();
 }
 
@@ -50,7 +50,7 @@ export async function loadRelease(fetchFn = fetcher) {
 
 async function openRelease() {
   const current = await get('current.json');
-  if (!current.release_id || /[/\\]|\.\./.test(current.release_id)) throw new Error('Invalid release pointer.');
+  if (!current.release_id || /[/\\]|\.\./.test(current.release_id)) throw new Error('The release pointer (current.json) is not correct.');
   // names.json is requested alongside release.json; it is used only after release.json validates
   const namesReady = get(`${current.release_id}/names.json`);
   namesReady.catch(() => {});

@@ -4,7 +4,7 @@ const W = 1, U = 2, B = 4, R = 8, G = 16;
 export const SINGLE = { [W]: 'w', [U]: 'u', [B]: 'b', [R]: 'r', [G]: 'g' };
 
 export function decodeMap(buf, hidden = new Set()) {
-  if (buf.byteLength % 5) throw new Error('Map data is truncated.');
+  if (buf.byteLength % 5) throw new Error('The map data is incomplete.');
   const n = buf.byteLength / 5;
   const view = new DataView(buf);
   const x = new Int16Array(n), y = new Int16Array(n), color = new Uint8Array(n);

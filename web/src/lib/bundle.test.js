@@ -65,20 +65,20 @@ describe('bundle validation', () => {
   it('validates names without waiting for the separate ID list', () => {
     expect(validateRelease(release, names)).toBe(true);
     expect(validateRelease(release)).toBe(true);
-    for (const bad of [null, [], 'names', 0]) expect(() => validateRelease(release, bad)).toThrow(/missing or malformed/);
-    expect(() => validateRelease(release, { ...names, names: ['short'] })).toThrow(/counts/);
-    expect(() => validateRelease(release, { ...names, ids: ids.ids })).toThrow(/counts/);
+    for (const bad of [null, [], 'names', 0]) expect(() => validateRelease(release, bad)).toThrow(/missing or not in the correct format/);
+    expect(() => validateRelease(release, { ...names, names: ['short'] })).toThrow(/does not match the card count/);
+    expect(() => validateRelease(release, { ...names, ids: ids.ids })).toThrow(/does not match the card count/);
   });
 
   it('rejects a v1 schema', () => {
-    expect(() => validateRelease({ ...release, schema: 'mtgemb-release-v1' }, names)).toThrow(/Unsupported release schema.*mtgemb-release-v2/);
+    expect(() => validateRelease({ ...release, schema: 'mtgemb-release-v1' }, names)).toThrow(/cannot read \(mtgemb-release-v1\).*mtgemb-release-v2/);
   });
 
   it('rejects an ID list with the wrong count, duplicates, or non-ascending values', () => {
     expect(validateIds(release, ids)).toBe(true);
     expect(() => validateIds(release, { ids: ['a', 'b'] })).toThrow(/count/);
-    expect(() => validateIds(release, { ids: ['a', 'a', 'c'] })).toThrow(/unique and strictly ascending/);
-    expect(() => validateIds(release, { ids: ['b', 'a', 'c'] })).toThrow(/unique and strictly ascending/);
+    expect(() => validateIds(release, { ids: ['a', 'a', 'c'] })).toThrow(/unique and in ascending order/);
+    expect(() => validateIds(release, { ids: ['b', 'a', 'c'] })).toThrow(/unique and in ascending order/);
   });
 
   it('rejects a current pointer that names a different release', () => {
@@ -88,9 +88,9 @@ describe('bundle validation', () => {
 
   it('checks shard lengths and neighbour index ranges', () => {
     expect(validateShard(cards, [[[1, 0.9]], [[0, 0.8]]], release, 0, ['a', 'b'])).toBe(true);
-    expect(() => validateShard(cards, [[]], release, 0)).toThrow(/length/);
-    expect(() => validateShard(cards, [[[3, 0.9]], [[0, 0.8]]], release, 0)).toThrow(/index/);
-    expect(() => validateShard([cards[1], cards[0]], [[[1, 0.9]], [[0, 0.8]]], release, 0, ['a', 'b'])).toThrow(/Card ID does not match/);
+    expect(() => validateShard(cards, [[]], release, 0)).toThrow(/wrong number of cards/);
+    expect(() => validateShard(cards, [[[3, 0.9]], [[0, 0.8]]], release, 0)).toThrow(/card number or score/);
+    expect(() => validateShard([cards[1], cards[0]], [[[1, 0.9]], [[0, 0.8]]], release, 0, ['a', 'b'])).toThrow(/ID of card 0 does not match/);
   });
 
   it('validates v3 ability manifests, alignment, text and neighbours', () => {
@@ -117,11 +117,11 @@ describe('bundle validation', () => {
     const missingManifest = { ...v3, files: { ...v3.files } };
     delete missingManifest.files['abilities/000.json'];
     expect(() => validateRelease(missingManifest, v3Names)).toThrow(/abilities\/000.json/);
-    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [v3Abilities[0]])).toThrow(/Ability shard.*length/);
-    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[{ ...v3Abilities[0][0], neighbours: [[0, 0.9]] }, v3Abilities[0][1]], []])).toThrow(/Ability neighbour index or score/);
-    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[{ ...v3Abilities[0][0], neighbours: [[2, 0.9]] }, v3Abilities[0][1]], []])).toThrow(/Ability neighbour index or score/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [v3Abilities[0]])).toThrow(/ability matches has the wrong number of cards/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[{ ...v3Abilities[0][0], neighbours: [[0, 0.9]] }, v3Abilities[0][1]], []])).toThrow(/ability match .*card number or score/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[{ ...v3Abilities[0][0], neighbours: [[2, 0.9]] }, v3Abilities[0][1]], []])).toThrow(/ability match .*card number or score/);
     expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [[v3Abilities[0][0]], []])).toThrow(/does not match/);
-    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [v3Abilities[0], [{ text: 'Invented line.', neighbours: [] }]])).toThrow(/Textless card/);
+    expect(() => validateShard(v3Cards, v3Neighbours, v3, 0, ['a', 'b'], [v3Abilities[0], [{ text: 'Invented line.', neighbours: [] }]])).toThrow(/has no rules text/);
     // exporter lines are the reminder-free model text, so they need not equal oracle_text lines
     const reminder = [{ ...v3Cards[0], faces: [{ oracle_text: 'Flying (This creature can block.)\n(Reminder only.)\nDraw a card.' }] }, v3Cards[1]];
     const modelLines = [[{ text: 'Flying', neighbours: [[1, 0.9]] }, { text: 'Draw a card.', neighbours: [] }], []];
@@ -152,9 +152,9 @@ describe('bundle validation', () => {
       delete manifest.files[missing];
       expect(() => validateRelease(manifest, v4Names)).toThrow(new RegExp(missing.replace('.', '\\.')));
     }
-    expect(() => validateShard([{ ...v4Cards[0], tags: [2] }, v4Cards[1]], v4Neighbours, v4, 0, ['a', 'b'], v4Abilities, v4Lines, v4Tags)).toThrow(/tag index/);
-    expect(() => validateShard(v4Cards, v4Neighbours, v4, 0, ['a', 'b'], [[{ ...v4Abilities[0][0], tags: [1] }, v4Abilities[0][1]], []], v4Lines, v4Tags)).toThrow(/subset/);
-    expect(() => validateShard(v4Cards, v4Neighbours, v4, 0, ['a', 'b'], v4Abilities, [[[0, 0.7]], []], v4Tags)).toThrow(/Line neighbour index or score/);
+    expect(() => validateShard([{ ...v4Cards[0], tags: [2] }, v4Cards[1]], v4Neighbours, v4, 0, ['a', 'b'], v4Abilities, v4Lines, v4Tags)).toThrow(/tag number/);
+    expect(() => validateShard(v4Cards, v4Neighbours, v4, 0, ['a', 'b'], [[{ ...v4Abilities[0][0], tags: [1] }, v4Abilities[0][1]], []], v4Lines, v4Tags)).toThrow(/tags that the card does not have/);
+    expect(() => validateShard(v4Cards, v4Neighbours, v4, 0, ['a', 'b'], v4Abilities, [[[0, 0.7]], []], v4Tags)).toThrow(/line matches .*card number or score/);
   });
 });
 
@@ -233,16 +233,16 @@ describe('v5 bundles', () => {
     expect(validateRelease(v5, { names: ['A', 'B'], aliases: [] })).toBe(true);
     expect(shard(base, { colors: '', image_back: 'https://cards.scryfall.io/normal/back/x.jpg' })).toBe(true);
   });
-  it('rejects a line_k that differs from k', () => expect(() => validateRelease({ ...v5, line_k: 50 })).toThrow(/v4/));
+  it('rejects a line_k that differs from k', () => expect(() => validateRelease({ ...v5, line_k: 50 })).toThrow(/line or tag settings/));
   it('rejects a k other than 200, even with a matching line_k', () => {
     expect(() => validateRelease({ ...v5, k: 0, line_k: 0 })).toThrow(/k/);
     expect(() => validateRelease({ ...v5, k: 50, line_k: 50 })).toThrow(/k/);
     expect(() => validateRelease({ ...v5, k: undefined })).toThrow(/k/);
   });
   it('rejects malformed colours or back images', () => {
-    expect(() => shard(base, { colors: 'RW' })).toThrow(/malformed/);
-    expect(() => shard(base, { colors: undefined })).toThrow(/malformed/);
-    expect(() => shard(base, { image_back: 3 })).toThrow(/malformed/);
+    expect(() => shard(base, { colors: 'RW' })).toThrow(/not in the correct format/);
+    expect(() => shard(base, { colors: undefined })).toThrow(/not in the correct format/);
+    expect(() => shard(base, { image_back: 3 })).toThrow(/not in the correct format/);
   });
 });
 

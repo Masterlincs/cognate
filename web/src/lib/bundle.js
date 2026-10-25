@@ -86,48 +86,48 @@ export const isV6 = (release) => release?.schema === 'mtgemb-release-v6';
 const COLOURS = /^W?U?B?R?G?$/;
 
 export function validateRelease(release, names) {
-  if (!SCHEMAS.includes(release?.schema)) throw new Error(`Unsupported release schema: ${release?.schema ?? 'missing'}; expected one of ${SCHEMAS.join(', ')}.`);
-  if (!Number.isInteger(release.n_cards) || release.n_cards < 1) throw new Error('Invalid card count in release.json.');
-  if (!Number.isInteger(release.shard_size) || release.shard_size < 1) throw new Error('Invalid shard_size.');
+  if (!SCHEMAS.includes(release?.schema)) throw new Error(`The card data is in a format that this site cannot read (${release?.schema ?? 'no format given'}). This site reads ${SCHEMAS.join(', ')}.`);
+  if (!Number.isInteger(release.n_cards) || release.n_cards < 1) throw new Error('The card count in release.json is not correct.');
+  if (!Number.isInteger(release.shard_size) || release.shard_size < 1) throw new Error('The shard size in release.json is not correct.');
   const shards = Math.ceil(release.n_cards / release.shard_size);
   const v3plus = release.schema !== 'mtgemb-release-v2';
   const v4 = isV4Plus(release);
   // v4 stores 50 line matches; v5/v6 store 200 whole-card and line matches.
   const v5 = isV5Plus(release);
   const v6 = isV6(release);
-  if (!Number.isInteger(release.k) || release.k < 1 || (v5 && release.k !== 200)) throw new Error('Invalid k in release.json.');
+  if (!Number.isInteger(release.k) || release.k < 1 || (v5 && release.k !== 200)) throw new Error('The neighbour count (k) in release.json is not correct.');
   const lineK = v5 ? 200 : 50;
   const expectedFiles = ['names.json', 'ids.json', ...(v4 ? ['tags.json'] : []), ...Array.from({ length: shards }, (_, i) => [`cards/${String(i).padStart(3, '0')}.json`, `neighbours/${String(i).padStart(3, '0')}.json`, ...(v3plus ? [`abilities/${String(i).padStart(3, '0')}.json`] : []), ...(v4 ? [`lines/${String(i).padStart(3, '0')}.json`] : []), ...(v6 ? [`faces/${String(i).padStart(3, '0')}.json`] : [])]).flat()];
-  if (release.schema === 'mtgemb-release-v3' && (release.ability_k !== 50 || release.abilities_status !== 'exploratory: not evaluated on the tag proxy')) throw new Error('Invalid ability metadata in release.json.');
-  if (v4 && (!Number.isInteger(release.ability_k) || release.ability_k !== 50 || typeof release.abilities_status !== 'string' || !Number.isInteger(release.line_k) || release.line_k !== lineK || typeof release.line_status !== 'string' || typeof release.tags_status !== 'string')) throw new Error('Invalid v4 line or tag metadata in release.json.');
-  if (v6 && (!Number.isInteger(release.face_k) || release.face_k !== 200 || typeof release.face_status !== 'string')) throw new Error('Invalid v6 face metadata in release.json.');
+  if (release.schema === 'mtgemb-release-v3' && (release.ability_k !== 50 || release.abilities_status !== 'exploratory: not evaluated on the tag proxy')) throw new Error('The ability settings in release.json are not correct.');
+  if (v4 && (!Number.isInteger(release.ability_k) || release.ability_k !== 50 || typeof release.abilities_status !== 'string' || !Number.isInteger(release.line_k) || release.line_k !== lineK || typeof release.line_status !== 'string' || typeof release.tags_status !== 'string')) throw new Error('The line or tag settings in release.json are not correct.');
+  if (v6 && (!Number.isInteger(release.face_k) || release.face_k !== 200 || typeof release.face_status !== 'string')) throw new Error('The face settings in release.json are not correct.');
   if (v3plus) for (const file of expectedFiles) {
     const entry = release.files?.[file];
-    if (!entry || !/^[a-f0-9]{64}$/.test(entry.sha256) || !Number.isInteger(entry.bytes) || entry.bytes < 0) throw new Error(`Release manifest is missing or malformed for ${file}.`);
+    if (!entry || !/^[a-f0-9]{64}$/.test(entry.sha256) || !Number.isInteger(entry.bytes) || entry.bytes < 0) throw new Error(`The file list in release.json has a missing or incorrect entry for ${file}.`);
   }
   if (names === undefined) return true;  // release-only check before names.json arrives
-  if (!names || typeof names !== 'object' || Array.isArray(names)) throw new Error('Name index is missing or malformed.');
-  if (!Array.isArray(names.names) || names.names.length !== release.n_cards || 'ids' in names) throw new Error('Name index counts do not match release.json or contains IDs.');
-  if (!Array.isArray(names.aliases)) throw new Error('Name aliases are missing or malformed.');
-  for (const [name, index] of names.aliases) if (typeof name !== 'string' || !Number.isInteger(index) || index < 0 || index >= release.n_cards) throw new Error('Name alias index is outside the card catalogue.');
+  if (!names || typeof names !== 'object' || Array.isArray(names)) throw new Error('The card name list is missing or not in the correct format.');
+  if (!Array.isArray(names.names) || names.names.length !== release.n_cards || 'ids' in names) throw new Error('The card name list does not match the card count in release.json, or it contains card IDs.');
+  if (!Array.isArray(names.aliases)) throw new Error('The alternative card names are missing or not in the correct format.');
+  for (const [name, index] of names.aliases) if (typeof name !== 'string' || !Number.isInteger(index) || index < 0 || index >= release.n_cards) throw new Error('An alternative card name points to a card that does not exist.');
   return true;
 }
 
 export function validateTags(release, tags) {
   if (!isV4Plus(release)) return true;
-  if (!Array.isArray(tags?.labels) || tags.labels.some((label) => typeof label !== 'string' || !label.trim())) throw new Error('Tag labels are missing or malformed.');
+  if (!Array.isArray(tags?.labels) || tags.labels.some((label) => typeof label !== 'string' || !label.trim())) throw new Error('The tag names are missing or not in the correct format.');
   return true;
 }
 
 export function validateIds(release, data) {
   const ids = data?.ids;
-  if (!Array.isArray(ids) || ids.length !== release?.n_cards) throw new Error('ID count does not match release.json.');
-  if (ids.some((id, index) => typeof id !== 'string' || !id || (index > 0 && ids[index - 1] >= id))) throw new Error('IDs must be unique and strictly ascending.');
+  if (!Array.isArray(ids) || ids.length !== release?.n_cards) throw new Error('The card ID list does not match the card count in release.json.');
+  if (ids.some((id, index) => typeof id !== 'string' || !id || (index > 0 && ids[index - 1] >= id))) throw new Error('The card IDs must be unique and in ascending order.');
   return true;
 }
 
 export function validateReleasePointer(current, release) {
-  if (!current?.release_id || current.release_id !== release?.release_id) throw new Error('Release pointer does not match release.json.');
+  if (!current?.release_id || current.release_id !== release?.release_id) throw new Error('The release pointer (current.json) does not match release.json.');
   return true;
 }
 
@@ -138,7 +138,7 @@ export function validateShard(cards, neighbours, release, shard, ids, abilities,
     for (let offset = 0; offset < cards.length; offset += 1) {
       const index = shard * release.shard_size + offset;
       validateTagIndices(cards[offset].tags, tags.labels.length, `Card ${index}`);
-      if (!cards[offset].has_text && cards[offset].tags.length) throw new Error(`Textless card ${index} must have no tags.`);
+      if (!cards[offset].has_text && cards[offset].tags.length) throw new Error(`Card ${index} has no rules text, so it must have no tags.`);
     }
     if (lines !== undefined) validateLineShard(cards, lines, release, shard);
     if (faces !== undefined) validateFaceShard(cards, faces, release, shard);
@@ -148,90 +148,90 @@ export function validateShard(cards, neighbours, release, shard, ids, abilities,
 }
 
 function validateTagIndices(indices, count, label) {
-  if (!Array.isArray(indices)) throw new Error(`${label} tags are malformed.`);
+  if (!Array.isArray(indices)) throw new Error(`${label} has tags that are not in the correct format.`);
   let previous = -1;
   for (const tag of indices) {
-    if (!Number.isInteger(tag) || tag < 0 || tag >= count || tag <= previous) throw new Error(`${label} tag index is invalid or not ascending unique.`);
+    if (!Number.isInteger(tag) || tag < 0 || tag >= count || tag <= previous) throw new Error(`${label} has a tag number that is not correct or not in ascending order.`);
     previous = tag;
   }
   return true;
 }
 
 export function validateLineShard(cards, lines, release, shard) {
-  return validateRankedShard(cards, lines, release, shard, release.line_k, 'Line');
+  return validateRankedShard(cards, lines, release, shard, release.line_k, 'line');
 }
 
 export function validateFaceShard(cards, faces, release, shard) {
-  return validateRankedShard(cards, faces, release, shard, release.face_k, 'Face');
+  return validateRankedShard(cards, faces, release, shard, release.face_k, 'face');
 }
 
 function validateRankedShard(cards, rows, release, shard, limit, label) {
   const expected = Math.min(release.shard_size, release.n_cards - shard * release.shard_size);
-  if (!Array.isArray(rows) || rows.length !== expected) throw new Error(`${label} shard ${shard} has the wrong length.`);
+  if (!Array.isArray(rows) || rows.length !== expected) throw new Error(`File ${shard} of the ${label} matches has the wrong number of cards.`);
   for (let offset = 0; offset < expected; offset += 1) {
     const index = shard * release.shard_size + offset;
     const list = rows[offset];
-    if (!Array.isArray(list) || list.length > limit) throw new Error(`${label} list ${index} is malformed.`);
+    if (!Array.isArray(list) || list.length > limit) throw new Error(`The ${label} matches for card ${index} are not in the correct format.`);
     let previous = Infinity;
     for (const pair of list) {
-      if (!Array.isArray(pair) || pair.length !== 2) throw new Error(`${label} neighbour index or score is invalid for card ${index}.`);
+      if (!Array.isArray(pair) || pair.length !== 2) throw new Error(`The ${label} matches for card ${index} have a card number or score that is not correct.`);
       const [target, score] = pair;
-      if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score)) throw new Error(`${label} neighbour index or score is invalid for card ${index}.`);
-      if (score > previous) throw new Error(`${label} neighbour scores are not descending for card ${index}.`);
+      if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score)) throw new Error(`The ${label} matches for card ${index} have a card number or score that is not correct.`);
+      if (score > previous) throw new Error(`The ${label} match scores for card ${index} are not in descending order.`);
       previous = score;
     }
-    if (!cards[offset].has_text && list.length) throw new Error(`Textless card ${index} must have no ${label.toLowerCase()} neighbours.`);
+    if (!cards[offset].has_text && list.length) throw new Error(`Card ${index} has no rules text, so it must have no ${label} matches.`);
   }
   return true;
 }
 
 export function validateCommonShard(cards, neighbours, release, shard, ids) {
   const expected = Math.min(release.shard_size, release.n_cards - shard * release.shard_size);
-  if (expected < 0 || !Array.isArray(cards) || cards.length !== expected) throw new Error(`Card shard ${shard} has the wrong length.`);
-  if (!Array.isArray(neighbours) || neighbours.length !== expected) throw new Error(`Neighbour shard ${shard} has the wrong length.`);
+  if (expected < 0 || !Array.isArray(cards) || cards.length !== expected) throw new Error(`File ${shard} of the card data has the wrong number of cards.`);
+  if (!Array.isArray(neighbours) || neighbours.length !== expected) throw new Error(`File ${shard} of the neighbour lists has the wrong number of cards.`);
   for (let offset = 0; offset < expected; offset += 1) {
     const card = cards[offset];
     const index = shard * release.shard_size + offset;
-    if (!card || typeof card.id !== 'string' || card.id !== undefined && card.id.length === 0 || !Array.isArray(card.faces) || typeof card.color_identity !== 'string' || typeof card.mv !== 'number' || typeof card.type_line !== 'string' || typeof card.is_creature !== 'boolean' || typeof card.has_text !== 'boolean') throw new Error(`Card ${index} is malformed.`);
-    if (isV5Plus(release) && (typeof card.colors !== 'string' || !COLOURS.test(card.colors) || !(card.image_back === null || typeof card.image_back === 'string'))) throw new Error(`Card ${index} is malformed.`);
-    if (ids && card.id !== ids[index]) throw new Error(`Card ID does not match ID index at ${index}.`);
+    if (!card || typeof card.id !== 'string' || card.id !== undefined && card.id.length === 0 || !Array.isArray(card.faces) || typeof card.color_identity !== 'string' || typeof card.mv !== 'number' || typeof card.type_line !== 'string' || typeof card.is_creature !== 'boolean' || typeof card.has_text !== 'boolean') throw new Error(`Card ${index} is not in the correct format.`);
+    if (isV5Plus(release) && (typeof card.colors !== 'string' || !COLOURS.test(card.colors) || !(card.image_back === null || typeof card.image_back === 'string'))) throw new Error(`Card ${index} is not in the correct format.`);
+    if (ids && card.id !== ids[index]) throw new Error(`The ID of card ${index} does not match the card ID list.`);
     const list = neighbours[offset];
-    if (!Array.isArray(list) || list.length > release.k) throw new Error(`Neighbour list ${index} is malformed.`);
+    if (!Array.isArray(list) || list.length > release.k) throw new Error(`The neighbour list for card ${index} is not in the correct format.`);
     let previous = Infinity;
     for (const pair of list) {
       const [target, score] = pair ?? [];
-      if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score)) throw new Error(`Neighbour index or score is invalid for card ${index}.`);
-      if (score > previous) throw new Error(`Neighbour scores are not descending for card ${index}.`);
+      if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score)) throw new Error(`The neighbour list for card ${index} has a card number or score that is not correct.`);
+      if (score > previous) throw new Error(`The neighbour scores for card ${index} are not in descending order.`);
       previous = score;
     }
-    if (!card.has_text && list.length) throw new Error(`Textless card ${index} must have no neighbours.`);
+    if (!card.has_text && list.length) throw new Error(`Card ${index} has no rules text, so it must have no neighbours.`);
   }
   return true;
 }
 
 export function validateAbilityShard(cards, abilities, release, shard, tags) {
   const expected = Math.min(release.shard_size, release.n_cards - shard * release.shard_size);
-  if (!Array.isArray(cards) || cards.length !== expected || !Array.isArray(abilities) || abilities.length !== expected) throw new Error(`Ability shard ${shard} has the wrong length.`);
+  if (!Array.isArray(cards) || cards.length !== expected || !Array.isArray(abilities) || abilities.length !== expected) throw new Error(`File ${shard} of the ability matches has the wrong number of cards.`);
   for (let offset = 0; offset < expected; offset += 1) {
     const card = cards[offset];
     const index = shard * release.shard_size + offset;
     const entries = abilities[offset];
-    if (!Array.isArray(entries)) throw new Error(`Ability list ${index} is malformed.`);
-    if (!card.has_text && entries.length) throw new Error(`Textless card ${index} must have no ability entries.`);
+    if (!Array.isArray(entries)) throw new Error(`The ability list for card ${index} is not in the correct format.`);
+    if (!card.has_text && entries.length) throw new Error(`Card ${index} has no rules text, so it must have no ability entries.`);
     // Lines come from the model text (reminder text removed), not oracle_text; the exporter
     // pins them by hash, so only the shape is checked here: none, or one entry per ability (>=2).
-    if (entries.length === 1) throw new Error(`Ability list ${index} does not match the card's ability lines.`);
+    if (entries.length === 1) throw new Error(`The ability list for card ${index} does not match the card's ability lines.`);
     for (const ability of entries) {
-      if (!ability || typeof ability.text !== 'string' || !ability.text.trim() || !Array.isArray(ability.neighbours) || ability.neighbours.length > release.ability_k) throw new Error(`Ability entry is malformed for card ${index}.`);
+      if (!ability || typeof ability.text !== 'string' || !ability.text.trim() || !Array.isArray(ability.neighbours) || ability.neighbours.length > release.ability_k) throw new Error(`An ability entry for card ${index} is not in the correct format.`);
       if (isV4Plus(release)) {
-        validateTagIndices(ability.tags, tags?.labels?.length ?? 0, `Ability on card ${index}`);
-        if (ability.tags.some((tag) => !card.tags?.includes(tag))) throw new Error(`Ability tags are not a subset of card tags for card ${index}.`);
+        validateTagIndices(ability.tags, tags?.labels?.length ?? 0, `An ability on card ${index}`);
+        if (ability.tags.some((tag) => !card.tags?.includes(tag))) throw new Error(`An ability on card ${index} has tags that the card does not have.`);
       }
       let previousAbilityScore = Infinity;
       for (const pair of ability.neighbours) {
         const [target, score] = pair ?? [];
-        if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score) || Math.abs(score - Number(score.toFixed(4))) > 1e-9) throw new Error(`Ability neighbour index or score is invalid for card ${index}.`);
-        if (score > previousAbilityScore) throw new Error(`Ability neighbour scores are not descending for card ${index}.`);
+        if (!Number.isInteger(target) || target < 0 || target >= release.n_cards || target === index || typeof score !== 'number' || !Number.isFinite(score) || Math.abs(score - Number(score.toFixed(4))) > 1e-9) throw new Error(`An ability match for card ${index} has a card number or score that is not correct.`);
+        if (score > previousAbilityScore) throw new Error(`The ability match scores for card ${index} are not in descending order.`);
         previousAbilityScore = score;
       }
     }
