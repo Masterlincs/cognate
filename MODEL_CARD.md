@@ -6,7 +6,7 @@ Status: **provisional tag-proxy promotion on selection-exposed development**. No
 
 A fine-tune of [`intfloat/e5-base-v2`](https://huggingface.co/intfloat/e5-base-v2) (revision `f52bf8ec8c7124536f0efb74aca902b2995e5bcd`, MIT licence). It maps a Magic: The Gathering card's rules text to a 768-dimensional unit vector. Cards whose main effects are similar should be close by cosine.
 
-Intended use: card-to-card discovery ("cards that do something like this card"), as in the Card Atlas site. It is not a natural-language search model. Query relevance was never measured, so this is not a claim about queries. It does not judge card strength, legality or deck fit.
+Intended use: card-to-card discovery ("cards that do something like this card"), as in the Cognate site. It is not a natural-language search model. Query relevance was never measured, so this is not a claim about queries. It does not judge card strength, legality or deck fit.
 
 ## Encoder contract
 

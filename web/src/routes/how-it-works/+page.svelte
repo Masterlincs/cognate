@@ -13,7 +13,7 @@
   import { contrastRows, runScore } from '#lib/study.js';
   import m from '#lib/generated/metrics.json';
 
-  const REPO = 'https://github.com/Masterlincs/mtg-embeddings';
+  const REPO = 'https://github.com/Masterlincs/cognate';
   const n = (x) => x.toLocaleString('en');
   const dep = m.deployed;
   const train = dep?.training;
@@ -84,8 +84,8 @@
 </script>
 
 <svelte:head>
-  <title>How it works · Card Atlas</title>
-  <meta name="description" content="How Card Atlas was built: a sentence-embedding model fine-tuned to find Magic cards with similar effects, how it was tested, and where it still fails." />
+  <title>How it works · Cognate</title>
+  <meta name="description" content="How Cognate was built: a sentence-embedding model fine-tuned to find Magic cards with similar effects, how it was tested, and where it still fails." />
 </svelte:head>
 
 {#snippet eyebrow(id)}<p class="eyebrow"><span class="num">{stepNo[id]}</span> {steps[stepNo[id] - 1][1]}</p>{/snippet}
@@ -93,7 +93,7 @@
 <article class="study">
   <header class="hero">
     <h1>Finding Magic cards by what they do, not what they say</h1>
-    <p class="lede">Pick a Magic: The Gathering card and Card Atlas lists the cards whose effects are most like it, even when the wording differs. Under it is e5-base-v2, a small open text-embedding model, fine-tuned on community tags. This page shows how it was built and tested, and where it still fails.</p>
+    <p class="lede">Pick a Magic: The Gathering card and Cognate lists the cards whose effects are most like it, even when the wording differs. Under it is e5-base-v2, a small open text-embedding model, fine-tuned on community tags. This page shows how it was built and tested, and where it still fails.</p>
     <div class="hero-actions">
       <div class="hero-search"><Search {names} id="hero-search" label="Open a card in the explorer" placeholder="Try a card, e.g. Counterspell" onfocus={loadNames} onpick={open} /></div>
       <a class="btn primary" href={resolve('/')}>Open the explorer</a>

@@ -309,7 +309,7 @@
 </script>
 
 <svelte:head>
-  <title>{card ? `${card.name} · Card Atlas` : 'Card Atlas'}</title>
+  <title>{card ? `${card.name} · Cognate` : 'Cognate'}</title>
   <meta name="description" content="Find Magic cards whose rules text does a similar thing, ranked by a fine-tuned embedding model." />
 </svelte:head>
 

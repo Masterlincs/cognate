@@ -1,4 +1,4 @@
-"""Static data for the Card Atlas site.
+"""Static data for the Cognate site.
 
 Three outputs, all derived from existing records:
 - a 2D map of a release's card vectors (t-SNE) with region labels from Tagger tags;

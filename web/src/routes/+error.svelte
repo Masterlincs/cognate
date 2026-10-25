@@ -8,7 +8,7 @@
   onMount(() => { loadFonts(); });
 </script>
 
-<svelte:head><title>{page.status} · Card Atlas</title></svelte:head>
+<svelte:head><title>{page.status} · Cognate</title></svelte:head>
 
 <div class="error">
   <h1>{page.status === 404 ? 'Page not found' : 'Something went wrong'}</h1>

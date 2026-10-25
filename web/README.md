@@ -1,4 +1,4 @@
-# Card Atlas
+# Cognate
 
 A static SvelteKit site for the effect-similarity model. Two pages:
 
@@ -48,7 +48,7 @@ Copy `build/` to any static host. The site uses relative paths, so it also works
 server {
     listen 80;
     server_name example.org;
-    root /var/www/card-atlas;
+    root /var/www/cognate;
 
     location / {
         try_files $uri $uri.html $uri/ =404;

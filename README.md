@@ -2,7 +2,7 @@
 
 Find Magic: The Gathering cards that do the same thing, not just cards that use the same words.
 
-This project fine-tunes [`intfloat/e5-base-v2`](https://huggingface.co/intfloat/e5-base-v2) so that cards with similar effects sit close together, evaluates it against pretrained and lexical baselines with a pre-registered protocol, and serves the result in **Card Atlas**, a static site for browsing each card's nearest neighbours.
+This project fine-tunes [`intfloat/e5-base-v2`](https://huggingface.co/intfloat/e5-base-v2) so that cards with similar effects sit close together, evaluates it against pretrained and lexical baselines with a pre-registered protocol, and serves the result in **Cognate**, a static site for browsing each card's nearest neighbours.
 
 On development cards the deployed model reaches **nDCG@10 0.714**, against 0.566 for pretrained E5 and 0.604 for character TF-IDF. The earlier 2000-update model was evaluated once on a sealed split and scored 0.705 there. Relevance throughout is a **tag proxy** built from Scryfall Tagger tags, not human judgement.
 
@@ -66,7 +66,7 @@ The model cleared its pre-registered promotion gate against both comparators on 
 - **Training.** Masked InfoNCE on 108,220 pairs of fit cards that share a tag. In-batch negatives that share an eligible tag or a family with the anchor are masked, and each pair gets one hard negative from its lexical neighbours. 32 pairs per batch, learning rate 3e-5, 4000 updates, on a laptop Intel Arc iGPU (3.8 h). See [MODEL_CARD.md](MODEL_CARD.md).
 - **Evaluation.** nDCG@10 for each development anchor against the whole fit and development catalogue. Comparisons, seeds, thresholds and the promotion gate were registered before the runs they judge. Decisions and the evidence behind them are logged in [the decision log].
 
-## Card Atlas
+## Cognate
 
 A SvelteKit static site in [`web/`](web/README.md). The explorer offers name search, a 2D map of the catalogue, and the 200 nearest neighbours of each card with colour, type and mana-value filters. It also offers exploratory views: per-ability neighbours, line match and face match, none of which is claimed as an improvement. A case-study page explains the project and compares the pretrained and fine-tuned neighbours side by side. The site reads a static release bundle exported by `mtgemb export`. Nothing has been published yet.
 
@@ -128,7 +128,7 @@ npm run build
 - `configs/`: the registered training configurations, one per run.
 - `exam/`: the trap exam worksheet.
 - `scripts/`: the run queue and the follow-up experiment pipeline.
-- `web/`: Card Atlas.
+- `web/`: Cognate.
 - `runs/`, `artifacts/`, `data/`: git-ignored run logs, models and data.
 
 ## Limitations
@@ -146,6 +146,6 @@ npm run build
 
 The code and documentation are MIT licensed ([LICENSE](LICENSE)). That licence does not cover Magic: The Gathering card names, rules text, symbols or images.
 
-Card Atlas is unofficial Fan Content permitted under the [Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy). Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
+Cognate is unofficial Fan Content permitted under the [Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy). Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
 
 Card data and images come from [Scryfall](https://scryfall.com) and tags from Scryfall Tagger, used under Scryfall's API terms: the site is free with no sign-up, card images are shown whole (artist and copyright line intact) and linked from Scryfall's servers, and the project adds a new similarity search rather than republishing Scryfall's data. Not affiliated with Scryfall. The pinned `intfloat/e5-base-v2` and `BAAI/bge-small-en-v1.5` revisions are recorded in the decision log; both are MIT licensed ([E5-base-v2](https://huggingface.co/intfloat/e5-base-v2), [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)).
