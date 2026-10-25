@@ -1,6 +1,6 @@
 <script>
   import { onMount, tick, untrack } from 'svelte';
-  import { asset } from '$app/paths';
+  import { asset, resolve } from '$app/paths';
   import { afterNavigate, beforeNavigate, pushState, replaceState } from '$app/navigation';
   import { page } from '$app/state';
   import CardMap from '#lib/CardMap.svelte';
@@ -9,19 +9,33 @@
   import CardTile from '#lib/CardTile.svelte';
   import ColourFilter from '#lib/ColourFilter.svelte';
   import Compare from '#lib/Compare.svelte';
+  import Examples from '#lib/Examples.svelte';
   import Rules from '#lib/Rules.svelte';
   import Search from '#lib/Search.svelte';
   import Segmented from '#lib/Segmented.svelte';
   import { filterNeighbours, isV4Plus, isV5Plus, isV6, parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
   import { entryKey, newEntryId } from '#lib/history.js';
   import { getAbilities, getCard, getFaces, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
-  import { activeFilters, hasMore, resolveSelection, savedList } from '#lib/explorer.js';
+  import { activeFilters, clearFilter, filterChips, hasMore, randomIndex, resolveSelection, savedList } from '#lib/explorer.js';
+  import { fixed, mean } from '#lib/format.js';
   import { loadFonts } from '#lib/load-fonts.js';
   import { remember } from '#lib/search.js';
-  import { decodeMap, regionLabel } from '#lib/map.js';
+  import { runScore } from '#lib/study.js';
+  import { decodeMap, regionLabel, TEXTLESS } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
 
   const PAGE = 12;
+  // the ranking modes, with what each does and how far it was tested (the caveats are the evaluation's, keep them)
+  const MODES = {
+    whole: { label: 'Whole card', hint: 'Compare all of each card’s rules text at once', about: 'Compares all of each card’s rules text at once.', note: 'The ranking the model was evaluated on.' },
+    line: { label: 'Line match', hint: 'Pair each line with the closest line on the other card', about: 'Pairs each line with the closest line on the other card, so one shared ability can count even when the rest differs.', note: 'Exploratory: ranked below whole-card on an earlier model’s tag benchmark.' },
+    face: { label: 'Face match', hint: 'Also score each face of a two-faced card on its own', about: 'Also scores each face of a two-faced card on its own, so a card can match on just its front or back.', note: 'Exploratory: about the same as whole-card on the development benchmark.' },
+  };
+  const ICON_LIST = 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01';
+  const ICON_GRID = 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z';
+  // the landing page's headline number, computed as the How it works page does
+  const depRow = Object.values(metrics.dev ?? {}).find((r) => r.runs.includes(metrics.deployed?.run_id));
+  const headline = depRow ? { tuned: runScore(depRow, metrics.deployed.run_id) ?? mean(depRow.full), base: metrics.dev['pretrained E5-base'] ? mean(metrics.dev['pretrained E5-base'].full) : null } : null;
   const NO_FILTERS = { color: '', colorMode: 'include', colorBy: 'identity', minMv: null, maxMv: null, creature: '', type: '' };
   const PARAM_NAMES = { color: 'colour', cm: 'colour match', cb: 'colour or identity', min: 'minimum mana value', max: 'maximum mana value', creature: 'creatures' };
   let release = $state.raw(null);
@@ -55,6 +69,10 @@
   let filtersOpen = $state(false); // narrow screens fold the filter fields behind one button
   let token = 0;
   let recent = $state.raw([]); // [{ id, name }], newest first, kept in localStorage
+  let exampleCards = $state.raw({}); // showcase id -> card, for the landing page's example tiles
+  let hoverIndex = $state(-1); // the result row under the pointer, ringed on the map
+  let copied = $state(false);
+  let resultsList = $state(null);
   let restoreY = $state(null); // back/forward: the scroll position to return to once that list has loaded
   const positions = new Map(); // history entry key (entryKey) -> { y, shown } when the page left that entry
   let entry = null; // the current history entry's id in page.state, or null for one made before this page ran
@@ -70,13 +88,37 @@
   const byFace = $derived(ability === null && rank === 'face');
   const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, faces: faceRows, abilities }).filter(([i]) => !hidden.has(i)));
   const filtering = $derived(activeFilters(filters));
-  const filterCount = $derived([filters.color, filters.creature, filters.type, Number.isFinite(filters.minMv) || Number.isFinite(filters.maxMv)].filter(Boolean).length);
+  const chips = $derived(filterChips(filters));
   const visible = $derived(filterNeighbours(saved, (i) => byIndex[i], filters));
   const pageRows = $derived(visible.slice(0, shown));
   const shownError = $derived(error || (ability === null && rowsError[rank]) || '');
   const pending = $derived((byLine && lineRows === null) || (byFace && faceRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
   const showcase = metrics.showcase ?? [];
   const recentOptions = $derived(names && idsLoaded ? recent.map((r) => ({ index: byId(r.id), name: r.name })).filter((r) => r.index >= 0 && r.index !== index) : []);
+  const examples = $derived(showcase.map((ex) => ({ id: ex.id, name: ex.name, card: exampleCards[ex.id] ?? null })));
+  const rankNote = $derived(ability !== null ? { about: 'Each card scores by its line closest to the one picked above.', note: 'Exploratory: line matches were not evaluated.' } : MODES[rank] ?? MODES.whole);
+
+  // the result row under the pointer, ringed on the map (one listener on the list, not one per row)
+  $effect(() => {
+    const list = resultsList;
+    if (!list) return;
+    const over = (e) => { const li = e.target.closest?.('li[data-index]'); hoverIndex = li ? Number(li.dataset.index) : -1; };
+    const out = () => { hoverIndex = -1; };
+    list.addEventListener('pointerover', over);
+    list.addEventListener('pointerleave', out);
+    return () => { list.removeEventListener('pointerover', over); list.removeEventListener('pointerleave', out); hoverIndex = -1; };
+  });
+
+  // the landing page's example tiles: their cards once ids.json is in (a failed shard leaves the name only)
+  $effect(() => {
+    if (!idsLoaded || card) return;
+    untrack(() => {
+      for (const ex of showcase) {
+        const i = byId(ex.id);
+        if (i >= 0 && !exampleCards[ex.id]) getCard(i).then((c) => { exampleCards = { ...exampleCards, [ex.id]: c }; }).catch(() => {});
+      }
+    });
+  });
 
   // Back/Forward: SvelteKit sets page.state for the entry landed on after the popstate event, so
   // read its id here rather than in the event
@@ -158,6 +200,7 @@
     error = ''; rowsError = {};
     compare = null;
     shown = PAGE;
+    hoverIndex = -1;
     try {
       // card shards are checked against ids.json, so wait for it before the first load
       if (!ids) await idsReady;
@@ -242,11 +285,44 @@
     setTab(tab === 'results' ? 'map' : 'results').then(() => document.getElementById(`tab-${tab}`)?.focus());
   }
 
-  // "/" jumps to the search box, as on many search sites
-  function slash(e) {
-    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || compare || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
-    const box = document.querySelector('.explorer [role=combobox]');
-    if (box) { e.preventDefault(); box.focus(); }
+  // "/" jumps to the search box, as on many search sites; "r" opens a random card
+  function shortcut(e) {
+    if (e.ctrlKey || e.metaKey || e.altKey || compare || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+    if (e.key === '/') {
+      const box = document.querySelector('.explorer [role=combobox]');
+      if (box) { e.preventDefault(); box.focus(); }
+    } else if ((e.key === 'r' || e.key === 'R') && !e.shiftKey && !e.repeat && ids) {
+      e.preventDefault();
+      random();
+    }
+  }
+
+  // any card with rules text that the map and lists show, other than the one already open
+  function random() {
+    if (!ids) return;
+    const i = randomIndex(ids.length, (k) => k !== index && !hidden.has(k) && (!map || map.x[k] !== TEXTLESS));
+    if (i >= 0) select(i);
+  }
+
+  function setFilters(next) {
+    filters = next;
+    notice = '';
+    updateUrl(false);
+  }
+
+  // the removed chip's button goes away, so keep focus in the bar: the next chip, else the view switch
+  async function removeChip(key) {
+    setFilters(clearFilter(filters, key));
+    await tick();
+    (document.querySelector('.fchip') ?? document.querySelector('.view [aria-pressed=true]'))?.focus();
+  }
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(location.href);
+      copied = true;
+      setTimeout(() => (copied = false), 1800);
+    } catch { /* no clipboard permission: the address bar still has the link */ }
   }
 
   function setView(value) {
@@ -265,6 +341,8 @@
   const setMv = (key, el) => { const v = numberOrNull(el.value); if (v === null) el.value = ''; setFilter(key, v); };
   const byId = (id) => (ids ? resolveSelection(ids, { card: id }).index : -1);
   const pick = (c) => { const i = byId(c.id); if (i >= 0) select(i); };
+  // an example tile opens in place once ids.json is in; before that its link loads the page
+  const pickExample = (id) => { const i = byId(id); if (i < 0) return false; select(i); return true; };
 
   // a plain link to this page (header logo, Explore) keeps the component, so re-read the URL
   beforeNavigate(({ type }) => { if (type === 'link') keep(); });
@@ -314,7 +392,9 @@
   <meta name="description" content="Find Magic cards whose rules text does a similar thing, ranked by a fine-tuned embedding model." />
 </svelte:head>
 
-<svelte:window onkeydown={slash} />
+{#snippet dice()}<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.75" /><circle cx="5.4" cy="5.4" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="10.6" cy="10.6" r="1" /></svg>{/snippet}
+
+<svelte:window onkeydown={shortcut} />
 
 <div class="explorer" class:has-card={card}>
   <div class="tabs" role="tablist" aria-label="View">
@@ -324,7 +404,7 @@
 
   <section class="map-pane" id="map-pane" class:hidden={tab !== 'map'} aria-label="Card map">
     {#if map && names}
-      <CardMap {map} {regions} {names} selected={card?.has_text ? index : -1} neighbours={pageRows.map(([i]) => i)} onselect={(i) => select(i, { focus: false })} />
+      <CardMap {map} {regions} {names} selected={card?.has_text ? index : -1} neighbours={pageRows.map(([i]) => i)} highlight={hoverIndex} onselect={(i) => select(i, { focus: false })} />
       {#if card}
         <div class="map-bar"><span>{card.name}</span><button type="button" class="btn" onclick={() => setTab('results')}>See results</button></div>
       {/if}
@@ -342,17 +422,41 @@
     {#if !card}
       <div class="intro">
         <h1>Find Magic cards by what they do.</h1>
-        <Search {names} recent={recentOptions} onpick={(i) => select(i)} />
-        {#if showcase.length}
-          <div class="examples">
-            {#each showcase as ex (ex.id)}
-              <a class="chip" href="?card={ex.id}" onclick={(e) => { if (byId(ex.id) >= 0) { e.preventDefault(); select(byId(ex.id)); } }}>{ex.name}</a>
-            {/each}
-          </div>
+        <p class="lede">Pick a card and Cognate ranks the cards whose rules text does the most similar thing, even when it is worded differently.</p>
+        <div class="search-row">
+          <Search {names} recent={recentOptions} onpick={(i) => select(i)} />
+          <button type="button" class="btn random" onclick={random} disabled={!idsLoaded} aria-keyshortcuts="r" title="Open a random card (R)">{@render dice()}<span class="lbl">Random card</span></button>
+        </div>
+        <p class="keys muted"><kbd>/</kbd> search <kbd>R</kbd> random card <kbd>↑</kbd><kbd>↓</kbd> recent cards</p>
+
+        {#if examples.length}
+          <section class="block" aria-labelledby="examples-title">
+            <h2 id="examples-title" class="kicker">Try a classic</h2>
+            <Examples items={examples} onpick={pickExample} />
+          </section>
         {/if}
+
+        <section class="block how" aria-labelledby="how-title">
+          <h2 id="how-title" class="kicker">How to use it</h2>
+          <ol class="steps">
+            <li><strong>Pick a card</strong><span>Search by name, roll a random one, or click any dot on the map.</span></li>
+            <li><strong>Read the matches</strong><span>Up to {release?.k ?? 200} cards, closest effect first, each with its similarity score.</span></li>
+            <li><strong>Narrow them down</strong><span>Filter by colour, type and mana value, or compare two cards side by side.</span></li>
+          </ol>
+        </section>
+
+        <dl class="stats">
+          <div><dt>Cards indexed</dt><dd>{release ? release.n_cards.toLocaleString('en') : '—'}</dd></div>
+          {#if headline}<div><dt>nDCG@10 on development cards (tag proxy)</dt><dd>{fixed(headline.tuned)}{#if headline.base !== null}<span> vs {fixed(headline.base)} pretrained</span>{/if}</dd></div>{/if}
+          <div><dt>Model</dt><dd>e5-base-v2, fine-tuned</dd></div>
+        </dl>
+        <p class="more-link"><a href={resolve('/how-it-works')}>How it was trained and tested</a></p>
       </div>
     {:else}
-      <div class="top-search"><Search {names} recent={recentOptions} id="card-search-top" onpick={(i) => select(i)} /></div>
+      <div class="top-search">
+        <Search {names} recent={recentOptions} id="card-search-top" onpick={(i) => select(i)} />
+        <button type="button" class="btn random square" onclick={random} aria-label="Random card" aria-keyshortcuts="r" title="Random card (R)">{@render dice()}</button>
+      </div>
       <article class="selected" aria-labelledby="selected-name">
         <!-- keyed, so the last card's image never shows under the new card's name -->
         {#key card.id}{#if card.image}<img src={card.image} alt="" width="488" height="680" />{/if}{/key}
@@ -365,56 +469,94 @@
               {#each card.tags.slice(0, 10) as t (t)}<span class="chip">{tagLabels[t]}</span>{/each}
             </div>
           {/if}
-          <p class="links"><a href={card.scryfall_uri} rel="noopener">View on Scryfall</a></p>
+          <p class="links">
+            <a href={card.scryfall_uri} rel="noopener">View on Scryfall</a>
+            <button type="button" class="linkish" onclick={copyLink}>{copied ? 'Link copied' : 'Copy link'}</button>
+            <span class="sr-only" role="status">{copied ? 'Link copied' : ''}</span>
+          </p>
         </div>
       </article>
 
       {#if !card.has_text}
         <p class="notice">No rules text to compare.</p>
       {:else}
-        <div class="similar-by">
-          <h2>Similar cards</h2>
+        <section class="similar" aria-labelledby="similar-title">
+          <h2 id="similar-title">Similar cards</h2>
           {#if hasLines || abilities.length > 1}
-            {#if hasLines}<Segmented label="Rank by" options={[{ value: 'whole', label: 'Whole card' }, { value: 'line', label: 'Line match' }, ...(hasFaces ? [{ value: 'face', label: 'Face match' }] : [])]} value={ability === null ? rank : null} onchange={setRank} />{/if}
-            {#if !hasLines}<button type="button" class="btn" class:on={ability === null} aria-pressed={ability === null} onclick={() => setRank('whole')}>Whole card</button>{/if}
-            {#if abilities.length > 1}
-              <p class="by-label muted">Match one line</p>
-              <div class="by" role="group" aria-label="Match one line">
-                {#each abilities as a, k (k)}
-                  <button type="button" aria-pressed={ability === k} onclick={() => setAbility(k)}><Rules text={a.text} /></button>
-                {/each}
+            <div class="rank">
+              <div class="rank-row">
+                <span class="flabel" aria-hidden="true">Rank by</span>
+                {#if hasLines}
+                  <Segmented label="Rank by" describedby="rank-help" options={Object.entries(MODES).filter(([k]) => k !== 'face' || hasFaces).map(([value, m]) => ({ value, label: m.label, hint: m.hint }))} value={ability === null ? rank : null} onchange={setRank} />
+                {:else}
+                  <Segmented label="Rank by" describedby="rank-help" options={[{ value: 'whole', label: MODES.whole.label, hint: MODES.whole.hint }]} value={ability === null ? 'whole' : null} onchange={setRank} />
+                {/if}
               </div>
-            {/if}
-            {#if ability !== null || byFace || byLine}<p class="by-note muted">{#if ability !== null}Each card scores by its closest line. Exploratory: line matches were not evaluated.{:else if byFace}A two-faced card also counts as each face on its own. Exploratory: about the same as whole-card on the development benchmark.{:else}Each line is paired with the closest line on the other card. Exploratory: ranked below whole-card on an earlier model's tag benchmark.{/if}</p>{/if}
-          {/if}
-        </div>
-
-        <div class="filters" role="group" aria-label="Filter results">
-          <button type="button" class="btn ftoggle" aria-expanded={filtersOpen} aria-controls="filter-fields" onclick={() => (filtersOpen = !filtersOpen)}>Filters{#if filterCount}<span class="num">· {filterCount}</span>{/if}</button>
-          <div class="fields" id="filter-fields" class:open={filtersOpen}>
-            <div class="f"><span class="fl">Colour</span><ColourFilter color={filters.color} mode={filters.colorMode} basis={filters.colorBy} showBasis={hasColours} onchange={setColour} /></div>
-            <div class="f"><span class="fl">Type</span>
-              <Segmented label="Creatures" options={[{ value: '', label: 'Any' }, { value: 'creature', label: 'Creatures' }, { value: 'noncreature', label: 'Non-creatures' }]} value={filters.creature} onchange={(v) => setFilter('creature', v)} />
-              <input type="text" class="type" placeholder="Type line has…" aria-label="Type line contains" value={filters.type} oninput={(e) => setFilter('type', e.currentTarget.value)} />
+              <p class="rank-help" id="rank-help">{rankNote.about} <span class="muted">{rankNote.note}</span></p>
+              {#if abilities.length > 1}
+                <p class="flabel by-label" id="by-label">Or match one line</p>
+                <div class="by" role="group" aria-labelledby="by-label">
+                  {#each abilities as a, k (k)}
+                    <button type="button" aria-pressed={ability === k} onclick={() => setAbility(k)}><Rules text={a.text} /></button>
+                  {/each}
+                </div>
+              {/if}
             </div>
-            <div class="f"><span class="fl">Mana value</span>
-              <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} oninput={(e) => setFilter('minMv', numberOrNull(e.currentTarget.value))} onchange={(e) => setMv('minMv', e.currentTarget)} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} oninput={(e) => setFilter('maxMv', numberOrNull(e.currentTarget.value))} onchange={(e) => setMv('maxMv', e.currentTarget)} aria-label="Maximum mana value" />
+          {/if}
+
+          <div class="controls">
+            <div class="fields" id="filter-fields" class:open={filtersOpen} role="group" aria-label="Filter results">
+              <div class="field"><span class="flabel" aria-hidden="true">Colour</span><ColourFilter color={filters.color} mode={filters.colorMode} basis={filters.colorBy} showBasis={hasColours} onchange={setColour} /></div>
+              <div class="field"><span class="flabel" aria-hidden="true">Card type</span>
+                <div class="ctl">
+                  <Segmented label="Creatures" options={[{ value: '', label: 'Any' }, { value: 'creature', label: 'Creatures' }, { value: 'noncreature', label: 'Non-creatures' }]} value={filters.creature} onchange={(v) => setFilter('creature', v)} />
+                  <input type="search" class="type" placeholder="Type line has…" aria-label="Type line contains" value={filters.type} oninput={(e) => setFilter('type', e.currentTarget.value)} />
+                </div>
+              </div>
+              <div class="field"><span class="flabel" aria-hidden="true">Mana value</span>
+                <div class="mv">
+                  <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} oninput={(e) => setFilter('minMv', numberOrNull(e.currentTarget.value))} onchange={(e) => setMv('minMv', e.currentTarget)} aria-label="Minimum mana value" />
+                  <span aria-hidden="true">–</span>
+                  <input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} oninput={(e) => setFilter('maxMv', numberOrNull(e.currentTarget.value))} onchange={(e) => setMv('maxMv', e.currentTarget)} aria-label="Maximum mana value" />
+                </div>
+              </div>
+            </div>
+
+            <div class="list-bar">
+              <button type="button" class="btn ftoggle" aria-expanded={filtersOpen} aria-controls="filter-fields" onclick={() => (filtersOpen = !filtersOpen)}>
+                <svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11l-4.25 5v4l-2.5 1.25V8.5z" /></svg>Filters{#if chips.length}<span class="badge num">{chips.length}</span>{/if}
+              </button>
+              <p class="count" aria-live="polite">
+                {#if (byLine && lineRows === null) || (byFace && faceRows === null)}Loading matches…{:else if filtering}<strong class="num">{visible.length}</strong> of the top {saved.length} match{:else}Top <strong class="num">{saved.length}</strong> by similarity{/if}
+              </p>
+              {#if chips.length}
+                <ul class="active" aria-label="Active filters">
+                  {#each chips as c (c.key)}
+                    <li><button type="button" class="fchip" aria-label="Remove filter: {c.label}" onclick={() => removeChip(c.key)}>{c.label}<span aria-hidden="true">×</span></button></li>
+                  {/each}
+                  {#if chips.length > 1}<li><button type="button" class="linkish" onclick={() => setFilters({ ...NO_FILTERS })}>Clear all</button></li>{/if}
+                </ul>
+              {/if}
+              <div class="view"><Segmented label="View" options={[{ value: 'list', label: 'List', icon: ICON_LIST }, { value: 'grid', label: 'Grid', icon: ICON_GRID }]} value={view} onchange={setView} /></div>
             </div>
           </div>
-          <div class="f"><span class="fl">View</span><Segmented label="View" options={[{ value: 'list', label: 'List' }, { value: 'grid', label: 'Grid' }]} value={view} onchange={setView} /></div>
-          <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; notice = ''; updateUrl(false); }}>Clear filters</button>{:else}Filters apply to the {saved.length} most similar cards.{/if}</p>
-        </div>
 
-        <ol class="results" class:grid={view === 'grid'} aria-busy={busy || pending}>
-          {#each pageRows as [i, score], r (i)}
-            {@const Item = view === 'grid' ? CardGridItem : CardTile}
-            <li><Item card={byIndex[i]} {score} rank={r + 1} oncompare={(c) => (compare = { card: c, score })} onselect={() => select(i)} /></li>
-          {/each}
-          {#if pending}{#each { length: Math.max(0, Math.min(shown, saved.length) - pageRows.length) } as _, k (k)}<li class="ghost" aria-hidden="true"></li>{/each}{/if}
-        </ol>
-        {#if !pending && filtering && !visible.length}<p class="notice">No cards match these filters.</p>{/if}
-        {#if hasMore({ saved, visible, shown, filtering })}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
-        <p class="model-note muted">{byLine ? 'Line-match score' : 'Cosine similarity'}, {release.model.label}.</p>
+          <ol class="results" class:grid={view === 'grid'} aria-busy={busy || pending} bind:this={resultsList}>
+            {#each pageRows as [i, score], r (i)}
+              {@const Item = view === 'grid' ? CardGridItem : CardTile}
+              <li data-index={i}><Item card={byIndex[i]} {score} rank={r + 1} scoreLabel={byLine ? 'Line-match score' : 'Cosine similarity to the selected card'} oncompare={(c) => (compare = { card: c, score })} onselect={() => select(i)} /></li>
+            {/each}
+            {#if pending}{#each { length: Math.max(0, Math.min(shown, saved.length) - pageRows.length) } as _, k (k)}<li class="ghost" aria-hidden="true"></li>{/each}{/if}
+          </ol>
+          {#if !pending && filtering && !visible.length}
+            <div class="empty">
+              <p>None of the top {saved.length} cards match these filters.</p>
+              <button type="button" class="btn" onclick={() => setFilters({ ...NO_FILTERS })}>Clear filters</button>
+            </div>
+          {/if}
+          {#if hasMore({ saved, visible, shown, filtering })}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
+          <p class="model-note muted">{byLine ? 'Line-match score' : 'Cosine similarity'}, {release.model.label}.</p>
+        </section>
       {/if}
     {/if}
   </section>
@@ -429,15 +571,42 @@
   .map-loading { height: 100%; border-radius: var(--radius); background: var(--sunken); }
   .map-bar { display: none; }
   .results-pane { min-width: 0; }
-  .intro { padding: clamp(8px, 7vh, 88px) 0 24px; max-width: 600px; }
-  .intro h1 { margin: 0 0 20px; }
-  .examples { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 14px; font-size: 0.92rem; }
-  .examples .chip { padding: 0; background: none; border-radius: 0; color: var(--ink); font-size: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.25em; }
-  .examples .chip:hover { text-decoration-color: currentColor; }
-  /* the search stays in reach below the site header */
+  .ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+  .ico circle { fill: currentColor; stroke: none; }
+  .flabel { margin: 0; font-size: 0.72rem; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+  .linkish { padding: 0; border: 0; background: none; font-size: inherit; color: var(--ink); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 0.2em; }
+  .linkish:hover { text-decoration-color: currentColor; }
+
+  /* landing */
+  .intro { padding: clamp(8px, 5vh, 56px) 0 8px; max-width: 700px; }
+  .intro h1 { margin: 0 0 12px; }
+  .lede { max-width: 54ch; margin: 0 0 22px; font-size: 1.06rem; color: var(--muted); }
+  .search-row, .top-search { display: flex; gap: 8px; }
+  .search-row > :global(.search), .top-search > :global(.search) { flex: 1; min-width: 0; }
+  .random { flex: none; height: 48px; padding: 0 16px; font-size: 0.92rem; }
+  .random.square { width: 48px; padding: 0; justify-content: center; }
+  .keys { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 10px 0 0; font-size: 0.78rem; }
+  .keys kbd:not(:first-child) { margin-left: 8px; }
+  .keys kbd + kbd { margin-left: 0; }
+  @media not ((hover: hover) and (pointer: fine)) { .keys { display: none; } }
+  .block { margin-top: 36px; }
+  .kicker { margin: 0 0 12px; font-size: 0.75rem; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
+  .steps li { counter-increment: step; display: grid; align-content: start; gap: 3px; padding: 14px; border: 1px solid var(--line); border-radius: calc(var(--radius) + 2px); font-size: 0.85rem; line-height: 1.45; color: var(--muted); }
+  .steps li::before { content: counter(step); display: grid; place-items: center; width: 22px; height: 22px; margin-bottom: 6px; border-radius: 50%; background: var(--sunken); color: var(--ink); font-size: 0.75rem; font-weight: 700; }
+  .steps strong { font-size: 0.92rem; font-weight: 650; color: var(--ink); }
+  .stats { display: flex; flex-wrap: wrap; gap: 14px 36px; margin: 32px 0 0; padding-top: 18px; border-top: 1px solid var(--line); }
+  .stats div { display: flex; flex-direction: column-reverse; gap: 2px; }
+  .stats dt { font-size: 0.78rem; color: var(--muted); }
+  .stats dd { margin: 0; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
+  .stats dd span { margin-left: 4px; font-size: 0.82rem; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+  .more-link { margin: 14px 0 0; font-size: 0.9rem; }
+  .more-link a::after { content: ' →'; }
+
+  /* the selected card; the search stays in reach below the site header */
   .top-search { position: sticky; top: 56px; z-index: 15; margin: -8px 0 14px; padding: 8px 0; background: var(--bg); }
   .selected h1:focus { outline: none; }
-  .busy :is(.selected, .similar-by, .filters, .results) { opacity: 0.55; transition: opacity 0.2s 0.15s; }
+  .busy :is(.selected, .similar) { opacity: 0.55; transition: opacity 0.2s 0.15s; }
   .selected { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
   .selected img { width: 180px; height: auto; aspect-ratio: 488 / 680; border-radius: 9px; background: var(--sunken); }
   .selected-body { min-width: 0; }
@@ -445,34 +614,61 @@
   .selected :global(.card-text) { font-size: 1.02rem; }
   .cost { font-size: 1.05rem; vertical-align: 0.2em; white-space: nowrap; letter-spacing: 0; }
   .tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 14px; font-size: 0.82rem; }
-  .links { margin: 14px 0 0; font-size: 0.9rem; }
-  .similar-by { margin: 26px 0 0; }
-  .similar-by h2 { margin-bottom: 12px; }
+  .links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 14px 0 0; font-size: 0.9rem; }
+
+  /* ranking */
+  .similar { margin-top: 26px; }
+  .similar h2 { margin-bottom: 14px; }
+  .rank { display: grid; gap: 8px; }
+  .rank-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .rank-help { max-width: 70ch; margin: 0; font-size: 0.86rem; }
+  .by-label { margin-top: 8px; }
   .by { display: flex; flex-direction: column; gap: 2px; }
   .by button { max-width: 100%; padding: 6px 10px; border: 0; border-left: 2px solid var(--line); background: none; font-size: 0.88rem; text-align: left; overflow-wrap: anywhere; color: var(--muted); }
-  .by button:hover { color: var(--ink); }
+  .by button:hover { color: var(--ink); border-left-color: var(--muted); }
   .by button[aria-pressed='true'] { border-left-color: var(--ink); color: var(--ink); background: var(--surface); }
-  .btn.on { border-color: var(--ink); }
-  .by-note { font-size: 0.84rem; margin: 10px 0 0; max-width: 70ch; }
-  .by-label { font-size: 0.84rem; margin: 14px 0 6px; }
-  .filters { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 26px; margin: 22px 0 6px; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-  .f { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-  .fl { font-size: 0.84rem; font-weight: 600; }
-  .filters input { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-size: 0.88rem; }
-  .filters input[type='number'] { width: 66px; }
-  .filters input.type { width: 140px; }
-  .fstatus { flex-basis: 100%; margin: 0; font-size: 0.82rem; }
+
+  /* filters, then the bar over the list: count, active filters, view */
+  .controls { display: flex; flex-direction: column; margin-top: 20px; }
+  .fields { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px 28px; padding: 14px 16px; border: 1px solid var(--line); border-radius: calc(var(--radius) + 2px); background: var(--surface); }
+  .field { display: grid; gap: 6px; }
+  .ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .fields input { height: 34px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); font-size: 0.88rem; }
+  .fields input.type { width: 150px; }
+  .mv { display: inline-flex; align-items: center; height: 34px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--muted); }
+  .mv:focus-within { border-color: var(--ink); }
+  .fields .mv input { width: 62px; height: 32px; border: 0; background: none; text-align: center; }
+  .list-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 14px; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
+  .count { margin: 0; font-size: 0.86rem; color: var(--muted); }
+  .count strong { color: var(--ink); font-weight: 650; }
+  .active { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 0.8rem; }
+  .fchip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 7px 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 0.78rem; font-weight: 550; }
+  .fchip span { font-size: 1rem; line-height: 1; color: var(--muted); }
+  .fchip:hover { border-color: var(--ink); }
+  .fchip:hover span { color: var(--ink); }
+  .view { margin-left: auto; }
   .ftoggle { display: none; }
-  .fields { display: contents; }
-  .linkish { padding: 0; border: 0; background: none; font-size: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 0.2em; }
+  .badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--ink); color: var(--bg); font-size: 0.72rem; font-weight: 700; }
+
+  /* results */
   .results { margin: 0; padding: 0; list-style: none; }
   .results > li { display: grid; min-width: 0; border-bottom: 1px solid var(--line); }
-  .results.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 22px 16px; padding-top: 14px; }
+  .results.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 22px 16px; padding-top: 16px; }
   .results.grid > li { border-bottom: 0; }
   .results.grid .ghost { min-height: 0; aspect-ratio: 488 / 680; margin: 0; }
   .ghost { min-height: 120px; margin: 8px 0; border-radius: var(--radius); background: var(--sunken); }
+  @media (prefers-reduced-motion: no-preference) { .ghost { animation: pulse 1.4s ease-in-out infinite; } }
+  @keyframes pulse { 50% { opacity: 0.55; } }
+  .empty { display: grid; justify-items: start; gap: 10px; padding: 26px 0 8px; }
+  .empty p { margin: 0; color: var(--muted); }
   .more { margin: 18px auto 0; display: flex; }
   .model-note { font-size: 0.8rem; margin-top: 22px; }
+
+  @media (max-width: 1100px) {
+    .steps { grid-template-columns: minmax(0, 1fr); }
+    .steps li { grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; }
+    .steps li::before { grid-row: span 2; margin: 0; }
+  }
   @media (max-width: 900px) {
     .explorer { grid-template-columns: minmax(0, 1fr); gap: 14px; padding-top: 12px; }
     /* at the foot of the screen, in thumb reach, while the explorer is in view */
@@ -481,25 +677,33 @@
     .tabs button + button { border-left: 1px solid var(--line); }
     .tabs button[aria-selected='true'] { background: var(--ink); color: var(--bg); }
     .explorer:not(.has-card) .tabs { display: none; }
-    .explorer:not(.has-card) .map-pane { display: block; position: static; height: 46dvh; min-height: 280px; order: 2; }
+    .explorer:not(.has-card) .map-pane { display: block; position: static; height: 52dvh; min-height: 300px; order: 2; }
     .map-pane { position: relative; top: 0; height: calc(100dvh - 150px); min-height: 360px; }
     .hidden { display: none; }
     .explorer:not(.has-card) .results-pane { display: block; }
     .map-bar { display: flex; position: absolute; left: 10px; right: 52px; top: 10px; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-weight: 600; font-size: 0.9rem; }
     .map-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .filters { gap: 10px 16px; padding: 10px 0; }
-    .ftoggle { display: inline-flex; height: 32px; }
+    .intro { padding-top: 8px; }
+    .block { margin-top: 28px; }
+    .ftoggle { display: inline-flex; height: 34px; }
     .ftoggle[aria-expanded='true'] { border-color: var(--ink); }
-    .fields { display: none; order: 2; flex-basis: 100%; flex-direction: column; align-items: flex-start; gap: 12px; padding: 4px 0; }
+    .list-bar { order: 1; margin-top: 0; }
+    .fields { display: none; order: 2; flex-direction: column; align-items: stretch; margin-top: 12px; }
     .fields.open { display: flex; }
-    .fstatus { order: 3; }
+    .view { order: 1; }
+    .active { order: 2; flex-basis: 100%; }
+    .count { flex-basis: 100%; order: 3; }
+    /* on a phone the map follows the intro, so keep the intro short */
+    .how { display: none; }
     .selected { grid-template-columns: 110px minmax(0, 1fr); gap: 14px; }
     .selected img { width: 110px; }
-    .intro { padding-top: 8px; }
   }
   @media (max-width: 480px) {
     .selected { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; }
     .selected img { width: 92px; border-radius: 5px; }
     .selected h1 { font-size: 1.45rem; }
+    .random { width: 48px; padding: 0; justify-content: center; }
+    .random .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+    .stats dd { font-size: 1.1rem; }
   }
 </style>
