@@ -15,25 +15,9 @@ export function searchKeys(names) {
   return keyCache.get(names);
 }
 
-export function searchNames(query, names, ids = null, limit = 12) {
-  const q = normalize(query);
-  if (!q) return [];
-  const exacts = [];
-  const prefixes = [];
-  const substrings = [];
-  const keys = searchKeys(names);
-  for (let i = 0; i < keys.length; i += 1) {
-    const strings = keys[i];
-    if (strings.some((s) => s === q)) exacts.push(i);
-    else if (strings.some((s) => s.startsWith(q))) prefixes.push(i);
-    else if (strings.some((s) => s.includes(q))) substrings.push(i);
-  }
-  return [...exacts, ...prefixes, ...substrings].slice(0, limit).map((index) => ({ index, id: ids?.[index] ?? '', name: names.names[index] }));
-}
-
 // C = colourless; otherwise picked is a WUBRG subset matched as include (has all picked),
 // exact (the same colours) or within (no colour outside picked; colourless cards pass)
-export function colourMatch(identity, picked, mode = 'include') {
+function colourMatch(identity, picked, mode = 'include') {
   if (picked === 'C') return identity === '';
   const has = (c) => identity.includes(c);
   if (mode === 'within') return [...identity].every((c) => picked.includes(c));

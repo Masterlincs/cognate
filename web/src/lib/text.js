@@ -21,8 +21,6 @@ export function sharedLines(a, b) {
   return new Set(cardLines(b).map((l) => lineKey(b, l.text)).filter((k) => keys.has(k)));
 }
 
-export const manaTokens = (cost) => [...(cost ?? '').matchAll(/\{([^}]+)\}/g)].map((m) => m[1]);
-
 // The Mana font class for one {X} symbol, or null when the font has no glyph for it.
 const MANA_SPECIAL = { T: 'tap', Q: 'untap', '1/2': '1-2', '½': '1-2' };
 export function manaClass(sym) {

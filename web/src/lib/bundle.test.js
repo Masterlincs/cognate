@@ -1,28 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchKeys, searchNames, serializeUrl, validateIds, validateRelease, validateTags, validateReleasePointer, validateShard } from './bundle.js';
+import { filterNeighbours, normalize, parseUrl, resolveAbilityIndex, searchKeys, serializeUrl, validateIds, validateRelease, validateTags, validateReleasePointer, validateShard } from './bundle.js';
 
 const names = { names: ['Café Lantern', 'Blue Door', 'Green Thread // Thread Unbound'], aliases: [['Thread Unbound', 2]] };
 const ids = { ids: ['a', 'b', 'c'] };
 const release = { schema: 'mtgemb-release-v2', n_cards: 3, shard_size: 2, k: 2 };
 
 describe('search and ranking helpers', () => {
-  it('normalizes accents and searches prefixes before substring matches', () => {
+  it('normalizes accents and case', () => {
     expect(normalize(' CAFÉ ')).toBe('cafe');
-    expect(searchNames('thread', names)[0].id).toBe('');
-    expect(searchNames('thread unbound', names, ids.ids)[0]).toMatchObject({ index: 2, id: 'c' });
-    expect(searchNames('thread', names, ids.ids).map((entry) => entry.id)).toEqual(['c']);
-    const order = { names: ['The Silver Lamp', 'Silver Lamp Keeper'], aliases: [] };
-    expect(searchNames('silver lamp', order).map((entry) => entry.index)).toEqual([1, 0]);
-    expect(searchNames('silver lamp', order).map((entry) => entry.id)).toEqual(['', '']);
-  });
-
-  it('matches accented names, case and aliases, exact before prefix before substring', () => {
-    const list = { names: ['Lim-Dûl the Necromancer', 'Jötun Grunt', 'Æther Vial', 'Grunt Totem', 'Dust Grunt'], aliases: [['Lim-Dul', 0], ['Grunt', 3]] };
-    expect(searchNames('LIM-DUL', list).map((entry) => entry.index)).toEqual([0]);
-    expect(searchNames('jotun', list).map((entry) => entry.index)).toEqual([1]);
-    expect(searchNames('æther', list).map((entry) => entry.index)).toEqual([2]);
-    expect(searchNames('grunt', list).map((entry) => entry.index)).toEqual([3, 1, 4]);
-    expect(searchNames('   ', list)).toEqual([]);
   });
 
   // the first search normalises every name once (it took about 0.6 s on the throttled mobile profile)

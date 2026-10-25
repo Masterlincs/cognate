@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { cardLines, manaClass, manaTokens, maskNumbers, sharedLines } from './text.js';
+import { cardLines, manaClass, maskNumbers, sharedLines } from './text.js';
 
 const card = (name, ...texts) => ({ name, faces: texts.map((t, i) => ({ name: i ? `${name} back` : name, oracle_text: t, mana_cost: '', type_line: '' })) });
 
@@ -27,11 +27,6 @@ describe('text helpers', () => {
 
   it('cardLines keeps face index', () => {
     expect(cardLines(card('A', 'One\n\nTwo', 'Three'))).toEqual([{ face: 0, text: 'One' }, { face: 0, text: 'Two' }, { face: 1, text: 'Three' }]);
-  });
-
-  it('manaTokens splits hybrid and generic', () => {
-    expect(manaTokens('{2}{R}{W/U}')).toEqual(['2', 'R', 'W/U']);
-    expect(manaTokens('')).toEqual([]);
   });
 });
 
