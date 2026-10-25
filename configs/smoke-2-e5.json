@@ -1,3 +1,0 @@
-{"run_id": "smoke-2-e5", "slot": "smoke-2", "hypothesis": "engineering: XPU resume determinism; same config as smoke-1, interrupted at 20",
- "backbone": "e5-base-v2", "max_length": 94, "lr": 3e-5, "scale": 20.0, "batch_pairs": 32, "hard_negatives": 1, "neg_band": [1, 30],
- "total_updates": 40, "eval_every": 40, "guardrail_hard_lexical": 0.5395124002293517, "dataset_dir": "data/processed/2026-10-16_no_reminder_v1"}

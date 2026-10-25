@@ -1,3 +1,0 @@
-{"run_id": "smoke-3-bge", "slot": "smoke-3", "hypothesis": "engineering: BGE-small step time, memory, eval cost under the same 32 pairs + 1 hard negative pool",
- "backbone": "bge-small-en-v1.5", "max_length": 92, "lr": 3e-5, "scale": 20.0, "batch_pairs": 32, "hard_negatives": 1, "neg_band": [1, 30],
- "total_updates": 40, "eval_every": 40, "guardrail_hard_lexical": 0.5135952028622092, "dataset_dir": "data/processed/2026-10-16_no_reminder_v1"}

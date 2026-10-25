@@ -6,4 +6,5 @@ build/
 !public/data/**
 public/data/20*/
 public/data/site-*/
+public/data/fixture-*/
 public/data/*.partial/

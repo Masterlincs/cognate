@@ -111,17 +111,9 @@ def main(argv: list[str] | None = None) -> None:
     q = sub.add_parser("exam-guard", help="find trap-exam regressions between two models")
     q.add_argument("old")
     q.add_argument("new")
-    q = sub.add_parser("annotate", help="run the local web app to label a blinded human pilot pool")
-    q.add_argument("pool_dir")
-    q.add_argument("--port", type=int, default=8765)
     a = ap.parse_args(argv)
 
-    if a.cmd == "annotate":
-        from .annotate import serve
-
-        serve(a.pool_dir, a.port)
-        return
-    elif a.cmd == "exam-score":
+    if a.cmd == "exam-score":
         from .exam import exam_score
 
         out = exam_score(a.ds, a.name, a.backbone, a.max_length, a.model_path,
