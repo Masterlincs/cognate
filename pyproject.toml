@@ -1,7 +1,7 @@
 [project]
 name = "mtgemb"
 version = "0.1.0"
-description = "MTG effect-similarity embeddings: data, training, evaluation, export"
+description = "Fine-tuned text embeddings for Magic: The Gathering card effect similarity"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "torch==2.14.1",

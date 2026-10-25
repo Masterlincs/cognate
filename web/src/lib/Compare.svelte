@@ -21,7 +21,7 @@
     </header>
     <p class="meta">
       {#if score !== null}Similarity <span class="num">{score.toFixed(3)}</span>. {/if}
-      {shared.size ? `${shared.size} ${shared.size > 1 ? 'lines appear' : 'line appears'} on both cards (highlighted; numbers and card names ignored).` : 'No line appears on both cards, so the similarity does not come from identical wording.'}
+      {shared.size ? `${shared.size} ${shared.size > 1 ? 'lines' : 'line'} shared (highlighted).` : 'No shared lines.'}
     </p>
     <div class="cols">
       {#each [a, b] as card, i (i)}

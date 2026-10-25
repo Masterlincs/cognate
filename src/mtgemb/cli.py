@@ -1,4 +1,4 @@
-"""Command line entry points. Each command runs a real, implemented pipeline step."""
+"""Command-line entry points for each pipeline step."""
 
 from __future__ import annotations
 
@@ -49,7 +49,7 @@ def gpu_limits(env=None, clock=None, sleep=None) -> dict:
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="mtgemb")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("acquire", help="download the current Scryfall bulk snapshot")
+    sub.add_parser("acquire", help="download the Scryfall bulk snapshot")
     p = sub.add_parser("prepare", help="build the processed dataset from a raw snapshot")
     p.add_argument("raw_dir")
     p.add_argument("--out")
@@ -58,7 +58,7 @@ def main(argv: list[str] | None = None) -> None:
         q.add_argument("--ds", default=DEFAULT_DS)
         if name == "pairs":
             q.add_argument("--version", default="pairs_v1", choices=["pairs_v1", "pairs_v2"])
-    q = sub.add_parser("eval-encoder", help="evaluate a pretrained or fine-tuned encoder")
+    q = sub.add_parser("eval-encoder", help="evaluate a pretrained or fine-tuned encoder on dev")
     q.add_argument("name")
     q.add_argument("backbone")
     q.add_argument("--max-length", type=int, required=True)
@@ -66,7 +66,7 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("replay-eval", help="re-score recorded evaluations from saved vectors")
     q.add_argument("--ds", default=DEFAULT_DS)
-    q = sub.add_parser("variants", help="face-match and effect-only scores of a dev eval")
+    q = sub.add_parser("variants", help="face-match and effect-only scores for a dev eval")
     q.add_argument("name")
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("export", help="encode the catalogue and write a release bundle")
@@ -81,15 +81,20 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--from-release", metavar="ID")
     q.add_argument("--decision", help="promotion decision text for a promoted release")
     q.add_argument("--ds", default=DEFAULT_DS)
-    q = sub.add_parser("confirm-report", help="confirmation contrasts and promotion decision")
+    q = sub.add_parser(
+        "confirm-report", help="compute confirmation contrasts and print the promotion decision"
+    )
     q.add_argument("--ds", default=DEFAULT_DS)
     q.add_argument("--design", choices=["d18", "x1"], default="d18")
-    q = sub.add_parser("site-data", help="map, pretrained neighbours and metrics for the site")
+    q = sub.add_parser("site-data", help="build map, pretrained neighbours, and site metrics")
     q.add_argument("--release", metavar="ID")
     q.add_argument("--metrics-only", action="store_true")
-    q.add_argument("--copy-from", metavar="ID", help="copy the map of a release with the same "
-                   "card vectors instead of recomputing it")
-    q = sub.add_parser("sealed-eval", help="authorised one-shot sealed evaluation")
+    q.add_argument(
+        "--copy-from",
+        metavar="ID",
+        help="copy the map of an earlier release with identical card vectors",
+    )
+    q = sub.add_parser("sealed-eval", help="run the authorised one-shot sealed evaluation")
     q.add_argument("--ds", default=DEFAULT_DS)
     q = sub.add_parser("train", help="train or resume a run from a JSON config")
     q.add_argument("config")
@@ -101,10 +106,10 @@ def main(argv: list[str] | None = None) -> None:
     q.add_argument("--text-version", choices=["no_reminder_v1", "no_reminder_v2"],
                    default="no_reminder_v1")
     q.add_argument("--ds", default=DEFAULT_DS)
-    q = sub.add_parser("exam-guard", help="items that passed in OLD and fail in NEW (#10)")
+    q = sub.add_parser("exam-guard", help="find trap-exam regressions between two models")
     q.add_argument("old")
     q.add_argument("new")
-    q = sub.add_parser("annotate", help="label an existing blinded human pilot pool locally")
+    q = sub.add_parser("annotate", help="run the local web app to label a blinded human pilot pool")
     q.add_argument("pool_dir")
     q.add_argument("--port", type=int, default=8765)
     a = ap.parse_args(argv)

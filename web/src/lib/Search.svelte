@@ -2,7 +2,7 @@
   import { searchNames } from './bundle.js';
 
   // names: names.json (null while loading); onpick(index)
-  let { names, onpick, onfocus = null, id = 'card-search', label = 'Search for a card', placeholder = 'Search any card, e.g. Lightning Bolt' } = $props();
+  let { names, onpick, onfocus = null, id = 'card-search', label = 'Search for a card', placeholder = 'Card name' } = $props();
   let query = $state('');
   let active = $state(-1);
   let open = $state(false);

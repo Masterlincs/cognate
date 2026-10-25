@@ -29,6 +29,5 @@
 <main id="main">{@render children()}</main>
 
 <footer class="site-footer">
-  <p>Card Atlas finds Magic: The Gathering cards that do similar things, using a sentence-embedding model fine-tuned on card rules text. <a href={REPO} rel="noopener">Source and write-up on GitHub</a>.</p>
   <p class="fine">Card Atlas is unofficial Fan Content permitted under the <a href="https://company.wizards.com/en/legal/fancontentpolicy" rel="noopener">Fan Content Policy</a>. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card data and images from <a href="https://scryfall.com" rel="noopener">Scryfall</a>, tags from Scryfall Tagger; not affiliated with Scryfall.</p>
 </footer>

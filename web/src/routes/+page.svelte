@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { asset, resolve } from '$app/paths';
+  import { asset } from '$app/paths';
   import { afterNavigate, pushState, replaceState } from '$app/navigation';
   import AtlasMap from '#lib/AtlasMap.svelte';
   import CardText from '#lib/CardText.svelte';
@@ -136,9 +136,9 @@
     else if (r.index < 0) clear();
     else select(r.index, { push: false, abilityIndex: state.ability });
     // select() clears the notice before its first await, so these land after it
-    const dropped = state.dropped.length ? `This link has a value the explorer does not recognise for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}, so ${state.dropped.length > 1 ? 'those filters are' : 'that filter is'} off.` : '';
-    const unavailableFace = state.rank === 'face' && !hasFaces ? 'Face match is unavailable in this release, so Whole card is selected.' : '';
-    notice = [r.unknown ? 'That link points to a card that is not in this release.' : '', dropped, unavailableFace].filter(Boolean).join(' ');
+    const dropped = state.dropped.length ? `Unrecognised link value for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}; ${state.dropped.length > 1 ? 'those filters are' : 'that filter is'} off.` : '';
+    const unavailableFace = state.rank === 'face' && !hasFaces ? 'Face match is unavailable in this release.' : '';
+    notice = [r.unknown ? 'That card is not in this release.' : '', dropped, unavailableFace].filter(Boolean).join(' ');
   }
 
   function setAbility(k) {
@@ -211,8 +211,8 @@
 </script>
 
 <svelte:head>
-  <title>{card ? `${card.name} · Card Atlas` : 'Card Atlas · find Magic cards by what they do'}</title>
-  <meta name="description" content="Pick a Magic: The Gathering card and see the cards whose rules do the most similar thing, ranked by a fine-tuned language model, on a map of every card." />
+  <title>{card ? `${card.name} · Card Atlas` : 'Card Atlas'}</title>
+  <meta name="description" content="Find Magic cards whose rules text does a similar thing, ranked by a fine-tuned embedding model." />
 </svelte:head>
 
 <div class="explorer" class:has-card={card}>
@@ -228,30 +228,27 @@
         <div class="map-bar"><span>{card.name}</span><button type="button" class="btn" onclick={() => (tab = 'results')}>See results</button></div>
       {/if}
     {:else if siteMissing}
-      <p class="notice">The map is not available for this release.</p>
+      <p class="notice">No map for this release.</p>
     {:else}
       <div class="map-loading" aria-hidden="true"></div>
     {/if}
   </section>
 
   <section class="results-pane" class:hidden={tab !== 'results'}>
-    {#if shownError}<p class="notice" role="alert">Something went wrong loading the card data: {shownError}</p>{/if}
+    {#if shownError}<p class="notice" role="alert">Could not load card data: {shownError}</p>{/if}
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
 
     {#if !card}
       <div class="intro">
         <h1>Find Magic cards by what they do.</h1>
-        <p class="lede">Pick a card to see the cards whose rules do the most similar thing, out of {release ? release.n_cards.toLocaleString('en') : 'all'} cards. A language model fine-tuned on rules text does the ranking. The map places every card by the same similarity, so related effects sit together.</p>
         <Search {names} onpick={(i) => select(i)} />
         {#if showcase.length}
           <div class="examples">
-            <span class="muted">Try</span>
             {#each showcase as ex (ex.id)}
               <a class="chip" href="?card={ex.id}" onclick={(e) => { if (byId(ex.id) >= 0) { e.preventDefault(); select(byId(ex.id)); } }}>{ex.name}</a>
             {/each}
           </div>
         {/if}
-        <p class="how"><a href={resolve('/how-it-works')}>How the model was built, and how well it works</a></p>
       </div>
     {:else}
       <div class="top-search"><Search {names} id="card-search-top" onpick={(i) => select(i)} /></div>
@@ -271,7 +268,7 @@
       </article>
 
       {#if !card.has_text}
-        <p class="notice">This card has no rules text, so the model has nothing to compare it on.</p>
+        <p class="notice">No rules text to compare.</p>
       {:else}
         <div class="similar-by" id="results">
           <h2>Similar cards</h2>
@@ -279,14 +276,14 @@
             {#if hasLines}<Segmented label="Rank by" options={[{ value: 'whole', label: 'Whole card' }, { value: 'line', label: 'Line match' }, ...(hasFaces ? [{ value: 'face', label: 'Face match' }] : [])]} value={ability === null ? rank : null} onchange={setRank} />{/if}
             {#if !hasLines}<button type="button" class="btn" class:on={ability === null} aria-pressed={ability === null} onclick={() => setRank('whole')}>Whole card</button>{/if}
             {#if abilities.length > 1}
-              <p class="by-label muted">Or match one line:</p>
+              <p class="by-label muted">Match one line</p>
               <div class="by" role="group" aria-label="Match one line">
                 {#each abilities as a, k (k)}
                   <button type="button" aria-pressed={ability === k} onclick={() => setAbility(k)}><Rules text={a.text} /></button>
                 {/each}
               </div>
             {/if}
-            <p class="by-note muted">{#if ability !== null}Matching one line: each card scores by its closest line. Exploratory: line matches were not evaluated.{:else if byFace}Face match: a card with two faces also counts as each face on its own, so a card whose back face does what this card does can rank as high as a one-faced card. Exploratory: on the development benchmark it scored about the same as the whole-card ranking.{:else if byLine}Line match: each line of this card is paired with the closest line on the other card, and lines that many cards share count for less. Exploratory: on the earlier model it ranked below the whole-card score on the tag benchmark.{:else}Ranked on the whole card.{#if abilities.length > 1}{' '}Pick a line to match cards that do that one thing.{/if}{/if}</p>
+            {#if ability !== null || byFace || byLine}<p class="by-note muted">{#if ability !== null}Each card scores by its closest line. Exploratory: line matches were not evaluated.{:else if byFace}A two-faced card also counts as each face on its own. Exploratory: about the same as whole-card on the development benchmark.{:else}Each line is paired with the closest line on the other card. Exploratory: ranked below whole-card on an earlier model's tag benchmark.{/if}</p>{/if}
           {/if}
         </div>
 
@@ -300,7 +297,7 @@
             <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} onchange={(e) => setMv('minMv', e.currentTarget)} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} onchange={(e) => setMv('maxMv', e.currentTarget)} aria-label="Maximum mana value" />
           </div>
           <div class="f"><span class="fl">View</span><Segmented label="View" options={[{ value: 'list', label: 'List' }, { value: 'grid', label: 'Grid' }]} value={view} onchange={setView} /></div>
-          <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; notice = ''; updateUrl(false); }}>Clear filters</button>{:else}Filters narrow the {saved.length} most similar cards; they do not search the whole catalogue.{/if}</p>
+          <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; notice = ''; updateUrl(false); }}>Clear filters</button>{:else}Filters apply to the {saved.length} most similar cards.{/if}</p>
         </div>
 
         <ol class="results" class:grid={view === 'grid'} aria-busy={busy || pending}>
@@ -310,9 +307,9 @@
           {/each}
           {#if pending}{#each { length: Math.max(0, Math.min(shown, saved.length) - pageRows.length) } as _, k (k)}<li class="ghost" aria-hidden="true"></li>{/each}{/if}
         </ol>
-        {#if !pending && filtering && !visible.length}<p class="notice">None of the {saved.length} most similar cards passes these filters.</p>{/if}
+        {#if !pending && filtering && !visible.length}<p class="notice">No cards match these filters.</p>{/if}
         {#if hasMore({ saved, visible, shown, filtering })}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
-        <p class="model-note muted">Scores are {byLine ? 'weighted line-match scores' : 'cosine similarities'} from {release.model.label}. Rankings are the model's judgement; check the cards before relying on them.</p>
+        <p class="model-note muted">{byLine ? 'Line-match score' : 'Cosine similarity'}, {release.model.label}.</p>
       {/if}
     {/if}
   </section>
@@ -328,12 +325,10 @@
   .map-bar { display: none; }
   .results-pane { min-width: 0; }
   .intro { padding: clamp(8px, 7vh, 88px) 0 24px; max-width: 600px; }
-  .intro h1 { margin: 0 0 16px; }
-  .lede { font-size: 1.06rem; color: var(--muted); margin-bottom: 24px; max-width: 54ch; }
+  .intro h1 { margin: 0 0 20px; }
   .examples { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 14px; font-size: 0.92rem; }
   .examples .chip { padding: 0; background: none; border-radius: 0; color: var(--ink); font-size: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.25em; }
   .examples .chip:hover { text-decoration-color: currentColor; }
-  .how { margin-top: 32px; font-size: 0.95rem; }
   .top-search { margin-bottom: 22px; }
   .selected { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
   .selected img { width: 180px; height: auto; aspect-ratio: 488 / 680; border-radius: 9px; background: var(--sunken); }
