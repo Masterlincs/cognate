@@ -51,7 +51,7 @@ The registered promotion test (3 seeds, family-cluster bootstrap, M = 6, `runs/c
 
 **Sealed evaluation:** none for this model. The single sealed run evaluated the previous 2000-update model, which cleared the gate on sealed anchors (seed 1: 0.7052 / 0.6833). The sealed split has now been used and will not be used again.
 
-**Trap exam** (, `exam/traps.md`; a diagnostic, not part of promotion): 47/51. It fails T001 and T021 (rider traps) and T022 and T029 (mechanism traps), the same four as the previous model. The exam is exposed: no item has all three cards in dev, and its fit cards are in the training pairs (, dev-only n = 0). Three later runs aimed at the rider traps did not clear their gates.
+**Trap exam** (`exam/traps.md`; a diagnostic, not part of promotion): 47/51. It fails T001 and T021 (rider traps) and T022 and T029 (mechanism traps), the same four as the previous model. The exam is exposed: no item has all three cards in dev, and its fit cards are in the training pairs (dev-only n = 0). Three later runs aimed at the rider traps did not clear their gates.
 
 **Human evaluation:** not performed. A blinded labelling pool exists but has no labels.
 

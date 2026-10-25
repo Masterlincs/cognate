@@ -1,4 +1,4 @@
-"""Trap exam (idea 9; the idea is credited to Delvefall).
+"""Trap exam (idea 9, credited to Delvefall).
 
 Each item is an anchor (a whole card, or one of its ability lines), a true match and a
 near-identical trap. A model passes an item when it scores the match above the trap.
@@ -6,7 +6,7 @@ near-identical trap. A model passes an item when it scores the match above the t
 The worksheet `exam/traps.md` is the source of truth. Items are proposed by rule-based
 mining or from user reports; only a human reviewer turns `proposed` into `accepted` or `rejected`.
 Only accepted items are scored. Exam card families are kept out of new training inputs;
-fit exam cards remain in the existing card pairs (, `exam_cards`).
+fit exam cards remain in the existing card pairs (`exam_cards`).
 Sealed cards are never loaded, so they cannot appear.
 
 Mined sections (one-line cards only, so every tag on a card belongs to its single line):
@@ -287,7 +287,7 @@ def score(items: list[dict], cards, encode) -> dict:
 
 
 def guard(old: dict, new: dict) -> dict:
-    """Regression guard (#10, Delvefall): items both records scored, by identical item.
+    """Regression guard (idea 10, Delvefall): items both records scored, by identical item.
 
     An item edited between the two records is not compared (it is a different item).
     """

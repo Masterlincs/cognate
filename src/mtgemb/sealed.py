@@ -32,7 +32,7 @@ def sealed_eval(ds_dir) -> dict:
         fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
         raise FileExistsError(f"{lock} exists: the sealed evaluation was already started "
-                              "(allows one run)") from None
+                              "(only one run is allowed)") from None
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(canonical_json({"pid": os.getpid(), "started_utc": utcnow(),
                                 "code": git_identity()}) + "\n")

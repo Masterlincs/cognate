@@ -1,4 +1,4 @@
-"""Fit-only rule-made positive/negative rows (ideas 3-6; exam exclusions)."""
+"""Fit-only rule-made positive/negative rows (ideas 3-6; exam families excluded)."""
 
 from __future__ import annotations
 

@@ -120,7 +120,7 @@ def jaccard(a: frozenset[str], b: frozenset[str]) -> float:
     return len(a & b) / len(a | b)
 
 
-# ---------------------------------------------------------------- no_reminder_v2 (#7)
+# ---------------------------------------------------------------- no_reminder_v2 (idea 7)
 
 VERSION_V2 = "no_reminder_v2"
 _SUBTYPE_NOUNS = ("Equipment", "Aura", "Vehicle", "Saga", "Class", "Case", "Room", "Siege")

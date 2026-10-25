@@ -176,7 +176,7 @@ def release_digest(dataset_id: str, ids: list[str], encoder: dict, model_hash: s
 
 def ability_neighbours(texts: list[str], encode, parity_n: int = 64,
                        ref_n: int = 20) -> dict:
-    """Encode lines and check max-sim picks; encode(lines, cpu=bool) is injectable.
+    """Encode per-ability lines and check max-sim picks; encode(lines, cpu=bool) is injectable.
 
     Neighbour indices and owners here are text rows, mapped to catalogue rows on export.
     The caller holds DeviceLock for both CPU and device encoding.

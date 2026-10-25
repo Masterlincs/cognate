@@ -43,7 +43,7 @@ def build_benchmark(cards: pd.DataFrame, mem: pd.DataFrame, tags: pd.DataFrame,
     """Freeze universe, anchors and rules, bound to the dataset that supplies relevance
     inputs (tags, weights, text, metadata): the id changes if any of them change.
 
-    held="sealed" (, authorised final evaluation only): sealed cards join the universe
+    held="sealed" (authorised final evaluation only): sealed cards join the universe
     and are the anchors; weights, taxonomy and view rules stay the fit-derived ones. The
     held="dev" spec is unchanged by this option.
     """

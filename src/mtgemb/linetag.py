@@ -1,4 +1,4 @@
-"""Line-to-tag training rows (ideas 1 and 2; the ideas are credited to Delvefall).
+"""Line-to-tag training rows (ideas 1 and 2, credited to Delvefall).
 
 A one-line card's tags all belong to its single ability line, so each (line, tag) is a
 labelled example nobody had to annotate. Fit cards only; trap-exam families are excluded;

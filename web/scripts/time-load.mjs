@@ -1,4 +1,4 @@
-// P9 load timing: headless Chrome over CDP on a throttled mobile profile. Times how long until typing
+// Load timing: headless Chrome over CDP on a throttled mobile profile. Times how long until typing
 // "Lightning Bolt" into the search box lists options (usable lookup), with the cache disabled.
 // usage: node scripts/time-load.mjs <url> [slow4g|fast4g|none] [runs]
 // Env: CHROME=<path to chrome>; GAP_MS=<pause between runs, default 6000> so one run's downloads

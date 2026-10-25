@@ -27,7 +27,7 @@ PAIR_CFG = {
     "spec_clip": [0.5, 2.0],
 }
 
-# tags about a card's own cost, casting mode or printing rather than what it does. In
+# Tags about a card's own cost, casting mode or printing rather than what it does. In
 # pairs_v2 they make no positive pairs, mask no in-batch negative and do not stop a card from
 # being a lexical negative. Tags about other cards' costs (cost reducer, free-cast-another)
 # and "cares about" conditions (threshold, morbid) are effects and stay.

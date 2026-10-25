@@ -426,7 +426,7 @@ def test_model_meta_decision_text():
                    "run_id": "run", "decision": "no sealed run"}
     assert "decision" not in exporter.model_meta("x", "experimental", recipe, None)
     with pytest.raises(ValueError, match="promoted"):
-        exporter.model_meta("x", "experimental", recipe, None, decision="")
+        exporter.model_meta("x", "experimental", recipe, None, decision="promotion text")
 
 
 def test_export_cli_forwards_decision(monkeypatch):
@@ -436,8 +436,8 @@ def test_export_cli_forwards_decision(monkeypatch):
     received = {}
     monkeypatch.setattr(exporter, "export", lambda *a, **kw: received.update(kw) or {})
     cli.main(["export", "e5-base-v2", "--max-length", "94", "--label", "fake",
-              "--status", "promoted", "--decision", ""])
-    assert received["decision"] == ""
+              "--status", "promoted", "--decision", "promotion text"])
+    assert received["decision"] == "promotion text"
 
 
 def test_card_display_colours_and_back_face():

@@ -64,11 +64,57 @@ The model cleared its pre-registered promotion gate against both comparators on 
 - **Labels.** 2,709 functional Scryfall Tagger tags (for example "removal" or "card draw"). A candidate's relevance to an anchor is the sum of the fit-IDF weights of the tags they share.
 - **Splits.** Cards are grouped into families (identical text, self-name templates, meld pairs) and each family is hashed into fit, development or sealed (80/10/10), so near-copies never straddle splits.
 - **Training.** Masked InfoNCE on 108,220 pairs of fit cards that share a tag. In-batch negatives that share an eligible tag or a family with the anchor are masked, and each pair gets one hard negative from its lexical neighbours. 32 pairs per batch, learning rate 3e-5, 4000 updates, on a laptop Intel Arc iGPU (3.8 h). See [MODEL_CARD.md](MODEL_CARD.md).
-- **Evaluation.** nDCG@10 for each development anchor against the whole fit and development catalogue. Comparisons, seeds, thresholds and the promotion gate were registered before the runs they judge. Decisions and the evidence behind them are logged in [the decision log].
+- **Evaluation.** nDCG@10 for each development anchor against the whole fit and development catalogue. Comparisons, seeds, thresholds and the promotion gate were registered before the runs they judge.
 
 ## Cognate
 
-A SvelteKit static site in [`web/`](web/README.md). The explorer offers name search, a 2D map of the catalogue, and the 200 nearest neighbours of each card with colour, type and mana-value filters. It also offers exploratory views: per-ability neighbours, line match and face match, none of which is claimed as an improvement. A case-study page explains the project and compares the pretrained and fine-tuned neighbours side by side. The site reads a static release bundle exported by `mtgemb export`. Nothing has been published yet.
+A SvelteKit static site in `web/`. The explorer offers name search, a 2D map of the catalogue, and the 200 nearest neighbours of each card with colour, type and mana-value filters. It also offers exploratory views: per-ability neighbours, line match and face match, none of which is claimed as an improvement. A case-study page explains the project and compares the pretrained and fine-tuned neighbours side by side. The site reads a static release bundle exported by `mtgemb export`. Nothing has been published yet.
+
+### Building and deploying the site
+
+Everything is prerendered to plain files; there is no server code. The explorer fetches JSON and binary shards from `data/` at run time. From `web/`:
+
+```sh
+npm ci
+npm test
+npm run build                  # writes build/
+node scripts/serve-build.mjs   # serves build/ with gzip on http://localhost:4318
+```
+
+`npm run build` runs `vite build`, then `scripts/prune-build.mjs`, which keeps only the release named by `public/data/current.json`, and its site data, in `build/data`. It also adds an inline script to `build/index.html` that requests the start-up data before the app's code loads. `npm run preview` serves the prerender output, not `build/`; use `serve-build.mjs` to check the artifact. `node scripts/time-load.mjs http://localhost:4318/ slow4g 6` times usable lookup on the throttled Lighthouse mobile profile (headless Chrome; set `CHROME` if it is not in the default Windows location).
+
+The site reads these from `web/public/data/` (git-ignored except `current.json`):
+
+| Path | Made by | Contents |
+|---|---|---|
+| `current.json` | by hand | `{"release_id": ...}`, the release the site shows |
+| `<release_id>/` | `uv run mtgemb export ...` | release bundle: card shards, neighbour shards, names, tags ([`web/SCHEMA.md`](web/SCHEMA.md)) |
+| `site-<release_id>/` | `uv run mtgemb site-data --release <release_id>` | map coordinates, region labels, pretrained-model neighbours for the before-and-after, and the list of keyword-only cards the site hides |
+
+The case-study numbers come from `web/src/lib/generated/metrics.json`, which is committed; `uv run mtgemb site-data --metrics-only` regenerates it from the run records. `site-data` refuses to overwrite an existing `site-<release_id>/` folder and writes to `site-<release_id>.partial` first; on Windows, stop `npm run dev` before running it, because the dev server's file watcher blocks the rename. Without site data the explorer still works, and the map and before-and-after say they are unavailable. `npm run build` fails if `current.json` names a release that is not in `public/data`.
+
+`npm run fixture` writes a small synthetic bundle (made-up names and rules text, not model results) and points `current.json` at it, for development without the real data; `git checkout web/public/data/current.json` switches back.
+
+To deploy, copy `build/` to any static host. The site uses relative paths, so it also works below a path prefix. Pages are written as `how-it-works.html`, so the server must map extensionless URLs to `.html`. For nginx:
+
+```nginx
+server {
+    listen 80;
+    server_name example.org;
+    root /var/www/cognate;
+
+    location / {
+        try_files $uri $uri.html $uri/ =404;
+    }
+    location /_app/immutable/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+    gzip on;
+    gzip_types application/json application/javascript text/css image/svg+xml application/octet-stream;
+}
+```
+
+Card images are loaded from Scryfall at view time and are not part of the build.
 
 ## Reproducing
 
@@ -127,13 +173,12 @@ npm run build
 - `tests/`: unit and contract tests (real-model tests are deselected by default).
 - `configs/`: the registered training configurations, one per run.
 - `exam/`: the trap exam worksheet.
-- `scripts/`: the run queue and the follow-up experiment pipeline.
 - `web/`: Cognate.
 - `runs/`, `artifacts/`, `data/`: git-ignored run logs, models and data.
 
 ## Limitations
 
-- Relevance labels are community tags, not human judgements. A blinded human-labelling pool is prepared but unlabelled.
+- Relevance labels are community tags, not human judgements.
 - The tag proxy weights side-clause tags (alternative costs, casting modes) as much as main effects, so on multi-ability cards a side clause can outrank the main effect, and the model partly learned this. For Deflecting Swat, commander and alternative-cost cards outscore redirect effects on the proxy, and the model ranks them first.
 - Development results are selection-exposed. The sealed results come from one run of the earlier model.
 - Three training seeds give only weak information about training variability. Training longer than 4000 updates was not tested.
@@ -148,4 +193,4 @@ The code and documentation are MIT licensed ([LICENSE](LICENSE)). That licence d
 
 Cognate is unofficial Fan Content permitted under the [Fan Content Policy](https://company.wizards.com/en/legal/fancontentpolicy). Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC.
 
-Card data and images come from [Scryfall](https://scryfall.com) and tags from Scryfall Tagger, used under Scryfall's API terms: the site is free with no sign-up, card images are shown whole (artist and copyright line intact) and linked from Scryfall's servers, and the project adds a new similarity search rather than republishing Scryfall's data. Not affiliated with Scryfall. The pinned `intfloat/e5-base-v2` and `BAAI/bge-small-en-v1.5` revisions are recorded in the decision log; both are MIT licensed ([E5-base-v2](https://huggingface.co/intfloat/e5-base-v2), [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)).
+Card data and images come from [Scryfall](https://scryfall.com) and tags from Scryfall Tagger, used under Scryfall's API terms: the site is free with no sign-up, card images are shown whole (artist and copyright line intact) and linked from Scryfall's servers, and the project adds a new similarity search rather than republishing Scryfall's data. Not affiliated with Scryfall. Both pinned models, `intfloat/e5-base-v2` and `BAAI/bge-small-en-v1.5`, are MIT licensed ([E5-base-v2](https://huggingface.co/intfloat/e5-base-v2), [BGE-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5)).

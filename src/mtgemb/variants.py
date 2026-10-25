@@ -1,4 +1,4 @@
-"""scoring variants on the frozen dev benchmark (diagnostics, not evaluation records).
+"""Scoring variants on the frozen dev benchmark (diagnostics, not evaluation records).
 
 Face match: a multi-face card is one text and one vector, so a card whose second face is
 Lightning Bolt is diluted by its first face. Here each card also gets one vector per face

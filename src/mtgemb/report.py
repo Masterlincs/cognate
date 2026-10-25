@@ -16,14 +16,14 @@ import pandas as pd
 from .evaluate import PILOT_THRESHOLDS, PROMOTION, n_boot_for, paired_bootstrap
 from .util import RUNS, read_json, utcnow
 
-BOOT_SEED = 20261017  # 
+BOOT_SEED = 20261017
 # frozen confirmation design: one E5 candidate, trained-BGE control, seeds 1-3
 CONFIRM = {"candidate": "confirm-e5-s{}", "bge": "confirm-bge-s{}",
            "pretrained": "pretrained-e5-base-v2", "seeds": (1, 2, 3), "deploy_seed": 1,
            "recipe_from": {"candidate": "initial-1-e5-lr3e-05-s20",
                            "bge": "initial-4-bge-lr3e-05-s20"},
            "pretrained_backbone": "e5-base-v2", "pretrained_max_length": 94}
-# the 4000-update recipe (x-1) under the same design, plus the deployed 2000-update E5
+# The 4000-update recipe (x-1) under the same design, plus the deployed 2000-update E5
 # recipe as a third comparator (a swap must beat it too); report under confirmation/<id>/x1/
 CONFIRM_X1 = {**CONFIRM, "candidate": "confirm-x1-s{}",
               "recipe_from": {**CONFIRM["recipe_from"], "candidate": "x-1-e5-4000",
@@ -36,7 +36,7 @@ MIN_CLUSTERS = 100  # fewer eligible families than this makes a contrast inconcl
 VIEWS = ("full", "hard_lexical")
 QUALIFIER = "provisional tag-proxy promotion on selection-exposed development"
 SEALED_QUALIFIER = ("registered gate re-tested once on sealed anchors (tag proxy); "
-                    "does not change the P7 decision")
+                    "does not change the promotion decision")
 SEALED_GATE = {"promote": "cleared", "reject": "not_cleared", "inconclusive": "inconclusive"}
 
 
@@ -186,7 +186,7 @@ def confirmation_report(bench_id: str, train_bench: str | None = None,
     sealed = train_bench is not None
     train_bench = train_bench or bench_id
     if sealed and design is not CONFIRM:
-        raise ValueError("the sealed gate was run once, for the design only")
+        raise ValueError("the sealed gate was run once, for the first design only")
     out = RUNS / ("sealed" if sealed else "confirmation") / bench_id
     out = (out / design["tag"] if "tag" in design else out) / "report.json"
     if out.exists():
@@ -235,12 +235,11 @@ def confirmation_report(bench_id: str, train_bench: str | None = None,
            "min_clusters": MIN_CLUSTERS,
            "deployment": {"seed": CONFIRM["deploy_seed"], "run_id": dep,
                           **{v: float(_ndcg(bench_id, dep, v).mean()) for v in VIEWS}},
-           "design": {**design, "decisions": ["", "", ""] + ([""] if inc else [])},
+           "design": dict(design),
            "created_utc": utcnow()}
     if sealed:
         rep["sealed_gate"] = SEALED_GATE[rep.pop("decision")]
         rep.update(qualifier=SEALED_QUALIFIER, train_benchmark_id=train_bench)
-        rep["design"]["decisions"].append("")
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_name(f"report.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(rep, indent=2), "utf-8")

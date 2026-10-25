@@ -142,16 +142,16 @@ class TrainData:
         self._ds, self._elig = ds, set(elig)
 
     def tag_weights(self) -> np.ndarray:
-        """option 3: each pair weighted by the fit IDF of the tag that made it (not the
+        """Each pair weighted by the fit IDF of the tag that made it (not the
         mean over all shared tags, as slot 7 did), mean-one, clipped like spec_weight."""
         return tag_idf_weights(self.pair_tag_id, self._ds["tags"])
 
     def line_tag_rows(self) -> dict:
-        """aux rows; every trap-exam card's family is kept out (exam.exam_cards)."""
+        """Aux rows; every trap-exam card's family is kept out (exam.exam_cards)."""
         return linetag.build(self._ds, self._elig, exam.exam_cards())
 
     def synth_rows(self) -> dict:
-        """rule-made rows, with whole exam families excluded."""
+        """Rule-made rows, with whole exam families excluded."""
         rows = synth.build(self._ds, self._elig, exam.exam_cards())
         pos = {o: i for i, o in enumerate(self.ids)}
         rows["card_rows"] = np.array([pos[o] for o in rows["anchor_ids"]])
@@ -559,7 +559,7 @@ def train(cfg: TrainConfig, bench: dict | None = None, *, dev: torch.device | No
 
 def aux_loss(model, tok, recipe, max_length, aux: dict, rows: np.ndarray, scale: float,
              dev, autocast) -> tuple[torch.Tensor, dict]:
-    """Symmetric masked InfoNCE between one-line texts and their tag texts (#1-2).
+    """Symmetric masked InfoNCE between one-line texts and their tag texts (ideas 1-2).
 
     Row i pairs line i with tag i; another in-batch tag the line also carries is masked,
     never a negative. Lines and tags are unique within a batch, so nothing else is excluded.

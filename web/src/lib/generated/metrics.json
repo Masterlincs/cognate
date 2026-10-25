@@ -236,7 +236,7 @@
     }
   },
   "sealed": {
-    "qualifier": "registered gate re-tested once on sealed anchors (tag proxy); does not change the P7 decision",
+    "qualifier": "registered gate re-tested once on sealed anchors (tag proxy); does not change the promotion decision",
     "m_contrasts": 4,
     "deployment": {
       "seed": 1,

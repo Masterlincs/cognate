@@ -219,7 +219,7 @@ def test_benchmark_id_binds_dataset_identity():
 def test_sealed_benchmark_d27_leaves_dev_spec_unchanged():
     cards, mem, tags = _fixture()
     dev = build_benchmark(cards, mem, tags, "ds")
-    assert dev["benchmark_id"] == "5fcd2a938726ca96"  # = id from the pre-code
+    assert dev["benchmark_id"] == "5fcd2a938726ca96"  # = id from the earlier code
     assert "held_split" not in dev["rules"] and dev["rules"]["views"][-1] == "dev_candidates"
     s = build_benchmark(cards, mem, tags, "ds", held="sealed")
     assert s["universe"] == ["a1", "c1", "c2", "c3", "c4", "d2", "s1"]

@@ -222,7 +222,7 @@ def test_sealed_report_retests_registered_contrasts_once(tmp_path, monkeypatch):
     sealed_copy(tmp_path / "ok")
     rep = rp.confirmation_report("S", train_bench="B")
     assert rep["sealed_gate"] == "cleared" and "decision" not in rep
-    assert rep["train_benchmark_id"] == "B" and rep["design"]["decisions"][-1] == ""
+    assert rep["train_benchmark_id"] == "B"
     assert (tmp_path / "ok" / "sealed" / "S" / "report.json").exists()
     assert not (tmp_path / "ok" / "confirmation").exists()
     with pytest.raises(FileExistsError):
@@ -252,7 +252,7 @@ def test_x1_design_adds_incumbent_and_writes_under_tag(tmp_path, monkeypatch):
     assert rep["deployment"]["run_id"] == "confirm-x1-s1"
     assert (tmp_path / "p" / "confirmation" / "B" / "x1" / "report.json").exists()
     assert not (tmp_path / "p" / "confirmation" / "B" / "report.json").exists()
-    assert rp.confirmation_report("B")["decision"] == "promote"  # design still separate
+    assert rp.confirmation_report("B")["decision"] == "promote"  # first design still separate
     with pytest.raises(ValueError, match="sealed"):
         rp.confirmation_report("S", train_bench="B", design=rp.CONFIRM_X1)
 

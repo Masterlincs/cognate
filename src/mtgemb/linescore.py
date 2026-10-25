@@ -1,4 +1,4 @@
-"""Line-based whole-card scores (, inference only).
+"""Line-based whole-card scores (inference only).
 
 line_mean:  mean over the anchor's lines of the best cosine against any candidate line.
 line_invdf: the same, each anchor line weighted 1/df, df = universe cards that have that
@@ -53,7 +53,7 @@ class LineScorer:
 
 
 def run(ds_dir, release_dir) -> dict:
-    """whole-card baseline vs both variants on dev (selection-exposed) and the exam."""
+    """Whole-card baseline vs both variants on dev (selection-exposed) and the exam."""
     from .evaluate import evaluate, load_benchmark
 
     rd = Path(release_dir)
@@ -92,7 +92,7 @@ def run(ds_dir, release_dir) -> dict:
         res["exam_whole_items"] = {"n": len(ex), "passed": sum(e["margin"] > 0 for e in ex),
                                    "failed": [e["id"] for e in ex if e["margin"] <= 0]}
         out[name] = res
-    rec = {"decision": "", "release_id": meta["release_id"],
+    rec = {"decision": "line-based scores", "release_id": meta["release_id"],
            "benchmark_id": bm.spec["benchmark_id"], "results": out,
            "worksheet_sha256": sha256_file(exam.EXAM), "code": git_identity(),
            "created_utc": utcnow(), "note": "selection-exposed dev; inference only"}

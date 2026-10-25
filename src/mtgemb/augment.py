@@ -1,4 +1,4 @@
-"""Rule-made training texts for ext-2 (ideas 3-6; the ideas are credited to Delvefall).
+"""Rule-made training texts for ext-2 (ideas 3-6, credited to Delvefall).
 
 Each generator maps a fit card's text to a variant with a known relation to it:
   flip     (3) one mechanism word swapped (tap/untap, enters/dies, ...): a hard negative
