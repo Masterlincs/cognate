@@ -33,5 +33,5 @@
 <main id="main">{@render children()}</main>
 
 <footer class="site-footer">
-  <p class="fine">Cognate is unofficial Fan Content permitted under the <a href="https://company.wizards.com/en/legal/fancontentpolicy" rel="noopener">Fan Content Policy</a>. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card data and images come from <a href="https://scryfall.com" rel="noopener">Scryfall</a>, and tags from Scryfall Tagger. Cognate is not affiliated with Scryfall.</p>
+  <p class="fine">Cognate is unofficial Fan Content permitted under the <a href="https://company.wizards.com/en/legal/fancontentpolicy" rel="noopener">Fan Content Policy</a>. Not approved/endorsed by Wizards. Portions of the materials used are property of Wizards of the Coast. ©Wizards of the Coast LLC. Card data and card images come from <a href="https://scryfall.com" rel="noopener">Scryfall</a>. The tags come from Scryfall Tagger. Cognate is not affiliated with Scryfall.</p>
 </footer>
