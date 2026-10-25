@@ -17,25 +17,20 @@
   import { entryKey, newEntryId } from '#lib/history.js';
   import { getAbilities, getCard, getFaces, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
   import { activeFilters, clearFilter, filterChips, hasMore, randomIndex, resolveSelection, savedList } from '#lib/explorer.js';
-  import { fixed, mean } from '#lib/format.js';
   import { loadFonts } from '#lib/load-fonts.js';
   import { remember } from '#lib/search.js';
-  import { runScore } from '#lib/study.js';
   import { decodeMap, regionLabel, TEXTLESS } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
 
   const PAGE = 12;
   // the ranking modes, with what each does and how far it was tested (the caveats are the evaluation's, keep them)
   const MODES = {
-    whole: { label: 'Whole card', hint: 'Compare all of each card’s rules text at once', about: 'Compares all of each card’s rules text at once.', note: 'The ranking the model was evaluated on.' },
+    whole: { label: 'Whole card', hint: 'Compare all of each card’s rules text at once', about: 'Compares all of each card’s rules text at once.' },
     line: { label: 'Line match', hint: 'Pair each line with the closest line on the other card', about: 'Pairs each line with the closest line on the other card, so one shared ability can count even when the rest differs.', note: 'Exploratory: ranked below whole-card on an earlier model’s tag benchmark.' },
     face: { label: 'Face match', hint: 'Also score each face of a two-faced card on its own', about: 'Also scores each face of a two-faced card on its own, so a card can match on just its front or back.', note: 'Exploratory: about the same as whole-card on the development benchmark.' },
   };
   const ICON_LIST = 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01';
   const ICON_GRID = 'M2.5 2.5h4.5v4.5H2.5zM9 2.5h4.5v4.5H9zM2.5 9h4.5v4.5H2.5zM9 9h4.5v4.5H9z';
-  // the landing page's headline number, computed as the How it works page does
-  const depRow = Object.values(metrics.dev ?? {}).find((r) => r.runs.includes(metrics.deployed?.run_id));
-  const headline = depRow ? { tuned: runScore(depRow, metrics.deployed.run_id) ?? mean(depRow.full), base: metrics.dev['pretrained E5-base'] ? mean(metrics.dev['pretrained E5-base'].full) : null } : null;
   const NO_FILTERS = { color: '', colorMode: 'include', colorBy: 'identity', minMv: null, maxMv: null, creature: '', type: '' };
   const PARAM_NAMES = { color: 'colour', cm: 'colour match', cb: 'colour or identity', min: 'minimum mana value', max: 'maximum mana value', creature: 'creatures' };
   let release = $state.raw(null);
@@ -435,22 +430,6 @@
             <Examples items={examples} onpick={pickExample} />
           </section>
         {/if}
-
-        <section class="block how" aria-labelledby="how-title">
-          <h2 id="how-title" class="kicker">How to use it</h2>
-          <ol class="steps">
-            <li><strong>Pick a card</strong><span>Search by name, roll a random one, or click any dot on the map.</span></li>
-            <li><strong>Read the matches</strong><span>Up to {release?.k ?? 200} cards, closest effect first, each with its similarity score.</span></li>
-            <li><strong>Narrow them down</strong><span>Filter by colour, type and mana value, or compare two cards side by side.</span></li>
-          </ol>
-        </section>
-
-        <dl class="stats">
-          <div><dt>Cards indexed</dt><dd>{release ? release.n_cards.toLocaleString('en') : '—'}</dd></div>
-          {#if headline}<div><dt>nDCG@10 on development cards (tag proxy)</dt><dd>{fixed(headline.tuned)}{#if headline.base !== null}<span> vs {fixed(headline.base)} pretrained</span>{/if}</dd></div>{/if}
-          <div><dt>Model</dt><dd>e5-base-v2, fine-tuned</dd></div>
-        </dl>
-        <p class="more-link"><a href={resolve('/how-it-works')}>How it was trained and tested</a></p>
       </div>
     {:else}
       <div class="top-search">
@@ -492,7 +471,7 @@
                   <Segmented label="Rank by" describedby="rank-help" options={[{ value: 'whole', label: MODES.whole.label, hint: MODES.whole.hint }]} value={ability === null ? 'whole' : null} onchange={setRank} />
                 {/if}
               </div>
-              <p class="rank-help" id="rank-help">{rankNote.about} <span class="muted">{rankNote.note}</span></p>
+              <p class="rank-help" id="rank-help">{rankNote.about}{#if rankNote.note} <span class="muted">{rankNote.note}</span>{/if}</p>
               {#if abilities.length > 1}
                 <p class="flabel by-label" id="by-label">Or match one line</p>
                 <div class="by" role="group" aria-labelledby="by-label">
@@ -591,17 +570,6 @@
   @media not ((hover: hover) and (pointer: fine)) { .keys { display: none; } }
   .block { margin-top: 36px; }
   .kicker { margin: 0 0 12px; font-size: 0.75rem; font-weight: 650; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
-  .steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; counter-reset: step; }
-  .steps li { counter-increment: step; display: grid; align-content: start; gap: 3px; padding: 14px; border: 1px solid var(--line); border-radius: calc(var(--radius) + 2px); font-size: 0.85rem; line-height: 1.45; color: var(--muted); }
-  .steps li::before { content: counter(step); display: grid; place-items: center; width: 22px; height: 22px; margin-bottom: 6px; border-radius: 50%; background: var(--sunken); color: var(--ink); font-size: 0.75rem; font-weight: 700; }
-  .steps strong { font-size: 0.92rem; font-weight: 650; color: var(--ink); }
-  .stats { display: flex; flex-wrap: wrap; gap: 14px 36px; margin: 32px 0 0; padding-top: 18px; border-top: 1px solid var(--line); }
-  .stats div { display: flex; flex-direction: column-reverse; gap: 2px; }
-  .stats dt { font-size: 0.78rem; color: var(--muted); }
-  .stats dd { margin: 0; font-size: 1.3rem; font-weight: 700; letter-spacing: -0.01em; }
-  .stats dd span { margin-left: 4px; font-size: 0.82rem; font-weight: 500; color: var(--muted); letter-spacing: 0; }
-  .more-link { margin: 14px 0 0; font-size: 0.9rem; }
-  .more-link a::after { content: ' →'; }
 
   /* the selected card; the search stays in reach below the site header */
   .top-search { position: sticky; top: 56px; z-index: 15; margin: -8px 0 14px; padding: 8px 0; background: var(--bg); }
@@ -665,9 +633,6 @@
   .model-note { font-size: 0.8rem; margin-top: 22px; }
 
   @media (max-width: 1100px) {
-    .steps { grid-template-columns: minmax(0, 1fr); }
-    .steps li { grid-template-columns: auto minmax(0, 1fr); column-gap: 12px; }
-    .steps li::before { grid-row: span 2; margin: 0; }
   }
   @media (max-width: 900px) {
     .explorer { grid-template-columns: minmax(0, 1fr); gap: 14px; padding-top: 12px; }
@@ -694,7 +659,6 @@
     .active { order: 2; flex-basis: 100%; }
     .count { flex-basis: 100%; order: 3; }
     /* on a phone the map follows the intro, so keep the intro short */
-    .how { display: none; }
     .selected { grid-template-columns: 110px minmax(0, 1fr); gap: 14px; }
     .selected img { width: 110px; }
   }
@@ -704,6 +668,5 @@
     .selected h1 { font-size: 1.45rem; }
     .random { width: 48px; padding: 0; justify-content: center; }
     .random .lbl { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-    .stats dd { font-size: 1.1rem; }
   }
 </style>

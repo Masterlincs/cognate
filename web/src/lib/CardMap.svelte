@@ -20,7 +20,6 @@
   let hoverKey = ''; // a colour hovered in the legend
   let pinned = $state(''); // a colour picked in the legend; the others fade
   let focusKey = '';
-  let hint = $state(true); // the how-to-read caption, until it is closed or a card is picked
   let frame = 0;
   let anim = 0;
   const grid = $derived(buildGrid(map.x, map.y, 1024));
@@ -256,9 +255,6 @@
 
   $effect(() => { void selected; void neighbours; frameSelection(); redraw(); });
   $effect(() => { void highlight; redraw(); });
-  // a picked card replaces the how-to-read caption for good
-  $effect(() => { if (selected >= 0) hint = false; });
-
   // pointer handling: drag to pan, two pointers to pinch, a click without movement selects
   const pointers = new Map();
   let moved = false, pinch = 0;
@@ -361,11 +357,6 @@
       <span>and its {neighbours.length} closest</span>
       <button type="button" class="link" onclick={showAll}>Whole map</button>
     </div>
-  {:else if hint}
-    <div class="caption" bind:this={caption}>
-      <p><strong>{placed.toLocaleString('en')} cards</strong>, placed by what they do. Nearby dots have similar effects: hover for a name, click one to see its matches.</p>
-      <button type="button" class="close" aria-label="Hide this note" onclick={() => { hint = false; redraw(); }}>×</button>
-    </div>
   {/if}
   <div class="legend" role="group" aria-label="Highlight one colour identity" bind:this={legend}>
     {#each LEGEND as [k, label] (k)}
@@ -401,10 +392,6 @@
   .legend button.faded .swatch { opacity: 0.35; }
   .legend .mlabel { padding-right: 4px; }
   .caption { position: absolute; left: 10px; top: 10px; max-width: min(340px, calc(100% - 64px)); display: flex; align-items: flex-start; gap: 6px; padding: 8px 6px 8px 12px; border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: 0 0 0 1px var(--line), 0 4px 16px rgb(0 0 0 / 0.08); font-size: 0.8rem; line-height: 1.4; color: var(--muted); }
-  .caption p { margin: 0; }
-  .caption strong { color: var(--ink); font-weight: 650; }
-  .close { flex: none; width: 24px; height: 24px; margin: -3px 0; padding: 0; border: 0; border-radius: 4px; background: none; font-size: 1.1rem; line-height: 1; color: var(--muted); }
-  .close:hover { color: var(--ink); background: var(--sunken); }
   .picked { max-width: calc(100% - 64px); align-items: center; gap: 7px; padding: 6px 8px 6px 11px; white-space: nowrap; }
   .picked i { flex: none; width: 9px; height: 9px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3.5px var(--ink); margin-right: 2px; }
   .picked .name { min-width: 0; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-weight: 650; }
