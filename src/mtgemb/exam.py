@@ -32,7 +32,6 @@ from .util import ROOT, RUNS, atomic_write_json, git_identity, log_event, sha256
 EXAM = ROOT / "exam" / "traps.md"  # absolute: a wrong cwd must not empty the exclusions
 STATUSES = ("proposed", "accepted", "rejected")
 SECTIONS = ("user", "rider", "mechanism", "parameters")
-PER_SECTION = 20
 
 OPENER = re.compile(r"^(At the beginning of [^,]+,|Whenever [^,]+,|When [^,]+,|If [^,]+,"
                     r"|As long as [^,]+,)")
@@ -40,9 +39,7 @@ FLIPS = [("tap", "untap"), ("tapped", "untapped"), ("enters", "dies"), ("gain", 
          ("gains", "loses"), ("attacks", "blocks"), ("attacking", "blocking"),
          ("hand", "graveyard"), ("draw", "discard"), ("you", "opponent"),
          ("creature", "land"), ("+1/+1", "-1/-1"), ("top", "bottom")]
-FLIP_OF = {a: b for a, b in FLIPS} | {b: a for a, b in FLIPS}
 _NUM = re.compile(r"\b(\d+|X|one|two|three|four|five|six|seven|eight|nine|ten)\b")
-_TOKEN = re.compile(r"[^\s.,;:]+")
 
 
 def opener(line: str) -> str | None:
@@ -115,108 +112,6 @@ def exam_cards(path: Path = EXAM) -> set[str]:
     return {it[r] for it in parse(path.read_text("utf-8")) for r in ("anchor", "match", "trap")}
 
 
-# ---------------------------------------------------------------- mining
-
-def mine(ds: dict, k: int = PER_SECTION) -> list[dict]:
-    """Proposed items from fit+dev one-line cards. Dev anchors first, then fit."""
-    from .data import tag_sets
-    from .lexical import fit_vectorizer
-
-    cards = ds["cards"]
-    ok = cards[cards["text_status"] == "ok"].sort_values("oracle_id")
-    one = ok[ok["text"].map(lambda t: len(split_abilities(t)) == 1)].reset_index(drop=True)
-    tags = ds["tags"].set_index("tag_id")
-    func = set(tags.index[tags["functional"]])
-    ts = tag_sets(ds["memberships"], func)
-    idf = tags["idf_fit"].dropna().to_dict()
-    ids, texts = one["oracle_id"].tolist(), one["text"].tolist()
-    tset = [ts.get(o, frozenset()) for o in ids]
-    tagged = np.array([bool(t) for t in tset])
-    fam = one["family_id"].to_numpy()
-    order = np.argsort(one["split"].map({"dev": 0, "fit": 1}).to_numpy(), kind="stable")
-    vec = fit_vectorizer(ok.loc[ok["split"] == "fit", "text"].tolist())
-    lex = vec.transform(texts)
-
-    def overlap(i, j):  # weighted Jaccard: shared idf mass over union idf mass
-        union = sum(idf.get(t, 0.0) for t in tset[i] | tset[j])
-        return sum(idf.get(t, 0.0) for t in tset[i] & tset[j]) / union if union else 0.0
-
-    def best_match(i, allowed):
-        cand = [j for j in allowed if j != i and fam[j] != fam[i] and tagged[j]]
-        sc = [(overlap(i, j), -j) for j in cand]
-        if not sc:
-            return None
-        s, j = max(sc)
-        return -j if s > 0 and len(tset[i] & tset[-j]) >= 2 else None
-
-    def lexical_nearest(i, cand):
-        cand = [j for j in cand if fam[j] != fam[i]]
-        if not cand:
-            return None
-        sims = (lex[cand] @ lex[i].T).toarray().ravel()
-        return cand[int(np.argmax(sims))]
-
-    out = {s: [] for s in SECTIONS[1:]}
-    used: set[int] = set()
-    n = len(one)
-    opens = [opener(t) for t in texts]
-    masked = [mask_numbers(t) for t in texts]
-    by_open: dict[str, list[int]] = {}
-    for j, o in enumerate(opens):
-        if o:
-            by_open.setdefault(o, []).append(j)
-    by_mask: dict[str, list[int]] = {}
-    for j, m in enumerate(masked):
-        by_mask.setdefault(m, []).append(j)
-    toks = [tuple(_TOKEN.findall(t.lower())) for t in texts]
-    by_toks: dict[tuple, list[int]] = {}
-    for j, t in enumerate(toks):
-        by_toks.setdefault(t, []).append(j)
-    seen_open, seen_flip = set(), set()
-    for i in order:
-        if not tagged[i] or i in used:
-            continue
-        o = opens[i]
-        if len(out["rider"]) < k and o and o not in seen_open:
-            traps = [j for j in by_open[o] if tagged[j] and not (tset[i] & tset[j])]
-            trap = lexical_nearest(i, traps)
-            match = best_match(i, [j for j in range(n) if opens[j] != o])
-            if trap is not None and match is not None and not {trap, match} & used:
-                out["rider"].append((i, match, trap))
-                used |= {i, match, trap}
-                seen_open.add(o)
-                continue
-        if len(out["mechanism"]) < k:
-            ti = toks[i]
-            flips = [(j, (w, FLIP_OF[w])) for p, w in enumerate(ti) if w in FLIP_OF
-                     for j in by_toks.get(ti[:p] + (FLIP_OF[w],) + ti[p + 1:], [])]
-            flips = [(j, f) for j, f in flips if frozenset(f) not in seen_flip and j not in used]
-            if flips:
-                trap, f = flips[0]
-                match = best_match(i, [j for j in range(n) if j not in (i, trap)])
-                if match is not None and match not in used:
-                    out["mechanism"].append((i, match, trap))
-                    used |= {i, match, trap}
-                    seen_flip.add(frozenset(f))
-                    continue
-        if len(out["parameters"]) < k:
-            twins = [j for j in by_mask[masked[i]]
-                     if j != i and fam[j] != fam[i] and texts[j] != texts[i] and j not in used]
-            if twins:
-                traps = [j for j in range(n) if tagged[j] and not (tset[i] & tset[j])
-                         and j not in used]
-                trap = lexical_nearest(i, traps)
-                if trap is not None:
-                    out["parameters"].append((i, twins[0], trap))
-                    used |= {i, twins[0], trap}
-    items = []
-    for s in SECTIONS[1:]:
-        for i, m, t in out[s]:
-            items.append({"section": s, "status": "proposed", "anchor": ids[i], "line": None,
-                          "match": ids[m], "trap": ids[t]})
-    return items
-
-
 HEADER = """# Trap exam
 
 Idea credited to Delvefall (github.com/Ballchinian/Delvefall); items here are our own.
@@ -231,20 +126,6 @@ Every card named here (and its family) is kept out of new training inputs.
 Sealed cards never appear.
 
 """
-
-
-def init_worksheet(ds: dict, user_items: list[dict], path: Path = EXAM) -> list[dict]:
-    """Write the first worksheet (user reports first, then mined items). Never overwrites."""
-    if path.exists():
-        raise FileExistsError(f"{path} exists; append new items instead of rebuilding")
-    items = [*user_items, *mine(ds)]
-    cards = ds["cards"].set_index("oracle_id")
-    for n, it in enumerate(items, 1):
-        it["id"] = f"T{n:03d}"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(HEADER + "\n".join(render(it, cards) for it in items), "utf-8")
-    assert [it["id"] for it in parse(path.read_text("utf-8"))] == [it["id"] for it in items]
-    return items
 
 
 # ---------------------------------------------------------------- scoring

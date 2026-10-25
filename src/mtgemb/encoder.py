@@ -93,9 +93,3 @@ def token_lengths(tok, texts: list[str], recipe: dict) -> np.ndarray:
     enc = tok(add_prefix(texts, recipe["prefix"]), truncation=False)
     return np.array([len(x) for x in enc["input_ids"]])
 
-
-def choose_max_length(lengths: np.ndarray, coverage: float = 0.99, cap: int = 512) -> int:
-    """Smallest length L with at least `coverage` of inputs <= L, else the model cap."""
-    s = np.sort(np.asarray(lengths))
-    need = int(s[int(np.ceil(coverage * len(s))) - 1])
-    return min(need, cap)

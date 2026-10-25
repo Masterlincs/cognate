@@ -1,8 +1,7 @@
-import numpy as np
 import pytest
 import torch
 
-from mtgemb.encoder import RECIPES, add_prefix, choose_max_length, encode, load, pool
+from mtgemb.encoder import RECIPES, add_prefix, encode, load, pool
 
 FIXTURES = [
     "Flying",
@@ -19,12 +18,6 @@ def test_prefix_once():
     with pytest.raises(ValueError):
         add_prefix(["query: a"], "query: ")
     assert add_prefix(["x"], "") == ["x"]
-
-
-def test_choose_max_length():
-    lengths = np.arange(1, 101)  # 99% of 100 inputs are <= 99
-    assert choose_max_length(lengths) == 99
-    assert choose_max_length(np.array([600] * 100)) == 512
 
 
 def test_mean_pool_ignores_padding():
