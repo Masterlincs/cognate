@@ -19,6 +19,7 @@
   import { activeFilters, clearFilter, filterChips, hasMore, randomIndex, resolveSelection, savedList } from '#lib/explorer.js';
   import { loadFonts } from '#lib/load-fonts.js';
   import { remember } from '#lib/search.js';
+  import { modelLabel } from '#lib/wording.js';
   import { decodeMap, regionLabel, TEXTLESS } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
 
@@ -534,7 +535,7 @@
             </div>
           {/if}
           {#if hasMore({ saved, visible, shown, filtering })}<button type="button" class="btn more" onclick={() => (shown += PAGE)}>Show more</button>{/if}
-          <p class="model-note muted">Scores: {byLine ? 'line-match score' : 'cosine similarity'}. Model: {release.model.label}.</p>
+          <p class="model-note muted">Scores: {byLine ? 'line-match score' : 'cosine similarity'}. Model: {modelLabel(release.model, metrics.deployed)}.</p>
         </section>
       {/if}
     {/if}

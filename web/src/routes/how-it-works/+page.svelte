@@ -11,6 +11,7 @@
   import { loadRelease, setRoot } from '#lib/data.js';
   import { delta, fixed, mean } from '#lib/format.js';
   import { contrastRows, runScore } from '#lib/study.js';
+  import { decisionNote } from '#lib/wording.js';
   import m from '#lib/generated/metrics.json';
 
   const REPO = 'https://github.com/Masterlincs/cognate';
@@ -48,7 +49,7 @@
   const promoIsDeployed = promo.deployment?.run_id === dep?.run_id;
   const sealedIsDeployed = sealed.deployment.run_id === dep?.run_id;
   const panels = [
-    { title: `Development cards: ${promoIsDeployed ? 'the deployed recipe' : 'the promoted recipe'}`, note: `${seeds} seeds, ${promo.m_contrasts} comparisons corrected together. Decision: ${promo.decision} (${promo.qualifier}).`, rows: contrastRows(promo, contrastLabels) },
+    { title: `Development cards: ${promoIsDeployed ? 'the deployed recipe' : 'the promoted recipe'}`, note: `${seeds} seeds, ${promo.m_contrasts} comparisons corrected together. ${decisionNote(promo)}`, rows: contrastRows(promo, contrastLabels) },
     { title: `Sealed cards: ${sealedIsDeployed ? 'the deployed model' : `the earlier ${stepA}-update model`}, scored once`, note: `${sealed.m_contrasts} comparisons. Gate ${sealed.sealed_gate}.`, rows: contrastRows(sealed, contrastLabels) },
   ];
 
