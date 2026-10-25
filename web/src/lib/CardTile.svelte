@@ -20,13 +20,13 @@
     <CardText {card} {highlight} clamp={5} />
   </div>
   <div class="side">
-    {#if score !== null}<span class="score num" title="Similarity to the selected card">{score.toFixed(2)}</span>{/if}
+    {#if score !== null}<span class="score num" title="Similarity to the selected card">{score.toFixed(3)}</span>{/if}
     {#if oncompare}<button type="button" class="btn" onclick={() => oncompare(card)}>Compare</button>{/if}
   </div>
 </article>
 
 <style>
-  .row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; padding: 14px 0; min-width: 0; }
+  .row { position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 14px; padding: 14px 0; min-width: 0; }
   .art { width: 64px; aspect-ratio: 146 / 204; border-radius: 4px; overflow: hidden; background: var(--sunken); }
   .art img { width: 100%; height: 100%; object-fit: cover; }
   .body { min-width: 0; }
@@ -34,12 +34,14 @@
   .rank { color: var(--muted); font-size: 0.8rem; min-width: 1.4em; }
   h3 { min-width: 0; }
   .name { all: unset; cursor: pointer; overflow-wrap: anywhere; }
+  /* the name button covers the row, so the whole row opens the card; Compare sits above it */
+  .name::after { content: ''; position: absolute; inset: 0; }
   .name:hover { text-decoration: underline; text-underline-offset: 0.2em; }
   .name:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   .cost { white-space: nowrap; font-size: 0.92rem; }
   .side { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; gap: 8px; }
   .score { font-size: 0.95rem; font-weight: 600; }
-  .btn { padding: 3px 10px; font-size: 0.8rem; }
+  .btn { position: relative; padding: 3px 10px; font-size: 0.8rem; }
   @media (max-width: 520px) {
     .row { grid-template-columns: 52px minmax(0, 1fr); }
     .art { width: 52px; }

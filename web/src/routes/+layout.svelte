@@ -1,14 +1,18 @@
 <script>
   import '../app.css';
+  import { onMount } from 'svelte';
   import { page } from '$app/state';
   import { resolve } from '$app/paths';
 
   let { children } = $props();
   const REPO = 'https://github.com/Masterlincs/mtg-embeddings';
+  let dark = $state(false);
+  onMount(() => { dark = document.documentElement.dataset.theme === 'dark'; });
 
   function toggleTheme() {
-    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    const next = dark ? 'light' : 'dark';
     document.documentElement.dataset.theme = next;
+    dark = next === 'dark';
     try { localStorage.setItem('theme', next); } catch { /* private mode */ }
   }
 </script>
@@ -20,7 +24,7 @@
     <a href={resolve('/')} aria-current={page.url.pathname.endsWith('/how-it-works') ? undefined : 'page'}>Explore</a>
     <a href={resolve('/how-it-works')} aria-current={page.url.pathname.endsWith('/how-it-works') ? 'page' : undefined}>How it works</a>
     <a href={REPO} rel="noopener">GitHub</a>
-    <button class="theme" type="button" onclick={toggleTheme} aria-label="Toggle dark mode">
+    <button class="theme" type="button" onclick={toggleTheme} aria-label="Toggle dark mode" aria-pressed={dark}>
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9A7 7 0 0 1 12 3z" /></svg>
     </button>
   </nav>

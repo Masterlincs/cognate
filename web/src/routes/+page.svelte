@@ -1,7 +1,8 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import { asset } from '$app/paths';
-  import { afterNavigate, pushState, replaceState } from '$app/navigation';
+  import { afterNavigate, beforeNavigate, pushState, replaceState } from '$app/navigation';
+  import { page } from '$app/state';
   import AtlasMap from '#lib/AtlasMap.svelte';
   import CardText from '#lib/CardText.svelte';
   import CardGridItem from '#lib/CardGridItem.svelte';
@@ -12,9 +13,11 @@
   import Search from '#lib/Search.svelte';
   import Segmented from '#lib/Segmented.svelte';
   import { filterNeighbours, isV4Plus, isV5Plus, isV6, parseUrl, resolveAbilityIndex, serializeUrl } from '#lib/bundle.js';
+  import { entryKey, newEntryId } from '#lib/history.js';
   import { getAbilities, getCard, getFaces, getLines, getNeighbours, getTagLabels, loadRelease, loadSiteData, setRoot } from '#lib/data.js';
   import { activeFilters, hasMore, resolveSelection, savedList } from '#lib/explorer.js';
   import { loadFonts } from '#lib/load-fonts.js';
+  import { remember } from '#lib/search.js';
   import { decodeMap, regionLabel } from '#lib/map.js';
   import metrics from '#lib/generated/metrics.json';
 
@@ -24,6 +27,7 @@
   let release = $state.raw(null);
   let names = $state.raw(null); // raw, not a deep proxy: proxied, the first search took about 0.5 s on the throttled mobile profile
   let ids = null;
+  let idsLoaded = $state(false); // ids stays a plain array; this flag lets the recent list react to it
   let idsReady = null;
   let map = $state(null);
   let regions = $state([]);
@@ -47,7 +51,16 @@
   let tab = $state('results');
   let view = $state('list');
   let busy = $state(false);
+  let filtersOpen = $state(false); // narrow screens fold the filter fields behind one button
   let token = 0;
+  let recent = $state.raw([]); // [{ id, name }], newest first, kept in localStorage
+  let restoreY = $state(null); // back/forward: the scroll position to return to once that list has loaded
+  const positions = new Map(); // history entry key (entryKey) -> { y, shown } when the page left that entry
+  let entry = null; // the current history entry's id in page.state, or null for one made before this page ran
+  let here = ''; // the current entry's key, under which keep() saves its place
+  let popped = false; // Back or Forward: show the entry landed on once page.state is its state
+  const tabY = { results: 0 };
+  const RECENT_KEY = 'recent-cards';
 
   const hasLines = $derived(isV4Plus(release));
   const hasFaces = $derived(isV6(release));
@@ -56,11 +69,33 @@
   const byFace = $derived(ability === null && rank === 'face');
   const saved = $derived(savedList({ ability, rank, whole, lines: lineRows, faces: faceRows, abilities }));
   const filtering = $derived(activeFilters(filters));
+  const filterCount = $derived([filters.color, filters.creature, filters.type, Number.isFinite(filters.minMv) || Number.isFinite(filters.maxMv)].filter(Boolean).length);
   const visible = $derived(filterNeighbours(saved, (i) => byIndex[i], filters));
   const pageRows = $derived(visible.slice(0, shown));
   const shownError = $derived(error || (ability === null && rowsError[rank]) || '');
   const pending = $derived((byLine && lineRows === null) || (byFace && faceRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
   const showcase = metrics.showcase ?? [];
+  const recentOptions = $derived(names && idsLoaded ? recent.map((r) => ({ index: byId(r.id), name: r.name })).filter((r) => r.index >= 0 && r.index !== index) : []);
+
+  // Back/Forward: SvelteKit sets page.state for the entry landed on after the popstate event, so
+  // read its id here rather than in the event
+  $effect(() => {
+    const { e } = page.state;
+    untrack(() => {
+      if (!popped) return;
+      popped = false;
+      land(e);
+      if (ids) apply(parseUrl(location.search), positions.get(here) ?? null);
+    });
+  });
+
+  // back/forward: once the restored list's cards are in, return to where the page was
+  $effect(() => {
+    if (restoreY === null || busy || pending) return;
+    const y = restoreY;
+    restoreY = null;
+    tick().then(() => scrollTo(0, y));
+  });
 
   // load the cards the list needs: the shown page, or every saved neighbour while filtering.
   // Not while a selection loads: the list still belongs to the old card but the token is new.
@@ -92,10 +127,30 @@
 
   function updateUrl(push) {
     const qs = serializeUrl({ card: card?.id ?? '', ability, rank, view, ...filters });
-    (push ? pushState : replaceState)(qs ? `?${qs}` : location.pathname, {});
+    // a new entry gets a new id; a replaced one keeps its id, or gets one if it was made before this page ran
+    if (push || !entry) entry = newEntryId();
+    here = entry;
+    (push ? pushState : replaceState)(qs ? `?${qs}` : location.pathname, { e: entry });
   }
 
-  async function select(i, { push = true, abilityIndex = null } = {}) {
+  // the scroll position and list length to come back to on Back
+  const keep = () => {
+    positions.set(here, { y: scrollY, shown });
+    // entries dropped from browser history are never read again, so keep only the most recent ones
+    if (positions.size > 200) positions.delete(positions.keys().next().value);
+  };
+  // e: the id in the page.state of the entry now shown
+  const land = (e) => { entry = e ?? null; here = entryKey(entry, location.search); };
+
+  function rememberCard(c) {
+    recent = remember(recent, { id: c.id, name: c.name });
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(recent)); } catch { /* private mode */ }
+  }
+
+  // push: a visitor's pick (adds history, then shows the new card from the top and focuses its name);
+  // focus: false keeps focus where it is (a map pick); back: a saved { y, shown } to restore
+  async function select(i, { push = true, abilityIndex = null, focus = true, back = null } = {}) {
+    if (push) keep();
     const t = ++token;
     busy = true;
     notice = '';
@@ -113,8 +168,15 @@
       index = i; card = c; whole = n; abilities = ab; lineRows = rows; faceRows = rows; tagLabels = labels;
       ability = resolveAbilityIndex(abilityIndex, ab);
       updateUrl(push);
-      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (push) document.getElementById('results')?.scrollIntoView({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+      rememberCard(c);
+      tabY.results = 0;
+      if (back) { shown = back.shown; restoreY = back.y; }
+      if (push && tab === 'results') {
+        await tick();
+        if (focus) document.getElementById('selected-name')?.focus({ preventScroll: true });
+        const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+        if (scrollY > 0) scrollTo({ top: 0, behavior: still ? 'auto' : 'smooth' });
+      }
     } catch (e) {
       if (t === token) error = e.message;
     } finally {
@@ -127,14 +189,14 @@
     index = -1; card = null; whole = []; abilities = []; lineRows = null; faceRows = null; ability = null; compare = null; rowsError = {};
   }
 
-  function apply(state) {
+  function apply(state, back = null) {
     filters = { color: state.color, colorMode: state.colorMode, colorBy: hasColours ? state.colorBy : 'identity', minMv: state.minMv, maxMv: state.maxMv, creature: state.creature, type: state.type };
     rank = hasFaces ? state.rank : hasLines ? (state.rank === 'face' ? 'whole' : state.rank) : 'whole';
     view = state.view;
     const r = resolveSelection(ids, state);
     if (r.unknown) clear();
     else if (r.index < 0) clear();
-    else select(r.index, { push: false, abilityIndex: state.ability });
+    else select(r.index, { push: false, abilityIndex: state.ability, back });
     // select() clears the notice before its first await, so these land after it
     const dropped = state.dropped.length ? `Unrecognised link value for ${state.dropped.map((k) => PARAM_NAMES[k]).join(', ')}; ${state.dropped.length > 1 ? 'those filters are' : 'that filter is'} off.` : '';
     const unavailableFace = state.rank === 'face' && !hasFaces ? 'Face match is unavailable in this release.' : '';
@@ -142,6 +204,7 @@
   }
 
   function setAbility(k) {
+    keep();
     ability = k;
     rank = 'whole';
     shown = PAGE;
@@ -149,6 +212,7 @@
   }
 
   function setRank(value) {
+    keep();
     ability = null;
     rank = value;
     rowsError[value] = ''; // its effect retries
@@ -161,6 +225,27 @@
     filters = { ...filters, [key]: value };
     notice = '';
     updateUrl(false);
+  }
+
+  // mobile Results/Map tabs: the map opens at the top, the results where they were left
+  async function setTab(next) {
+    if (next === tab) return;
+    if (tab === 'results') tabY.results = scrollY;
+    tab = next;
+    await tick();
+    scrollTo(0, next === 'results' ? tabY.results : 0);
+  }
+  function tabKey(e) {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    setTab(tab === 'results' ? 'map' : 'results').then(() => document.getElementById(`tab-${tab}`)?.focus());
+  }
+
+  // "/" jumps to the search box, as on many search sites
+  function slash(e) {
+    if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey || compare || e.target.closest?.('input, textarea, select, [contenteditable]')) return;
+    const box = document.querySelector('.explorer [role=combobox]');
+    if (box) { e.preventDefault(); box.focus(); }
   }
 
   function setView(value) {
@@ -181,13 +266,25 @@
   const pick = (c) => { const i = byId(c.id); if (i >= 0) select(i); };
 
   // a plain link to this page (header logo, Explore) keeps the component, so re-read the URL
+  beforeNavigate(({ type }) => { if (type === 'link') keep(); });
   afterNavigate(({ type }) => {
-    if (ids && (type === 'link' || type === 'goto')) apply(parseUrl(location.search));
+    if (type !== 'link' && type !== 'goto') return;
+    land(page.state.e);
+    if (ids) apply(parseUrl(location.search));
   });
 
   onMount(() => {
     setRoot(asset(''));
-    const onPop = () => ids && apply(parseUrl(location.search));
+    land(page.state.e);
+    // save the place of the entry being left; the $effect on page.state shows the one landed on.
+    // A fragment link (Skip to content) also fires popstate, with no state yet; SvelteKit leaves
+    // page.state alone then (its popstate listener in @sveltejs/kit/src/runtime/client/client.js)
+    // While a pick is loading, select() has already saved the place it left and reset the list length,
+    // so saving again would overwrite that snapshot with the reset one
+    const onPop = (e) => { if (!e.state) return; if (!busy) keep(); popped = true; };
+    try { recent = JSON.parse(localStorage.getItem(RECENT_KEY) ?? '[]').filter((r) => typeof r?.id === 'string' && typeof r?.name === 'string'); } catch { /* private mode or bad JSON */ }
+    // a first visit on a desktop starts in the search box; on touch screens that would open the keyboard over the page
+    if (!new URLSearchParams(location.search).get('card') && matchMedia('(hover: hover) and (pointer: fine)').matches) document.getElementById('card-search')?.focus();
     addEventListener('popstate', onPop);
     // web fonts wait for the search index (or its failure) so they do not slow it down, and cards
     // wait for the fonts, so a card never shows blank mana symbols while they load
@@ -202,6 +299,7 @@
         }).catch(() => { siteMissing = true; });
         const before = token;
         ids = await idsReady;
+        idsLoaded = true;
         // a card picked from search while ids loaded wins over the starting URL
         if (token === before) apply(parseUrl(location.search));
       } catch (e) { error = e.message; }
@@ -215,17 +313,19 @@
   <meta name="description" content="Find Magic cards whose rules text does a similar thing, ranked by a fine-tuned embedding model." />
 </svelte:head>
 
+<svelte:window onkeydown={slash} />
+
 <div class="explorer" class:has-card={card}>
   <div class="tabs" role="tablist" aria-label="View">
-    <button role="tab" aria-selected={tab === 'results'} onclick={() => (tab = 'results')}>Results</button>
-    <button role="tab" aria-selected={tab === 'map'} onclick={() => (tab = 'map')}>Map</button>
+    <button role="tab" id="tab-results" aria-controls="results-pane" aria-selected={tab === 'results'} tabindex={tab === 'results' ? 0 : -1} onclick={() => setTab('results')} onkeydown={tabKey}>Results</button>
+    <button role="tab" id="tab-map" aria-controls="map-pane" aria-selected={tab === 'map'} tabindex={tab === 'map' ? 0 : -1} onclick={() => setTab('map')} onkeydown={tabKey}>Map</button>
   </div>
 
-  <section class="map-pane" class:hidden={tab !== 'map'} aria-label="Card map">
+  <section class="map-pane" id="map-pane" class:hidden={tab !== 'map'} aria-label="Card map">
     {#if map && names}
-      <AtlasMap {map} {regions} {names} selected={card?.has_text ? index : -1} neighbours={pageRows.map(([i]) => i)} onselect={(i) => select(i)} />
+      <AtlasMap {map} {regions} {names} selected={card?.has_text ? index : -1} neighbours={pageRows.map(([i]) => i)} onselect={(i) => select(i, { focus: false })} />
       {#if card}
-        <div class="map-bar"><span>{card.name}</span><button type="button" class="btn" onclick={() => (tab = 'results')}>See results</button></div>
+        <div class="map-bar"><span>{card.name}</span><button type="button" class="btn" onclick={() => setTab('results')}>See results</button></div>
       {/if}
     {:else if siteMissing}
       <p class="notice">No map for this release.</p>
@@ -234,14 +334,14 @@
     {/if}
   </section>
 
-  <section class="results-pane" class:hidden={tab !== 'results'}>
+  <section class="results-pane" id="results-pane" class:hidden={tab !== 'results'} class:busy aria-label="Results">
     {#if shownError}<p class="notice" role="alert">Could not load card data: {shownError}</p>{/if}
     {#if notice}<p class="notice" role="status">{notice}</p>{/if}
 
     {#if !card}
       <div class="intro">
         <h1>Find Magic cards by what they do.</h1>
-        <Search {names} onpick={(i) => select(i)} />
+        <Search {names} recent={recentOptions} onpick={(i) => select(i)} />
         {#if showcase.length}
           <div class="examples">
             {#each showcase as ex (ex.id)}
@@ -251,11 +351,12 @@
         {/if}
       </div>
     {:else}
-      <div class="top-search"><Search {names} id="card-search-top" onpick={(i) => select(i)} /></div>
+      <div class="top-search"><Search {names} recent={recentOptions} id="card-search-top" onpick={(i) => select(i)} /></div>
       <article class="selected" aria-labelledby="selected-name">
-        {#if card.image}<img src={card.image} alt="" width="488" height="680" />{/if}
+        <!-- keyed, so the last card's image never shows under the new card's name -->
+        {#key card.id}{#if card.image}<img src={card.image} alt="" width="488" height="680" />{/if}{/key}
         <div class="selected-body">
-          <h1 id="selected-name">{card.name} {#if card.faces.length === 1 && card.faces[0].mana_cost}<span class="cost"><Rules text={card.faces[0].mana_cost} /></span>{/if}</h1>
+          <h1 id="selected-name" tabindex="-1">{card.name} {#if card.faces.length === 1 && card.faces[0].mana_cost}<span class="cost"><Rules text={card.faces[0].mana_cost} /></span>{/if}</h1>
           <CardText {card} />
           {#if card.tags?.length}
             <div class="tags" title={release.tags_status}>
@@ -270,7 +371,7 @@
       {#if !card.has_text}
         <p class="notice">No rules text to compare.</p>
       {:else}
-        <div class="similar-by" id="results">
+        <div class="similar-by">
           <h2>Similar cards</h2>
           {#if hasLines || abilities.length > 1}
             {#if hasLines}<Segmented label="Rank by" options={[{ value: 'whole', label: 'Whole card' }, { value: 'line', label: 'Line match' }, ...(hasFaces ? [{ value: 'face', label: 'Face match' }] : [])]} value={ability === null ? rank : null} onchange={setRank} />{/if}
@@ -288,13 +389,16 @@
         </div>
 
         <div class="filters" role="group" aria-label="Filter results">
-          <div class="f"><span class="fl">Colour</span><ColourFilter color={filters.color} mode={filters.colorMode} basis={filters.colorBy} showBasis={hasColours} onchange={setColour} /></div>
-          <div class="f"><span class="fl">Type</span>
-            <Segmented label="Creatures" options={[{ value: '', label: 'Any' }, { value: 'creature', label: 'Creatures' }, { value: 'noncreature', label: 'Non-creatures' }]} value={filters.creature} onchange={(v) => setFilter('creature', v)} />
-            <input type="text" class="type" placeholder="Type line has…" aria-label="Type line contains" value={filters.type} onchange={(e) => setFilter('type', e.currentTarget.value)} />
-          </div>
-          <div class="f"><span class="fl">Mana value</span>
-            <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} onchange={(e) => setMv('minMv', e.currentTarget)} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} onchange={(e) => setMv('maxMv', e.currentTarget)} aria-label="Maximum mana value" />
+          <button type="button" class="btn ftoggle" aria-expanded={filtersOpen} aria-controls="filter-fields" onclick={() => (filtersOpen = !filtersOpen)}>Filters{#if filterCount}<span class="num">· {filterCount}</span>{/if}</button>
+          <div class="fields" id="filter-fields" class:open={filtersOpen}>
+            <div class="f"><span class="fl">Colour</span><ColourFilter color={filters.color} mode={filters.colorMode} basis={filters.colorBy} showBasis={hasColours} onchange={setColour} /></div>
+            <div class="f"><span class="fl">Type</span>
+              <Segmented label="Creatures" options={[{ value: '', label: 'Any' }, { value: 'creature', label: 'Creatures' }, { value: 'noncreature', label: 'Non-creatures' }]} value={filters.creature} onchange={(v) => setFilter('creature', v)} />
+              <input type="text" class="type" placeholder="Type line has…" aria-label="Type line contains" value={filters.type} oninput={(e) => setFilter('type', e.currentTarget.value)} />
+            </div>
+            <div class="f"><span class="fl">Mana value</span>
+              <input type="number" min="0" max="20" inputmode="numeric" placeholder="min" value={filters.minMv ?? ''} oninput={(e) => setFilter('minMv', numberOrNull(e.currentTarget.value))} onchange={(e) => setMv('minMv', e.currentTarget)} aria-label="Minimum mana value" /><span class="muted">to</span><input type="number" min="0" max="20" inputmode="numeric" placeholder="max" value={filters.maxMv ?? ''} oninput={(e) => setFilter('maxMv', numberOrNull(e.currentTarget.value))} onchange={(e) => setMv('maxMv', e.currentTarget)} aria-label="Maximum mana value" />
+            </div>
           </div>
           <div class="f"><span class="fl">View</span><Segmented label="View" options={[{ value: 'list', label: 'List' }, { value: 'grid', label: 'Grid' }]} value={view} onchange={setView} /></div>
           <p class="fstatus muted" aria-live="polite">{#if filtering}{visible.length} of the {saved.length} most similar cards match. <button type="button" class="linkish" onclick={() => { filters = { ...NO_FILTERS }; notice = ''; updateUrl(false); }}>Clear filters</button>{:else}Filters apply to the {saved.length} most similar cards.{/if}</p>
@@ -329,7 +433,10 @@
   .examples { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin-top: 14px; font-size: 0.92rem; }
   .examples .chip { padding: 0; background: none; border-radius: 0; color: var(--ink); font-size: inherit; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 0.25em; }
   .examples .chip:hover { text-decoration-color: currentColor; }
-  .top-search { margin-bottom: 22px; }
+  /* the search stays in reach below the site header */
+  .top-search { position: sticky; top: 56px; z-index: 15; margin: -8px 0 14px; padding: 8px 0; background: var(--bg); }
+  .selected h1:focus { outline: none; }
+  .busy :is(.selected, .similar-by, .filters, .results) { opacity: 0.55; transition: opacity 0.2s 0.15s; }
   .selected { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 22px; padding-bottom: 24px; border-bottom: 1px solid var(--line); }
   .selected img { width: 180px; height: auto; aspect-ratio: 488 / 680; border-radius: 9px; background: var(--sunken); }
   .selected-body { min-width: 0; }
@@ -338,7 +445,7 @@
   .cost { font-size: 1.05rem; vertical-align: 0.2em; white-space: nowrap; letter-spacing: 0; }
   .tags { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 14px; font-size: 0.82rem; }
   .links { margin: 14px 0 0; font-size: 0.9rem; }
-  .similar-by { margin: 26px 0 0; scroll-margin-top: 70px; }
+  .similar-by { margin: 26px 0 0; }
   .similar-by h2 { margin-bottom: 12px; }
   .by { display: flex; flex-direction: column; gap: 2px; }
   .by button { max-width: 100%; padding: 6px 10px; border: 0; border-left: 2px solid var(--line); background: none; font-size: 0.88rem; text-align: left; overflow-wrap: anywhere; color: var(--muted); }
@@ -354,6 +461,8 @@
   .filters input[type='number'] { width: 66px; }
   .filters input.type { width: 140px; }
   .fstatus { flex-basis: 100%; margin: 0; font-size: 0.82rem; }
+  .ftoggle { display: none; }
+  .fields { display: contents; }
   .linkish { padding: 0; border: 0; background: none; font-size: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 0.2em; }
   .results { margin: 0; padding: 0; list-style: none; }
   .results > li { display: grid; min-width: 0; border-bottom: 1px solid var(--line); }
@@ -365,23 +474,31 @@
   .model-note { font-size: 0.8rem; margin-top: 22px; }
   @media (max-width: 900px) {
     .explorer { grid-template-columns: minmax(0, 1fr); gap: 14px; padding-top: 12px; }
-    .tabs { display: flex; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-    .tabs button { flex: 1; padding: 7px; border: 0; background: var(--surface); font-weight: 500; color: var(--muted); }
+    /* at the foot of the screen, in thumb reach, while the explorer is in view */
+    .tabs { display: flex; order: 3; position: sticky; bottom: max(10px, env(safe-area-inset-bottom)); z-index: 18; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; box-shadow: 0 6px 20px rgb(0 0 0 / 18%); }
+    .tabs button { flex: 1; padding: 11px 7px; border: 0; background: var(--surface); font-weight: 500; color: var(--muted); }
     .tabs button + button { border-left: 1px solid var(--line); }
     .tabs button[aria-selected='true'] { background: var(--ink); color: var(--bg); }
     .explorer:not(.has-card) .tabs { display: none; }
     .explorer:not(.has-card) .map-pane { display: block; position: static; height: 46dvh; min-height: 280px; order: 2; }
-    .map-pane { position: relative; top: 0; height: 72dvh; }
+    .map-pane { position: relative; top: 0; height: calc(100dvh - 150px); min-height: 360px; }
     .hidden { display: none; }
     .explorer:not(.has-card) .results-pane { display: block; }
     .map-bar { display: flex; position: absolute; left: 10px; right: 52px; top: 10px; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 6px 6px 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); font-weight: 600; font-size: 0.9rem; }
     .map-bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .filters { gap: 10px 16px; padding: 10px 0; }
+    .ftoggle { display: inline-flex; height: 32px; }
+    .ftoggle[aria-expanded='true'] { border-color: var(--ink); }
+    .fields { display: none; order: 2; flex-basis: 100%; flex-direction: column; align-items: flex-start; gap: 12px; padding: 4px 0; }
+    .fields.open { display: flex; }
+    .fstatus { order: 3; }
     .selected { grid-template-columns: 110px minmax(0, 1fr); gap: 14px; }
     .selected img { width: 110px; }
     .intro { padding-top: 8px; }
   }
   @media (max-width: 480px) {
-    .selected { grid-template-columns: minmax(0, 1fr); }
-    .selected img { width: 150px; }
+    .selected { grid-template-columns: 92px minmax(0, 1fr); gap: 12px; }
+    .selected img { width: 92px; border-radius: 5px; }
+    .selected h1 { font-size: 1.45rem; }
   }
 </style>

@@ -5,7 +5,7 @@
 // normal-vision ΔE >= 17 (OKLab x100). White in the light theme is a pale mark by nature (2.2:1).
 export const PALETTE = {
   light: { w: '#c6af00', u: '#366096', b: '#5b205a', r: '#ba002f', g: '#1d956d', m: '#b46d09', c: '#a0a3b3' },
-  dark: { w: '#f2e5ad', u: '#58a7ff', b: '#b85eb7', r: '#d81e1d', g: '#29c38f', m: '#ea9127', c: '#596e6f' }
+  dark: { w: '#f2e5ad', u: '#58a7ff', b: '#b85eb7', r: '#ee5a50', g: '#29c38f', m: '#ea9127', c: '#8a9fa0' }
 };
 
 export const LEGEND = [['w', 'White'], ['u', 'Blue'], ['b', 'Black'], ['r', 'Red'], ['g', 'Green'], ['c', 'Colourless'], ['m', 'Multicolour']];

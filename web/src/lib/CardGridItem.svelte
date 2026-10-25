@@ -25,7 +25,7 @@
   </div>
   <div class="meta">
     {#if rank !== null}<span class="rank num">{rank}</span>{/if}
-    {#if score !== null}<span class="score num" title="Similarity to the selected card">{score.toFixed(2)}</span>{/if}
+    {#if score !== null}<span class="score num" title="Similarity to the selected card">{score.toFixed(3)}</span>{/if}
     {#if oncompare}<button type="button" class="btn" onclick={() => oncompare(card)}>Compare</button>{/if}
   </div>
 </article>
