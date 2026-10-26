@@ -34,7 +34,7 @@
   .tile:hover img { transform: scale(1.04); }
   .tile:focus-visible { outline-offset: 2px; }
   .art { display: block; aspect-ratio: 5 / 7; overflow: hidden; background: var(--sunken); padding: 10px 14px 0; }
-  img { width: 100%; height: 100%; object-fit: contain; border-radius: 4.5%; }
+  img { width: 100%; height: 100%; object-fit: contain; border-radius: 5.5% / 3.9%; }
   .body { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px 11px; min-width: 0; }
   .head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
   strong { font-weight: 650; font-size: 0.92rem; line-height: 1.25; }
