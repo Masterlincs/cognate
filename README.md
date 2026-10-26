@@ -78,7 +78,7 @@ Everything is prerendered to plain files; there is no server code. The explorer 
 npm ci
 npm test
 npm run build                  # writes build/
-node scripts/serve-build.mjs   # serves build/ with gzip on http://localhost:4318
+node scripts/serve-build.mjs   # serves build/ with gzip on http://127.0.0.1:4318, applying the /* rules of build/_headers
 ```
 
 `npm run build` runs `vite build`, then `scripts/prune-build.mjs`, which keeps only the release named by `public/data/current.json`, and its site data, in `build/data`. It also adds an inline script to `build/index.html` that requests the start-up data before the app's code loads. `npm run preview` serves the prerender output, not `build/`; use `serve-build.mjs` to check the artifact. `node scripts/time-load.mjs http://localhost:4318/ slow4g 6` times usable lookup on the throttled Lighthouse mobile profile (headless Chrome; set `CHROME` if it is not in the default Windows location).
@@ -95,26 +95,39 @@ The case-study numbers come from `web/src/lib/generated/metrics.json`, which is 
 
 `npm run fixture` writes a small synthetic bundle (made-up names and rules text, not model results) and points `current.json` at it, for development without the real data; `git checkout web/public/data/current.json` switches back.
 
-To deploy, copy `build/` to any static host. The site uses relative paths, so it also works below a path prefix. Pages are written as `how-it-works.html`, so the server must map extensionless URLs to `.html`. For nginx:
+To deploy, copy `build/` to any static host. The build also writes `build/_headers` (a Content-Security-Policy that allows only this build's inline scripts by hash, plus cache rules) and a plain `404.html`. Cloudflare Pages and Netlify read `_headers` as it is. For other hosts, copy the same values into the server configuration. The licence texts for the bundled fonts are in `THIRD_PARTY_NOTICES.txt`, which the build copies to its root. The site uses relative paths, so it also works below a path prefix. Pages are written as `how-it-works.html`, so the server must map extensionless URLs to `.html`. For nginx:
 
 ```nginx
 server {
-    listen 80;
+    listen 443 ssl;
     server_name example.org;
     root /var/www/cognate;
+    # ssl_certificate and ssl_certificate_key go here.
+    error_page 404 /404.html;
+
+    # Copy the Content-Security-Policy value from build/_headers.
+    add_header Content-Security-Policy "<value from build/_headers>" always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    add_header Strict-Transport-Security "max-age=31536000" always;
 
     location / {
         try_files $uri $uri.html $uri/ =404;
     }
     location /_app/immutable/ {
+        # add_header in a location replaces the server-level headers, so repeat them here.
         add_header Cache-Control "public, max-age=31536000, immutable";
+        add_header X-Content-Type-Options nosniff always;
     }
     gzip on;
+    gzip_vary on;
     gzip_types application/json application/javascript text/css image/svg+xml application/octet-stream;
 }
 ```
 
 Card images are loaded from Scryfall at view time and are not part of the build.
+
+For Cloudflare Pages, use Direct Upload of the `build/` folder (for example `npx wrangler pages deploy build`). The free plan allows 20,000 files and 25 MiB per file; the build is well inside both. I have not deployed it there yet, so these notes come from Cloudflare's documentation and not from a test.
 
 ## Reproducing
 
