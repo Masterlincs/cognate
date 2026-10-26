@@ -8,10 +8,10 @@
 </script>
 
 <ul class="examples">
-  {#each items as { id, name, card } (id)}
+  {#each items as { id, name, card }, n (id)}
     <li>
       <a class="tile" href="?card={id}" onclick={(e) => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey && onpick(id)) e.preventDefault(); }}>
-        <span class="art">{#if card?.image}<img src={cardImage(card.image, 'small')} alt="" loading="lazy" decoding="async" width="146" height="204" />{/if}</span>
+        <span class="art">{#if card?.image}<img src={cardImage(card.image, 'small')} alt="" loading={n < 4 ? 'eager' : 'lazy'} fetchpriority={n < 4 ? 'high' : 'auto'} decoding="async" width="146" height="204" />{/if}</span>
         <span class="body">
           <span class="head"><strong>{name}</strong>{#if card?.faces[0]?.mana_cost}<span class="cost"><Rules text={card.faces[0].mana_cost} /></span>{/if}</span>
           {#if card}
