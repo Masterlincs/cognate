@@ -11,7 +11,7 @@
   {#each items as { id, name, card } (id)}
     <li>
       <a class="tile" href="?card={id}" onclick={(e) => { if (!e.ctrlKey && !e.metaKey && !e.shiftKey && onpick(id)) e.preventDefault(); }}>
-        <span class="art">{#if card?.image}<img src={cardImage(card.image, 'art_crop')} alt="" loading="lazy" decoding="async" width="626" height="457" />{/if}</span>
+        <span class="art">{#if card?.image}<img src={cardImage(card.image, 'small')} alt="" loading="lazy" decoding="async" width="146" height="204" />{/if}</span>
         <span class="body">
           <span class="head"><strong>{name}</strong>{#if card?.faces[0]?.mana_cost}<span class="cost"><Rules text={card.faces[0].mana_cost} /></span>{/if}</span>
           {#if card}
@@ -33,8 +33,8 @@
   .tile:hover { border-color: color-mix(in srgb, var(--ink) 45%, var(--line)); }
   .tile:hover img { transform: scale(1.04); }
   .tile:focus-visible { outline-offset: 2px; }
-  .art { display: block; aspect-ratio: 16 / 7; overflow: hidden; background: var(--sunken); }
-  img { width: 100%; height: 100%; object-fit: cover; object-position: center 30%; }
+  .art { display: block; aspect-ratio: 5 / 7; overflow: hidden; background: var(--sunken); padding: 10px 14px 0; }
+  img { width: 100%; height: 100%; object-fit: contain; border-radius: 4.5%; }
   .body { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px 11px; min-width: 0; }
   .head { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
   strong { font-weight: 650; font-size: 0.92rem; line-height: 1.25; }
