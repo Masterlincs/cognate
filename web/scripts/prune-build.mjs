@@ -53,8 +53,9 @@ const headers = [
   '/*', ...security,
   '/_app/immutable/*', '  Cache-Control: public, max-age=31536000, immutable',
   '/data/current.json', '  Cache-Control: no-cache',
-  `/data/site-${id}/*`, '  Cache-Control: public, max-age=3600',
-  `/data/${id}/*`, '  Cache-Control: public, max-age=3600'
+  // a release id names its files for good: site data and release data are never overwritten
+  `/data/site-${id}/*`, '  Cache-Control: public, max-age=31536000, immutable',
+  `/data/${id}/*`, '  Cache-Control: public, max-age=31536000, immutable'
 ];
 await writeFile(path.join(build, '_headers'), headers.join('\n') + '\n');
 console.log(`build/_headers: ${hashes.size} inline script hashes`);

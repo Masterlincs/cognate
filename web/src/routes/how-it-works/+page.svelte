@@ -92,6 +92,9 @@
 <svelte:head>
   <title>How it works · Cognate</title>
   <meta name="description" content="How I built Cognate, a site that finds Magic cards with similar effects using a fine-tuned embedding model. How I tested it, and where it still fails." />
+  <meta property="og:title" content="How Cognate works" />
+  <meta property="og:description" content="How I built Cognate, a site that finds Magic cards with similar effects using a fine-tuned embedding model. How I tested it, and where it still fails." />
+  <meta property="og:url" content="https://cognate.lincolnvw.dev/how-it-works" />
 </svelte:head>
 
 {#snippet eyebrow(id)}<p class="eyebrow"><span class="num">{stepNo[id]}</span> {steps[stepNo[id] - 1][1]}</p>{/snippet}

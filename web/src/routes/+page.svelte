@@ -386,6 +386,9 @@
 <svelte:head>
   <title>{card ? `${card.name} · Cognate` : 'Cognate'}</title>
   <meta name="description" content="Pick a Magic card and find the cards that do a similar thing. A fine-tuned embedding model ranks them." />
+  <meta property="og:title" content="Cognate: find Magic cards by what they do" />
+  <meta property="og:description" content="Pick a Magic card and find the cards that do a similar thing. A fine-tuned embedding model ranks them." />
+  <meta property="og:url" content="https://cognate.lincolnvw.dev/" />
 </svelte:head>
 
 {#snippet dice()}<svg class="ico" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.75" /><circle cx="5.4" cy="5.4" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="10.6" cy="10.6" r="1" /></svg>{/snippet}
