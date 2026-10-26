@@ -26,16 +26,21 @@
   const exDep = dep ? exam[dep.run_id] : null;
   const margin = (rec, id) => rec?.failed.find((f) => f.id === id)?.margin ?? null;
   const marginText = (rec, id) => (margin(rec, id) === null ? '—' : fixed(margin(rec, id)));
-  const fineTuned = m.dev['fine-tuned E5'];
+  const fineTuned = m.dev['fine-tuned E5, 2000 updates'];
   // the dev row whose runs include the deployed run (falls back to the first E5 recipe)
   const depRow = Object.values(m.dev).find((r) => r.runs.includes(dep?.run_id)) ?? fineTuned;
   const depScore = runScore(depRow, dep?.run_id) ?? mean(depRow.full);
-  const lexical = m.dev['keyword baseline (character TF-IDF)'];
+  const lexical = m.dev['character n-gram TF-IDF'];
   const pretrained = m.dev['pretrained E5-base'];
   const split = m.data.split_counts;
   const [stepA, stepB] = Object.keys(Object.values(m.steps)[0] ?? {});
   const stepRows = Object.entries(m.steps).map(([s, v]) => ({ label: `seed ${s}`, a: v[stepA], b: v[stepB] }));
 
+  // evaluation sizes from runs/eval/<dev benchmark>/confirm-x1-s1/summary.json and benchmark_v3.json
+  const DEV_ANCHORS = 3016;
+  const DEV_UNIVERSE = 27573;
+  const TRUNCATED = 260;
+  const KEYWORD_ONLY = 1099;
   const seeds = Math.max(...Object.values(m.dev).map((r) => r.runs.length));
   const spread = Math.max(...Object.values(m.dev).flatMap((r) => [r.full, r.hard_lexical].map((xs) => Math.max(...xs) - Math.min(...xs))));
   const devRows = Object.entries(m.dev).map(([label, r]) => ({
@@ -50,7 +55,7 @@
   const sealedIsDeployed = sealed.deployment.run_id === dep?.run_id;
   const panels = [
     { title: `Development cards: ${promoIsDeployed ? 'the deployed recipe' : 'the promoted recipe'}`, note: `${seeds} seeds, ${promo.m_contrasts} comparisons corrected together. ${decisionNote(promo)}`, rows: contrastRows(promo, contrastLabels) },
-    { title: `Sealed cards: ${sealedIsDeployed ? 'the deployed model' : `the earlier ${stepA}-update model`}, scored once`, note: `${sealed.m_contrasts} comparisons. Gate ${sealed.sealed_gate}.`, rows: contrastRows(sealed, contrastLabels) },
+    { title: `Sealed cards: ${sealedIsDeployed ? 'the deployed model' : `the earlier ${stepA}-update model`}, one test`, note: `${sealed.m_contrasts} comparisons. Gate ${sealed.sealed_gate}.`, rows: contrastRows(sealed, contrastLabels) },
   ];
 
   const steps = [
@@ -86,7 +91,7 @@
 
 <svelte:head>
   <title>How it works · Cognate</title>
-  <meta name="description" content="How I built Cognate, a fine-tuned sentence-embedding model that finds Magic cards with similar effects. How I tested it, and where it still fails." />
+  <meta name="description" content="How I built Cognate, a site that finds Magic cards with similar effects using a fine-tuned embedding model. How I tested it, and where it still fails." />
 </svelte:head>
 
 {#snippet eyebrow(id)}<p class="eyebrow"><span class="num">{stepNo[id]}</span> {steps[stepNo[id] - 1][1]}</p>{/snippet}
@@ -94,14 +99,14 @@
 <article class="study">
   <header class="hero">
     <h1>Finding Magic cards by what they do, not what they say</h1>
-    <p class="lede">Pick a Magic: The Gathering card, and Cognate lists the cards with the most similar effects, even when the words are different. It runs on e5-base-v2, a small open text-embedding model that I fine-tuned on community tags. This page shows how I built and tested it, and where it still fails.</p>
+    <p class="lede">Pick a Magic: The Gathering card, and Cognate lists the cards that its model rates as most similar in effect, often even when the words are different. It runs on e5-base-v2, a small open text-embedding model that I fine-tuned on community tags. This page shows how I built and tested it, and where it still fails.</p>
     <div class="hero-actions">
       <div class="hero-search"><Search {names} id="hero-search" label="Open a card in the explorer" placeholder="Try a card, such as Counterspell" onfocus={loadNames} onpick={open} /></div>
       <a class="btn primary" href={resolve('/')}>Open the explorer</a>
     </div>
     <dl class="facts">
-      <div><dt>Cards in the explorer</dt><dd class="num">{n(split.fit + split.dev)}</dd></div>
-      <div><dt>Effect tags as labels</dt><dd class="num">{n(m.data.tags_functional)}</dd></div>
+      <div><dt>Cards you can search</dt><dd class="num">{n(split.fit + split.dev)}</dd></div>
+      <div><dt>Dev nDCG@10, TF-IDF baseline</dt><dd class="num">{fixed(lexical.full[0])}</dd></div>
       <div><dt>Dev nDCG@10, deployed</dt><dd class="num">{fixed(depScore)}</dd></div>
       <div><dt>Dev nDCG@10, untuned</dt><dd class="num">{fixed(pretrained.full[0])}</dd></div>
     </dl>
@@ -123,25 +128,25 @@
       <figure class="quote"><figcaption>Furnace of Rath <span>same words, opposite effect</span></figcaption><p>If a source would deal damage to a permanent or player, it deals <mark>double</mark> that damage to that permanent or player instead.</p></figure>
       <figure class="quote good"><figcaption>Kitsune Palliator <span>a real match, different words</span></figcaption><p><Rules text={'{T}'} />: Prevent the next 1 damage that would be dealt to each creature and each player this turn.</p></figure>
     </div>
-    <p>A model that reads for meaning should put Ghosts next to damage-prevention cards such as Kitsune Palliator, not next to Furnace. But shared words are still a strong signal. On the development cards, a plain keyword baseline (character TF-IDF) scores {fixed(lexical.full[0])}. The untuned embedding model scores lower, at {fixed(pretrained.full[0])}.</p>
+    <p>A model that reads for meaning should put Ghosts next to damage-prevention cards such as Kitsune Palliator, not next to Furnace. But shared words are still a strong signal. On the development cards, a baseline that only matches wording (character n-gram TF-IDF, no learning) scores {fixed(lexical.full[0])}. The untuned embedding model scores lower, at {fixed(pretrained.full[0])}.</p>
   </section>
 
   <section id="data">
     {@render eyebrow('data')}
     <h2>Rules text from Scryfall</h2>
-    <p>The card text comes from Scryfall's bulk data, snapshot {dep?.release_id.slice(0, 10) ?? ''}. That gives {n(m.data.n_cards)} cards. I remove all text in parentheses. Most of it is reminder text, but this also removes the occasional parenthetical that matters to the rules. For the {n(m.data.multi_face)} cards with more than one face, I join the faces into one text. I use only English rules text.</p>
+    <p>The card text comes from Scryfall's bulk data, snapshot {dep?.release_id.slice(0, 10) ?? ''}. That gives {n(m.data.n_cards)} cards. I remove all text inside matched parentheses. Most of it is reminder text, but this also removes the occasional parenthetical that matters to the rules. For the {n(m.data.multi_face)} cards with more than one face, I join the faces into one text. I use only English rules text.</p>
   </section>
 
   <section id="labels">
     {@render eyebrow('labels')}
     <h2>Community tags stand in for "same effect"</h2>
     <p>The labels come from <a href="https://tagger.scryfall.com" rel="noopener">Scryfall Tagger</a>, where players tag cards with what they do, such as "removal", "card draw" and "change target". I dropped the tags about cycles, names, errata, and printing or set trivia. That leaves {n(m.data.tags_functional)} effect tags and {n(m.data.functional_memberships)} card–tag links.</p>
-    <p>Two cards count as similar when they share tags, and rare tags count for more. This makes the tags a <strong>proxy</strong> for "same effect". They reward any shared tag, even an incidental one. Also, the model is trained and scored on the same source. Every ranking score on this page is a proxy score, not a human judgement.</p>
+    <p>Two cards count as similar when they share tags, and rare tags count for more. This makes the tags a <strong>proxy</strong> for "same effect". They reward any shared tag, even an incidental one. Also, the model is trained and scored on the same source. The benchmark scores and promotion tests use this proxy, not a human judgement. The neighbour lists use the model's cosine similarity. The trap exam below uses matches that I accepted myself.</p>
   </section>
 
   <section id="splits">
     {@render eyebrow('splits')}
-    <h2>Three splits, one opened only once</h2>
+    <h2>Three splits, one held out for a single final test</h2>
     <figure class="splits">
       <div class="splitbar" role="img" aria-label="Fit {n(split.fit)}, development {n(split.dev)}, sealed {n(split.sealed)} cards">
         <span class="fit" style:flex={split.fit}></span>
@@ -151,10 +156,10 @@
       <ul>
         <li><i class="fit"></i><b>Fit</b> <span class="num">{n(split.fit)}</span><span>Training pairs come only from these.</span></li>
         <li><i class="dev"></i><b>Dev</b> <span class="num">{n(split.dev)}</span><span>Used to compare runs and pick the recipe.</span></li>
-        <li><i class="sealed"></i><b>Sealed</b> <span class="num">{n(split.sealed)}</span><span>Locked away. Scored once, after I chose a model. Not in the explorer.</span></li>
+        <li><i class="sealed"></i><b>Sealed</b> <span class="num">{n(split.sealed)}</span><span>Locked away. Used in one authorised test of the earlier 2000-update model. That test restarted once after a crash, before any model was scored. Not in the explorer.</span></li>
       </ul>
     </figure>
-    <p>Reprints and cards with identical text form {n(m.data.families)} families. Each family stays in one split, so a model cannot score points by remembering a copy.</p>
+    <p>Cards with identical text, cards that differ only by their own name, and melded pairs form {n(m.data.families)} families. Most families hold one card. Each family stays in one split. Near-identical cards can still fall in different splits. The hard-lexical view below controls for that.</p>
   </section>
 
   <section id="training">
@@ -165,13 +170,14 @@
       <li class="accent"><small>Encoder</small>{enc?.model_id ?? 'e5-base-v2'}<span>{enc?.pooling} pooling</span></li>
       <li><small>Output</small>{enc?.dim}-number vector<span>compared by cosine</span></li>
     </ol>
-    <p>Each card becomes one vector. A card's neighbours are the cards with the most similar vectors. The pretrained model already knows English, but it does not know which Magic effects are alike. Fine-tuning teaches it from pairs of cards that share an effect tag.</p>
+    <p>Each card becomes one vector. A card's neighbours are the cards with the most similar vectors. The pretrained model already finds some related effects, but it scores below the wording baseline on this benchmark. Fine-tuning adapts its rankings to the community tags. It learns from pairs of cards that share an effect tag.</p>
     <div class="cols2">
-      <p>The loss is contrastive ({train?.objective === 'masked_infonce' ? 'InfoNCE' : train?.objective}). Each batch has {train?.batch_pairs} pairs. The loss pushes the model to score a card's partner above every other card in the batch. Some cards in the batch also share a tag or a reprint family with that card. The loss masks those cards out, so related cards do not get pushed apart. Each pair also gets {train?.hard_negatives} <em>hard negative</em>: a card with very similar wording but no shared tag. It comes from the card's closest keyword matches.</p>
-      <figure class="triplet" aria-label="One training example">
+      <p>The loss is contrastive ({train?.objective === 'masked_infonce' ? 'InfoNCE' : train?.objective}). Each batch has {train?.batch_pairs} pairs. The loss pushes the model to score a card's partner above every other card in the batch. Cards from one family never share a batch. If another card in the batch shares a training tag with that card, the loss ignores it, so related cards do not get pushed apart. (A training tag is one that 2 to 500 training cards carry.) Each pair also gets {train?.hard_negatives} <em>hard negative</em>: a card with similar wording but no shared tag. I pick it at random from the card's 30 closest training cards by character n-gram TF-IDF.</p>
+      <figure class="triplet" aria-label="An illustration of the loss, not a real training example">
         <div class="t anchor"><small>Card</small>Ghosts of the Innocent</div>
-        <div class="t pos"><small>Pulled closer: shares a tag</small>Kitsune Palliator</div>
-        <div class="t neg"><small>Pushed away: similar words, no shared tag</small>Furnace of Rath</div>
+        <div class="t pos"><small>Should rank close: a real match</small>Kitsune Palliator</div>
+        <div class="t neg"><small>Should rank lower: similar words, different effect</small>Furnace of Rath</div>
+        <figcaption class="muted small">Illustration only. Kitsune Palliator is a development card, so this pair is never used in training.</figcaption>
       </figure>
     </div>
     <p class="muted small">Deployed run: {n(train?.total_updates ?? 0)} updates, learning rate {train?.lr?.toExponential()}, seed {train?.seed} (<code>{train?.source}</code>).</p>
@@ -179,19 +185,19 @@
 
   <section id="results">
     {@render eyebrow('results')}
-    <h2>What changed, and how sure we can be</h2>
+    <h2>What changed, and how sure I can be</h2>
 
     <h3 class="sub">The same card, before and after</h3>
-    <p>These are the top 8 neighbours from the pretrained model and from the deployed fine-tuned model. Pick an example, or type the name of any card.</p>
+    <p>These are the top 8 neighbours from the pretrained model and from the deployed fine-tuned model. The six examples are cards from the training split, so they show behaviour, not performance on unseen cards. You can also type the name of any card. The explorer hides {n(KEYWORD_ONLY)} keyword-only cards, but this view does not.</p>
     <div class="bleed"><BeforeAfter showcase={m.showcase} /></div>
 
     <h3 class="sub">Scores against baselines</h3>
-    <p>The score is nDCG@10 on the {n(split.dev)} development cards. For each card, it measures how good the top 10 neighbours are, judged by shared tags. Higher ranks count for more, and 1.0 is perfect. The <b>hard-lexical</b> view removes reprints and near-identical wording from the candidates. That way, a model cannot score points by finding copies.</p>
-    <BarChart rows={devRows} series={[{ key: 'full', label: 'full' }, { key: 'hard_lexical', label: 'hard-lexical' }]} axisLabel="nDCG@10" caption="Development tag-proxy nDCG@10. Higher is better, and the bars start at zero. Each trained system shows the mean of {seeds} seeds, and the seed scores differ by at most {fixed(spread)}. The deployed model is seed {train?.seed} of its recipe, with {fixed(depScore)} full." />
+    <p>The score is nDCG@10, averaged over {n(DEV_ANCHORS)} development cards ({n(split.dev)} cards in the split, minus those with no rules text or no tag seen in training). Each one is ranked against {n(DEV_UNIVERSE)} training and development cards that have rules text. The score measures how good the top 10 neighbours are. A neighbour gains the summed weight of the tags it shares, and rare tags weigh more. Higher ranks count for more, and 1.0 is perfect. The <b>hard-lexical</b> view also removes cards from the same family and cards with at least 80% word overlap with the query. That way, a model cannot score points by finding copies.</p>
+    <BarChart rows={devRows} series={[{ key: 'full', label: 'full' }, { key: 'hard_lexical', label: 'hard-lexical' }]} axisLabel="nDCG@10" caption="Development tag-proxy nDCG@10. Higher is better, and the bars start at zero. Each trained system shows the mean of {seeds} seeds, and the seed scores differ by at most {fixed(spread)}. The deployed model is seed {train?.seed} of its recipe. I fixed that seed before training. It is the lowest of the three seeds, with {fixed(depScore)} full." />
 
     <h3 class="sub">Is the gain more than noise?</h3>
-    <p>A cluster bootstrap over card families gives each difference a 95% interval and a one-sided lower bound. The lower bounds are adjusted because several comparisons are tested together. {#if allClear}Every adjusted lower bound is above zero.{/if}</p>
-    <ContrastPlot {panels} caption="Difference in tag-proxy nDCG@10 between the fine-tuned E5 model and each comparator." />
+    <p>I resample card families and the three seeds together, 12,000 times. That gives each difference a 95% interval and a one-sided lower bound. The lower bounds are adjusted for the number of comparisons (a Bonferroni correction). With three seeds, the intervals mostly reflect which cards were sampled, not how much training varies. A model passes a comparison if its full-view gain is at least 0.005 with an adjusted lower bound above 0, and its hard-lexical gain is at least 0 with an adjusted lower bound above −0.010. {#if allClear}Every adjusted lower bound is above zero.{/if}</p>
+    <ContrastPlot {panels} caption="Difference in tag-proxy nDCG@10 between the fine-tuned E5 recipe (3-seed mean) and each comparator. The top panel is the 4000-update recipe and the bottom panel is the 2000-update recipe." />
     <p class="caveat">The development results are selection-exposed. Those cards helped decide which recipe and checkpoint to keep. The sealed numbers are for {sealedIsDeployed ? 'the deployed model' : `the earlier ${stepA}-update model (${sealed.deployment.run_id}: ${fixed(sealed.deployment.full)} full, ${fixed(sealed.deployment.hard_lexical)} hard-lexical)`}. {#if !sealedIsDeployed}The sealed split is now used up, so the deployed {stepB}-update model has no sealed result.{/if}</p>
 
     {#if stepRows.length}
@@ -208,7 +214,7 @@
             <div class="meter"><span class="ml">{label}</span><span class="cells">{#each Array.from({ length: rec.n }, (_, i) => i) as i (i)}<i class:on={i < rec.passed}></i>{/each}</span><b class="num">{rec.passed}<span>/{rec.n}</span></b></div>
           {/each}
         </div>
-        <p>The exam has {exDep.n} hand-written items. Each item is a card, its true match, and a lookalike that must rank lower. The lookalikes use shared rider clauses, one-word flips and changed numbers. The deployed model fails {exDep.failed.length} ({exDep.failed.map((f) => f.id).join(', ')}), and two of them are below. The exam is a diagnostic and is not part of promotion. It is also exposed: its fit cards appear in the training pairs.</p>
+        <p>The exam has {exDep.n} items. Two come from my own review of the app. The simple text rules in my code proposed the other 49, and I checked and accepted them. Each item names a card or line, the match I accept, and a lookalike that must rank lower. The lookalikes use shared rider clauses, one-word flips and changed numbers. The rules chose the matches and lookalikes from the same Tagger tags that the model trains on, so the exam is not independent of the training labels. The deployed model fails {exDep.failed.length} ({exDep.failed.map((f) => f.id).join(', ')}), and two of them are below. The other two seeds of this recipe pass 49 and 48, so a difference of one or two items is within seed noise. The exam is not part of the final promotion test. But it was one of the rules for keeping the 4000-update recipe and for judging the follow-up runs, so it is selection-exposed. Its fit cards also appear in the training pairs.</p>
       </div>
     {/if}
   </section>
@@ -218,19 +224,23 @@
     <h2>Where it still goes wrong</h2>
     <div class="case">
       <h3>Deflecting Swat: the labels favour the wrong neighbour</h3>
-      <p>Deflecting Swat redirects a spell, and it is free if you control a commander. The ideal neighbour is Redirect. But the fine-tuned model ranks Obscuring Haze higher, and Haze shares only the free-with-a-commander line. The tags explain why. Swat shares three tags with Obscuring Haze and only two with Redirect, so training on tags pulls the wrong card closer. On the trap exam, the margin went from {marginText(exPre, 'T001')} before tuning to {marginText(exDep, 'T001')} after. A margin below zero is a fail. Fixing it means changing the labels, not the model. In the explorer, pick Swat's redirect line under "Similar cards", and Redirect does show up.</p>
+      <p>Deflecting Swat redirects a spell, and it is free if you control a commander. The ideal neighbour is Redirect. But the fine-tuned model ranks Obscuring Haze higher, and Haze shares only the free-with-a-commander line. The tags are one likely reason. Swat shares three tags with Obscuring Haze and only two with Redirect, so training on tags may pull the wrong card closer. I did not isolate the cause, and my one follow-up run on effect-only labels did not fix it. On the trap exam, the margin went from {marginText(exPre, 'T001')} before tuning to {marginText(exDep, 'T001')} after. A margin below zero is a fail. In the explorer, pick Swat's redirect line under "Similar cards", and Redirect does show up.</p>
       <p><a href="{resolve('/')}?card=ae120613-97d6-4393-b39d-c3e6c076f5d6">See Deflecting Swat in the explorer</a></p>
     </div>
     <div class="case">
       <h3>Lexical twins still fool it</h3>
-      <p>For Ghosts of the Innocent, the model still ranks Furnace of Rath above Kitsune Palliator (trap-exam margin {marginText(exDep, 'T021')}). I aimed three follow-up runs at these side-clause traps, with more hard negatives, effect-only labels and rare-tag weighting. None of them cleared its registered gate. Each one also failed at least one exam item that its comparator passes. The rider problem is not solved.</p>
+      <p>For Ghosts of the Innocent, the model still ranks Furnace of Rath above Kitsune Palliator (trap-exam margin {marginText(exDep, 'T021')}). I ran three follow-up runs, each with one intended change: more hard negatives, effect-only labels, and rare-tag weighting. They also used gradient checkpointing to save memory, so they are not fully controlled tests. None of them cleared its rule. Each one also failed at least one exam item that its comparator passes. The rider problem is not solved.</p>
     </div>
     <ul class="plain">
-      <li><b>Proxy, not people.</b> The scores and promotion tests measure how well the model agrees with community tags. I accepted the trap-exam items myself; a panel did not. No human relevance study has been run. A blinded labelling pool is ready, but nobody has labelled it yet.</li>
-      <li><b>Selection-exposed.</b> The development scores helped me choose models. The only sealed result is for the earlier model.</li>
+      <li><b>Proxy, not people.</b> The scores and promotion tests measure how well the model agrees with community tags. I accepted the trap-exam items myself; a panel did not. No human relevance study has been run. I built a blinded pool of 1,256 card pairs from an earlier model, but nobody has labelled it, and its labelling tool is not in this repository.</li>
+      <li><b>Selection-exposed.</b> The development scores helped me choose models. The only sealed result is for the earlier model. I fixed the seeds, thresholds and statistical test before the first training run, and recorded them in a private log. The promotion test for the 4000-update recipe reuses those rules, but I wrote its design down after two of its three seeds had finished. That log is not in this repository.</li>
       <li><b>Card to card only.</b> You always start from a card. Cognate is not a natural-language search model, and I never measured how well it handles typed queries.</li>
-      <li><b>Exploratory views.</b> The explorer marks one-line matches, Line match and Face match as exploratory. I do not claim that any of them is an improvement. On an earlier model's tag benchmark, Line match scored below the Whole card ranking.</li>
-      <li><b>Few seeds.</b> Each trained recipe ran with {seeds} seeds. That says little about how much the results vary from run to run.</li>
+      <li><b>Exploratory views.</b> The explorer marks three views as exploratory: matches for one chosen ability, Line match and Face match. I do not claim that any of them is an improvement. With the earlier 2000-update model, Line match scored below Whole card on the development tag proxy (0.687 against 0.706). Face match scored about the same.</li>
+      <li><b>Few seeds.</b> The three recipes in the main chart each ran with {seeds} seeds. The follow-up runs used one seed each. Three seeds say little about how much results vary from run to run.</li>
+      <li><b>Long and rare cards.</b> The model reads at most {enc?.max_length} tokens, including its prefix. That cuts {n(TRUNCATED)} of the {n(DEV_UNIVERSE)} benchmark cards. Scores are lower for rare effects (0.636), long cards (0.628) and two-faced cards (0.650), against 0.714 overall.</li>
+      <li><b>Lenient metric.</b> The top result almost always shares at least one tag with the card (MRR@10 is 0.985), so the metric mostly rewards getting the order of good neighbours right.</li>
+      <li><b>Narrow comparison.</b> I compared only with the base model, a small BGE model and a TF-IDF baseline. I did not compare with larger embedding models.</li>
+      <li><b>Display filter.</b> The explorer hides {n(KEYWORD_ONLY)} keyword-only cards, such as plain flyers, from the map and the lists. All scores include them.</li>
       <li><b>Snapshot.</b> Cards printed after the data snapshot are missing.</li>
     </ul>
   </section>
@@ -238,8 +248,8 @@
   <section id="built">
     {@render eyebrow('built')}
     <h2>Built with</h2>
-    <p>Training and evaluation use Python, PyTorch and Hugging Face Transformers. The map uses scikit-learn (t-SNE). This is a static site built with SvelteKit, with no server and no tracking. A script reads every result on this page from the run and evaluation records in the repository.</p>
-    <p>Card data and images come from <a href="https://scryfall.com" rel="noopener">Scryfall</a> and tags from <a href="https://tagger.scryfall.com" rel="noopener">Scryfall Tagger</a>. The trap exam and several ideas for line-level labels and training come from <a href="https://github.com/Ballchinian/Delvefall" rel="noopener">Delvefall</a>. I took ideas only, and I did not copy any code, data or exam items.</p>
+    <p>Training and evaluation use Python, PyTorch and Hugging Face Transformers. The map uses scikit-learn (t-SNE). This is a static site built with SvelteKit, with no server of its own and no tracking. Card images load from Scryfall. A script reads every result on this page from my local run and evaluation records. Those records are not in this repository.</p>
+    <p>Card data and images come from <a href="https://scryfall.com" rel="noopener">Scryfall</a> and tags from <a href="https://tagger.scryfall.com" rel="noopener">Scryfall Tagger</a>. The idea of a trap exam, and several ideas for line-level labels and training, come from <a href="https://github.com/Ballchinian/Delvefall" rel="noopener">Delvefall</a>. I used the ideas only. I did not copy any code, data or exam items.</p>
     <p class="links"><a class="btn" href={REPO} rel="noopener">Code on GitHub</a> <a class="btn primary" href={resolve('/')}>Open the explorer</a></p>
   </section>
 </article>

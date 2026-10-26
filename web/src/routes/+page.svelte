@@ -418,7 +418,7 @@
     {#if !card}
       <div class="intro">
         <h1>Find Magic cards by what they do.</h1>
-        <p class="lede">Pick a card. Cognate finds the cards whose rules text does the most similar thing, even when the words are different.</p>
+        <p class="lede">Pick a card. Cognate ranks other cards by how similar their rules text is in effect, using a model trained on community tags.</p>
         <div class="search-row">
           <Search {names} recent={recentOptions} onpick={(i) => select(i)} />
           <button type="button" class="btn random" onclick={random} disabled={!idsLoaded} aria-keyshortcuts="r" title="Open a random card (R)">{@render dice()}<span class="lbl">Random card</span></button>
@@ -444,8 +444,8 @@
           <h1 id="selected-name" tabindex="-1">{card.name} {#if card.faces.length === 1 && card.faces[0].mana_cost}<span class="cost"><Rules text={card.faces[0].mana_cost} /></span>{/if}</h1>
           <CardText {card} />
           {#if card.tags?.length}
-            <div class="tags" title={release.tags_status}>
-              <span class="muted">Predicted tags</span>
+            <div class="tags" title="The tags that Scryfall Tagger lists for this card">
+              <span class="muted">Tagger tags</span>
               {#each card.tags.slice(0, 10) as t (t)}<span class="chip">{tagLabels[t]}</span>{/each}
             </div>
           {/if}
