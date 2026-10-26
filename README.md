@@ -118,7 +118,7 @@ Card images are loaded from Scryfall at view time and are not part of the build.
 
 ## Reproducing
 
-Requirements: Windows or Linux, Python 3.12, [uv](https://docs.astral.sh/uv/), and Node.js for the site. CPU works; Intel XPU needs a compatible PyTorch XPU build (the XPU index is pinned in `pyproject.toml`, so pick a matching environment for CPU-only use).
+Requirements: Python 3.12, [uv](https://docs.astral.sh/uv/), and Node.js for the site. Every recorded run used an Intel Arc GPU (torch XPU), and the XPU index is pinned in `pyproject.toml`. I have not run the project on CPU or on Linux.
 
 ```sh
 uv sync
