@@ -26,7 +26,7 @@
   </div>
   <div class="side">
     {#if score !== null}
-      <span class="score num" title={scoreLabel}>{score.toFixed(3)}</span>
+      <span class="score num" title="{scoreLabel}: {score.toFixed(4)}. Differences in the third decimal place are not meaningful.">{score.toFixed(2)}</span>
     {/if}
     {#if oncompare}<button type="button" class="btn ghost compare" onclick={() => oncompare(card)} aria-label="Compare {card.name} with the selected card">Compare</button>{/if}
   </div>

@@ -20,7 +20,7 @@
       <button type="button" class="close" onclick={() => dialog.close()} aria-label="Close">×</button>
     </header>
     <p class="meta">
-      {#if score !== null}Similarity <span class="num">{score.toFixed(3)}</span>. {/if}
+      {#if score !== null}Similarity <span class="num" title="Exact value {score.toFixed(4)}">{score.toFixed(2)}</span>. {/if}
       {shared.size ? `${shared.size} shared ${shared.size > 1 ? 'lines' : 'line'}, highlighted. This check ignores numbers and card names.` : 'No shared lines.'}
     </p>
     <div class="cols">
