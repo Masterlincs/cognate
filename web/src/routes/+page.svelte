@@ -89,7 +89,7 @@
   const pageRows = $derived(visible.slice(0, shown));
   const shownError = $derived(error || (ability === null && rowsError[rank]) || '');
   const pending = $derived((byLine && lineRows === null) || (byFace && faceRows === null) || (filtering ? saved : saved.slice(0, shown)).some(([i]) => !byIndex[i]));
-  const showcase = metrics.showcase ?? [];
+  const showcase = (metrics.showcase ?? []).filter((ex) => !ex.unseen);
   const recentOptions = $derived(names && idsLoaded ? recent.map((r) => ({ index: byId(r.id), name: r.name })).filter((r) => r.index >= 0 && r.index !== index) : []);
   const examples = $derived(showcase.map((ex) => ({ id: ex.id, name: ex.name, card: exampleCards[ex.id] ?? null })));
   const rankNote = $derived(ability !== null ? { about: 'Each card gets the score of its line that is closest to the line you picked.', note: 'Exploratory. One-line matches have not been evaluated.' } : MODES[rank] ?? MODES.whole);

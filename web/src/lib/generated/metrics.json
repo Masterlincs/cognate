@@ -786,6 +786,42 @@
       "id": "9243bd95-5467-490d-9bd2-4d5ce1ebc589",
       "name": "Ghosts of the Innocent",
       "why": "a miss. Before tuning, the list is mostly cards that change damage, and Furnace of Rath is first. It doubles damage instead of halving it. After tuning, Gisela, Blade of Goldnight is first. She halves damage to you, but she doubles damage to your opponents. The rest is a loose mix of damage and life-loss cards. Neither list has a damage-prevention card such as Kitsune Palliator."
+    },
+    {
+      "id": "5bc66b18-22ac-4138-b527-fa711116e298",
+      "name": "Zimone and Dina",
+      "why": "a card with two abilities. Before tuning, the first result, Gixian Puppeteer, has the same trigger: when you draw your second card each turn, each opponent loses 2 life and you gain 2 life. After tuning, that card is not in the top 8. The list has cards that match one part each, such as Kang, Temporal Tyrant (the second-draw trigger) and Vermin Gorger (sacrifice another creature to drain). Tuning did not help here.",
+      "unseen": true
+    },
+    {
+      "id": "5ec9f317-887a-4e08-a165-e7cf15eb071d",
+      "name": "Enraging Licid",
+      "why": "all 8 cards in both lists are Licids. Tuning changed the order and swapped one card (Nurturing Licid out, Leeching Licid in). It made little difference.",
+      "unseen": true
+    },
+    {
+      "id": "9805b7b3-086a-4c91-810f-52c8f8f95f6a",
+      "name": "Mardu Banner",
+      "why": "after tuning, four Banners come first (Abzan, Temur, Jeskai and Sultai). Before tuning, Boros Cluestone was first, and only two of the top 8 were Banners. Tuning helped here.",
+      "unseen": true
+    },
+    {
+      "id": "9d2e7099-dcd5-428f-a732-2a82b8d1dd1a",
+      "name": "Frantic Salvage",
+      "why": "the first three results are the same in both lists. After tuning, Learn from the Past and Clear the Mind also appear. They shuffle a graveyard into a library and draw a card, so they are close, but they do not put cards on top. Tuning changed the list a little.",
+      "unseen": true
+    },
+    {
+      "id": "c7c35dd9-8c3b-4be5-b310-61db5e73ed6c",
+      "name": "Charnel Troll",
+      "why": "before tuning, the first result, Entrails Feaster, has almost the same upkeep cost: exile a creature card from a graveyard to get a +1/+1 counter. After tuning, that card is not in the top 8. The list has cards that exile a creature card from your graveyard as a cost, such as Rank Officer and Graveyard Marshal. Tuning did not help here.",
+      "unseen": true
+    },
+    {
+      "id": "e78fd8f6-eca9-4107-aee7-a65689cee2f4",
+      "name": "Sarcomite Myr",
+      "why": "Slinking Skirge, Brass Secretary and Parcel Myr all have \"{2}, Sacrifice this creature: Draw a card\". They are in both lists. After tuning, Tin-Wing Chimera is first. It also has a sacrifice ability, but it does not draw a card. Illvoi Galeblade, second, does match. The result is mixed.",
+      "unseen": true
     }
   ]
 }

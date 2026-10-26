@@ -6,7 +6,7 @@
   import { getCard, getNeighbours, getPretrained, loadRelease, loadSiteData, setRoot } from './data.js';
   import { resolveSelection } from './explorer.js';
 
-  // showcase: [{id, name, why}]; data loads when the section scrolls into view
+  // showcase: [{id, name, why, unseen?}]; data loads when the section scrolls into view
   let { showcase = [] } = $props();
   const TOP = 8;
   let root;
@@ -63,11 +63,16 @@
 
 <div class="ba" bind:this={root}>
   <div class="pick">
-    <div class="chips" role="group" aria-label="Example cards">
-      {#each showcase as s (s.id)}
-        <button type="button" class="chip" aria-pressed={current?.id === s.id} disabled={phase !== 'ready'} onclick={() => show(byId(s.id))}>{s.name}</button>
-      {/each}
-    </div>
+    {#each [['Familiar cards (in the training split)', false], ['Unseen cards (development split, picked at random)', true]] as [label, unseen] (label)}
+      <div class="group">
+        <span class="glabel" id="ba-{unseen ? 'unseen' : 'seen'}">{label}</span>
+        <div class="chips" role="group" aria-labelledby="ba-{unseen ? 'unseen' : 'seen'}">
+          {#each showcase.filter((s) => !!s.unseen === unseen) as s (s.id)}
+            <button type="button" class="chip" aria-pressed={current?.id === s.id} disabled={phase !== 'ready'} onclick={() => show(byId(s.id))}>{s.name}</button>
+          {/each}
+        </div>
+      </div>
+    {/each}
     <div class="search"><Search names={phase === 'ready' ? names : null} id="ba-search" label="Compare any card" placeholder="Or type any card…" onpick={(i) => show(i)} /></div>
   </div>
 
@@ -106,6 +111,8 @@
 
 <style>
   .pick { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .group { display: grid; gap: 6px; flex-basis: 100%; }
+  .glabel { font-size: 0.78rem; color: var(--muted); }
   .chips { display: flex; flex-wrap: wrap; gap: 6px; }
   .chip { border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 12px; font-size: 0.84rem; }
   .chip:hover:not(:disabled) { border-color: var(--ink); }
