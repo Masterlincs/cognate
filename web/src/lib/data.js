@@ -1,6 +1,7 @@
 // Release bundle and site-data loading. One promise cache per shard kind; failed loads are
 // evicted so a retry can succeed. Shapes are checked with the bundle validators (SCHEMA.md).
 import { isV4Plus, isV6, validateAbilityShard, validateCommonShard, validateFaceShard, validateIds, validateLineShard, validateRelease, validateReleasePointer, validateShard, validateTags } from './bundle.js';
+import { PLAIN_PRINTINGS } from './printings.js';
 
 let root = '';
 let fetcher = (...args) => fetch(...args);
@@ -82,7 +83,7 @@ export function getCards(shard) {
   return cached(shards, shard, async () => {
     const [cards, tags] = await Promise.all([get(`${release.release_id}/cards/${pad(shard)}.json`), getTags()]);
     validateShard(cards, cards.map(() => []), release, shard, ids, undefined, undefined, tags);
-    return cards;
+    return cards.map((c) => (PLAIN_PRINTINGS[c.id] ? { ...c, image: PLAIN_PRINTINGS[c.id] } : c));
   });
 }
 
