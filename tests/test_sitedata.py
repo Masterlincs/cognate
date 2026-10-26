@@ -72,8 +72,8 @@ def test_site_metrics_reads_records(tmp_path, monkeypatch):
     monkeypatch.setattr(sitedata, "WEB", tmp_path / "web")
     m = sitedata.site_metrics()
     assert m["deployed"] is None
-    assert m["dev"]["fine-tuned E5"]["full"] == [0.5, 0.5, 0.5]
-    assert m["dev"]["fine-tuned E5"]["source"][0].endswith("summary.json")
+    assert m["dev"]["fine-tuned E5, 2000 updates"]["full"] == [0.5, 0.5, 0.5]
+    assert m["dev"]["fine-tuned E5, 2000 updates"]["source"][0].endswith("summary.json")
     assert m["promotion"]["d18"]["contrasts"]["pretrained_e5"]["full"]["point"] == 0.1
     assert m["promotion"]["x1"] is None
     assert m["sealed"]["sealed_gate"] == "cleared"

@@ -1,6 +1,6 @@
 {
   "dev": {
-    "keyword baseline (character TF-IDF)": {
+    "character n-gram TF-IDF": {
       "full": [
         0.6042245589680475
       ],
@@ -64,7 +64,7 @@
         "runs/eval/8bf2f48c0bba3b2c/confirm-bge-s3/summary.json"
       ]
     },
-    "fine-tuned E5": {
+    "fine-tuned E5, 2000 updates": {
       "full": [
         0.705543134874474,
         0.7066287095610543,
@@ -760,7 +760,7 @@
     {
       "id": "4457ed35-7c10-48c8-9776-456485fdf070",
       "name": "Lightning Bolt",
-      "why": "before tuning, the list shows cards that share the word “Lightning”. Some of them hit every opponent or split the damage. After tuning, the list shows other burn spells that deal 3 damage, such as Volcanic Hammer and Searing Spear, even when their names are different."
+      "why": "before tuning, the list shows cards that share the word “Lightning”. Some of them hit every opponent or split the damage. After tuning, the list shows other burn spells, such as Volcanic Hammer and Searing Spear, even when their names are different."
     },
     {
       "id": "5748ebf1-24e3-499d-ab7c-c2cebd462a24",
@@ -785,7 +785,7 @@
     {
       "id": "9243bd95-5467-490d-9bd2-4d5ce1ebc589",
       "name": "Ghosts of the Innocent",
-      "why": "a miss. Before tuning, the list shows other damage-replacement cards. One of them is Furnace of Rath, which doubles damage instead of halving it. After tuning, the list is a loose mix of damage and life-loss cards. Neither list finds a damage-prevention card such as Kitsune Palliator."
+      "why": "a miss. Before tuning, the list is mostly cards that change damage, and Furnace of Rath is first. It doubles damage instead of halving it. After tuning, Gisela, Blade of Goldnight is first. She halves damage to you, but she doubles damage to your opponents. The rest is a loose mix of damage and life-loss cards. Neither list has a damage-prevention card such as Kitsune Palliator."
     }
   ]
 }

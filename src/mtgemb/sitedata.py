@@ -35,11 +35,11 @@ DEV_BENCH = "8bf2f48c0bba3b2c"
 SEALED_BENCH = "c98bb619ea613672"
 SEEDS = (1, 2, 3)
 DEV_MODELS = {
-    "keyword baseline (character TF-IDF)": ["lexical-char35-tfidf"],
+    "character n-gram TF-IDF": ["lexical-char35-tfidf"],
     "pretrained BGE-small": ["pretrained-bge-small-en-v1.5"],
     "pretrained E5-base": ["pretrained-e5-base-v2"],
     "fine-tuned BGE-small": [f"confirm-bge-s{s}" for s in SEEDS],
-    "fine-tuned E5": [f"confirm-e5-s{s}" for s in SEEDS],
+    "fine-tuned E5, 2000 updates": [f"confirm-e5-s{s}" for s in SEEDS],
 }
 DEV_MODELS_FLAT = [n for names in DEV_MODELS.values() for n in names]
 X1_LABEL = "fine-tuned E5, 4000 updates"
