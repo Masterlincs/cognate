@@ -112,6 +112,16 @@
     </dl>
   </header>
 
+  <aside class="short" aria-labelledby="short-title">
+    <h2 id="short-title">In short</h2>
+    <ul>
+      <li>I fine-tuned a small text-embedding model so that cards with a similar effect get similar vectors. Search for a card, and the site shows its closest vectors.</li>
+      <li>On the development cards, the tuned model scores {fixed(depScore)} nDCG@10. The untuned model scores {fixed(pretrained.full[0])}, and a word-matching baseline scores {fixed(lexical.full[0])}.</li>
+      <li>The score uses community tags as the answer key, and the model trained on the same kind of tags. No person has judged the results.</li>
+      <li>On six unseen cards the results are mixed: tuning clearly helped one, changed little or gave mixed lists on three, and dropped a close match on two (see Results).</li>
+    </ul>
+  </aside>
+
   <nav class="pipeline" aria-label="On this page">
     <ol>
       {#each steps as [id, title, detail], i (id)}
@@ -188,7 +198,7 @@
     <h2>What changed, and how sure I can be</h2>
 
     <h3 class="sub">The same card, before and after</h3>
-    <p>These are the top 8 neighbours from the pretrained model and from the deployed fine-tuned model. The six examples are cards from the training split, so they show behaviour, not performance on unseen cards. You can also type the name of any card. The explorer hides {n(KEYWORD_ONLY)} keyword-only cards, but this view does not.</p>
+    <p>These are the top 8 neighbours from the pretrained model and from the deployed fine-tuned model. The first six examples are familiar cards from the training split, so they show behaviour, not performance on unseen cards. The other six are development cards that I picked with a random seed (20261026) before I looked at their lists. I did not choose them, and I did not remove any. They are too few to measure anything, but they show what to expect on cards the model did not train on: help on some, little change on others, and misses. You can also type the name of any card. The explorer hides {n(KEYWORD_ONLY)} keyword-only cards, but this view does not.</p>
     <div class="bleed"><BeforeAfter showcase={m.showcase} /></div>
 
     <h3 class="sub">Scores against baselines</h3>
@@ -271,6 +281,10 @@
   .hero-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 26px 0 8px; }
   .hero-search { flex: 1 1 280px; }
   .hero-actions .btn { height: 48px; padding: 0 20px; font-size: 0.95rem; }
+  .short { margin-top: 28px; padding: 16px 20px 6px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+  .short h2 { margin: 0 0 8px; font-size: 1.05rem; }
+  .short ul { margin: 0; padding-left: 1.2em; }
+  .short li { margin: 0 0 8px; max-width: 70ch; }
   .facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 30px 0 0; }
   .facts div { padding: 10px 2px 0; border-top: 2px solid var(--ink); }
   .facts dt { font-size: 0.76rem; color: var(--muted); }
