@@ -127,7 +127,7 @@ server {
 
 Card images are loaded from Scryfall at view time and are not part of the build.
 
-For Cloudflare Pages, use Direct Upload of the `build/` folder (for example `npx wrangler pages deploy build`). The free plan allows 20,000 files and 25 MiB per file; the build is well inside both. I have not deployed it there yet, so these notes come from Cloudflare's documentation and not from a test.
+For Cloudflare Pages, use Direct Upload of the `build/` folder (for example `npx wrangler pages deploy build`). The free plan allows 20,000 files and 25 MiB per file; the build is well inside both. I deployed the 2026-10-16 build this way on 2026-10-26 with `npx wrangler pages deploy build --project-name cognate --branch main`, after `wrangler login`. It is live at https://cognate-6q7.pages.dev. I checked the response headers, the 404 status and extensionless routes on that URL.
 
 ## Reproducing
 
