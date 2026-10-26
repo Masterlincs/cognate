@@ -1,6 +1,6 @@
 # Trap exam
 
-Idea credited to Delvefall (github.com/Ballchinian/Delvefall); items here are our own.
+Idea credited to Delvefall (github.com/Ballchinian/Delvefall); items here are our own. T001 and T002 come from the owner's review of the app. T003 to T051 were proposed by the text rules in `src/mtgemb/exam.py` and accepted by the owner on 2026-10-18. The rules used the same Tagger tags the model trains on, so the exam is not independent of the training labels.
 Rule: **same mechanism, flexible parameters.** Numbers, colours and riders are forgivable;
 a different or flipped mechanism is not.
 
@@ -8,7 +8,7 @@ Each item: an anchor (a whole card, or `line N` of it), a true **match** and a *
 A model passes when it scores the match above the trap. Only the user changes `proposed` to
 `accepted` or `rejected` in an item's heading. Only accepted items are scored. Never edit
 ids or card ids; to change an item, reject it and add a new one with the next id.
-Every card named here (and its family) is kept out of new training inputs.
+Every card named here (and its family) is kept out of new auxiliary training rows (line-tag and synthetic rows). Fit exam cards are still in the original card pairs, so the exam is not held out.
 Sealed cards never appear.
 
 ## T001 · user · accepted

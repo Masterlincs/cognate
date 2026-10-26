@@ -4,7 +4,7 @@ Dataset `cbd5c12011c94e68`, processed from the Scryfall bulk snapshot of 2026-10
 
 ## Sources and terms
 
-- **Cards:** Scryfall bulk `oracle_cards` (one record per Oracle ID), downloaded 2026-10-16. The raw manifest hash is recorded in `dataset.json`.
+- **Cards:** Scryfall bulk `oracle_cards` (one record per Oracle ID), dated 2026-10-16 (published 21:02 UTC) and downloaded on 2026-10-17 at 02:28 UTC. The raw manifest hash is recorded in `dataset.json`.
 - **Labels:** Scryfall Tagger `oracle_tags`, community-made functional tags (for example "removal" or "card draw").
 - **Terms**, as recorded at acquisition:
   - Scryfall data is free for research and Magic software, with no paywalling, no plain repackaging or republishing, and no implied Scryfall endorsement.
@@ -29,7 +29,7 @@ One row per Oracle ID. A card is included if it exists in paper, its vintage leg
 
 ## Splits and leakage controls
 
-- **Families:** cards are grouped into families (identical text, self-name templates, meld pairs). A whole family goes to one split, so near-copies never straddle splits.
+- **Families:** cards are grouped into families (identical text, self-name templates, meld pairs). A whole family goes to one split, so cards with identical text, self-name templates and meld pairs never straddle splits. Other near-duplicates can; the hard-lexical evaluation view controls for them.
 - **Assignment:** each family is assigned by a hash of its smallest Oracle ID and the seed `mtgemb-split-v1`. The targets are 80% fit, 10% development and 10% sealed.
 - **Counts:**
 
@@ -61,4 +61,4 @@ One row per Oracle ID. A card is included if it exists in paper, its vintage leg
 
 ## Human labels
 
-None. A blinded pool of 1,256 items is prepared but unlabelled.
+None. I built a blinded pool of 1,256 items from an earlier model. It is unlabelled, and its labelling tool is not in this repository.

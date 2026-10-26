@@ -8,7 +8,7 @@ The app accepts v2 through v6. A v2 bundle loads with the whole-card neighbour f
 
 The app loads `current.json`, then `release.json`, then `names.json`. Lookup becomes available as soon as `names.json` passes validation. The larger `ids.json` is fetched after names; card selection, share-link resolution and shard ID checks wait for it. Card and neighbour shards, plus the selected card's v3 ability shard, load on demand and are cached by shard.
 
-## Common files (v2 and v3)
+## Common files (v2 to v6)
 
 ### `release.json`
 
